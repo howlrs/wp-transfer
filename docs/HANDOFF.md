@@ -4,33 +4,36 @@
 **日付:** 2026-04-08
 **テスト:** 339 / 339 全パス
 **リポジトリ:** https://github.com/howlrs/wp-transfer
+**ライセンス:** MIT
 
 ## プロジェクト概要
 
 WordPress サイト（Plugin含む）を TypeScript/Next.js に移行する「移行アクセラレータ」CLIツール。
-エージェンシー/制作会社が顧客サイトを完全移行するためのツールチェーン。
+エージェンシー/制作会社が顧客サイトを移行するためのツールチェーン。
 
 ## アーキテクチャ
 
 ```
 wp-transfer (pnpm monorepo)
 ├── packages/
-│   ├── core/           # 型定義 (Zod), シークレットスキャナ
+│   ├── core/           # 型定義 (Zod), Portable Text型, シークレットスキャナ
 │   ├── wxr-parser/     # SAXストリーミングWXRパーサー
 │   └── analyzer/       # REST client, Plugin検出, スキーマ分析,
-│                       # レポート生成, PHP解析, スタブ生成,
-│                       # Admin/Auth/Docker scaffold
+│                       # Gutenberg→PT変換, Yoast/ACF テンプレート,
+│                       # Blog/Admin/Auth/Docker scaffold, Verify生成,
+│                       # セキュリティサニタイザ
 ├── apps/
 │   └── cli/            # CLIエントリーポイント (citty)
-├── fixtures/           # WXRテストフィクスチャ
-├── docs/               # 設計ドキュメント, WPバージョン対応表
+├── fixtures/           # WXRテストフィクスチャ (7 XML)
+├── docs/               # 設計ドキュメント, 実装計画
+├── .github/workflows/  # CI (test + typecheck)
 └── output/             # 生成物 (gitignored)
 ```
 
 ## CLIコマンド
 
 ```bash
-# WXR/REST API解析 → 移行レポート
+# WXR/REST API解析 → 移行レポート + Gutenberg→PT変換
 wp-transfer analyze <url|wxr-file> [--output path] [--format json|markdown|both]
 
 # PHPソース解析 → 完全なNext.jsプロジェクト生成
@@ -52,106 +55,87 @@ wp-transfer analyze-php <dir> [--schema db-schema.md] [--output path]
 | vitest | 4.1.3 | テスト |
 | @portabletext/types | 4.0.2 | Portable Text型 |
 
-## 完了済み (Phase 1)
+## 完了済み機能
 
 ### コア機能
-- [x] WXRストリーミングパーサー (post, taxonomy, user, media collectors)
-- [x] WP REST APIクライアント (SSRF防御, クレデンシャル漏洩防止)
-- [x] プラグイン検出 + レジストリ (17+ known plugins)
-- [x] スキーマ分析 (ACFフィールド検出, Yoast/RankMath検出)
-- [x] コスト見積 + リスク分析
-- [x] 移行レポート生成 (JSON/Markdown)
-- [x] シークレットスキャナ (AWS, GitHub, Stripe, Google, WP salts等)
+- WXRストリーミングパーサー (post, taxonomy, user, media collectors)
+- WP REST APIクライアント (SSRF防御, クレデンシャル漏洩防止)
+- プラグイン検出 + レジストリ (17+ known plugins)
+- スキーマ分析 (ACFフィールド検出, Yoast/RankMath検出)
+- コスト見積 + リスク分析
+- 移行レポート生成 (JSON/Markdown)
+- シークレットスキャナ (AWS, GitHub, Stripe, Google, WP salts等)
 
 ### analyze-php (PHPソース直接解析)
-- [x] PHPファイル解析 (DB操作, 入力パラメータ, セキュリティ問題)
-- [x] DBスキーマMarkdown → Prismaスキーマ (リレーション自動検出)
-- [x] Next.js API Routeスタブ生成 (Zod精度, トランザクション検出, ファイルアップロード)
-- [x] 管理画面scaffold自動生成 (一覧, フォーム, ダッシュボード)
-- [x] 認証scaffold自動生成 (NextAuth v5 + RBAC)
-- [x] Docker scaffold自動生成 (Compose + Dockerfile)
-- [x] PHPバージョン検出 (10パターン)
+- PHPファイル解析 (DB操作, 入力パラメータ, セキュリティ問題)
+- DBスキーマMarkdown → Prismaスキーマ (リレーション自動検出)
+- Next.js API Routeスタブ生成 (Zod精度, トランザクション検出, ファイルアップロード)
+- 管理画面scaffold自動生成 (一覧, フォーム, ダッシュボード, Tailwind対応)
+- 認証scaffold自動生成 (NextAuth v5 + RBAC fail-safe)
+- Docker scaffold自動生成 (Compose + Dockerfile)
 
-### セキュリティ (Karpathy原則レビュー)
-- [x] 18件修正 (Critical 1, High 4, Medium 6, Low 7)
-- [x] SSRF防御, クレデンシャル保護, SAXエラー処理, 型安全性
+### Gutenberg → Portable Text 変換
+- ブロックコメントパーサー (ネストJSON, brace-balanced, Global Styles対応)
+- ブロック→PT変換 (paragraph/heading/list/image/code/embed/quote/separator)
+- インラインHTML→PTマーク/スパン (bold, italic, link with markDef)
+- 未知ブロック→htmlBlockフォールバック
 
-### ドッグフーディング (JRA tokyo)
-- [x] 39 PHPファイル → 17 API Routes + 16管理画面ページ
-- [x] 21テーブル Prismaスキーマ (リレーション付き)
-- [x] NextAuth + RBAC (3プラグイン統合移行)
-- [x] Docker環境 (MySQL 8.0 + Next.js)
-- [x] E2E APIテスト 15件
+### テンプレート生成
+- Yoast SEOメタデータ抽出 (%%var%%プレースホルダー解決, Next.js Metadata API)
+- ACFテンプレート生成 (Zodスキーマ + 型付きアクセサ)
+- WXRブログscaffold (投稿/アーカイブ/カテゴリ/404/PT renderer/next.config)
+- Playwright Verify scaffold (スモークテスト + ビルド検証)
 
-### C-Phase: Phase 1 MVP (WXRブログサイト対応)
-- [x] Gutenbergブロックパーサー (ネスト対応, Global Styles JSON, 16テスト)
-- [x] ブロック→Portable Text変換 (paragraph/heading/list/image/code/embed/quote/separator, 20テスト)
-- [x] Yoast SEOメタデータ抽出 (%%var%%プレースホルダー解決, Next.js Metadata API生成, 10テスト)
-- [x] ACFテンプレート生成 (Zodスキーマ + 型付きアクセサ, 7テスト)
-- [x] WXRブログscaffold生成 (投稿/アーカイブ/カテゴリ/404/PT renderer/next.config, 12テスト)
-- [x] Playwright Verify scaffold生成 (スモークテスト + ビルド検証, 6テスト)
-- [x] 統合テスト (WXR→scaffold全パイプライン, 2テスト)
+### セキュリティ
+- Phase 1: 18件修正 (SSRF, クレデンシャル, SAX, 型安全性)
+- Issue #9: sanitize.ts (7関数), RCE/XSS/PathTraversal防止
+- RBAC fail-safe default deny, API 401/403
+- URL protocol検証, コード生成エスケープ, パストラバーサルガード
 
-### セキュリティ修正 (Issue #9)
-- [x] sanitize.ts ユーティリティ (7関数, 29テスト)
-- [x] ACFフィールド名RCE防止 (toSafeIdentifier)
-- [x] XSS防止 (PT Renderer React要素化, dangerouslySetInnerHTML排除)
-- [x] URLプロトコル検証 (javascript:/data:/protocol-relative拒否)
-- [x] コード生成インジェクション防止 (siteTitle/mediaDomains エスケープ)
-- [x] パストラバーサル防止 (path.relative ガード)
-- [x] Gemini Proレビュー3回, 指摘3件反映
-
-### D-Phase: OSS公開準備
-- [x] README全面改訂 (英語, Quick Start, コマンドリファレンス, アーキテクチャ)
-- [x] MIT LICENSE + package.json整備 (全パッケージ)
-- [x] GitHub Actions CI (test + typecheck, pnpm cache)
-
-### B-Phase: ジェネレーター品質向上
-- [x] B1: RBAC強化 (fail-safe default deny, API 401/403, /unauthorized)
-- [x] B2: Tailwind CSS出力 (UiFramework option, 7テスト)
-- [x] B3: カット (C4 blog-scaffoldで基本カバー済み)
-
-## 未完了 (次のフェーズ)
-
-### C. Phase 1 MVP残タスク
-- [x] C1: Gutenberg → Portable Text → React変換 (WXRブログサイト向け)
-- [x] C2: Yoast SEOメタデータ移行テンプレート
-- [x] C3: ACFスキーマ移行テンプレート
-- [x] C4: Next.js scaffold生成 (WXR版)
-- [x] C5: Verify最小版 (Playwright)
-
-### D. OSS公開準備
-- [x] D1: README改善 (英語、フル書き直し)
-- [x] D2: npm publish準備 (MIT LICENSE, package.json整備)
-- [x] D3: CI/CD (GitHub Actions — test + typecheck)
+### OSS公開準備
+- README (英語, Quick Start, コマンドリファレンス)
+- MIT LICENSE + 全package.json整備
+- GitHub Actions CI (test + typecheck, pnpm cache)
 
 ## Issue一覧
 
 | # | タイトル | 状態 |
 |---|---------|------|
 | 1 | RFC: 全体アーキテクチャ方針 | Closed |
-| 2 | Phase 1-1: WPサイト解析 (Analyze) | Open |
-| 3 | Phase 1-2: コンテンツ Extract + Transform | Open |
-| 4 | Phase 1-3: 変換テンプレート (ACF, Yoast) | Open |
-| 5 | Phase 1-4: Next.js scaffold生成 | Open |
+| 2 | Phase 1-1: WPサイト解析 (Analyze) | Closed |
+| 3 | Phase 1-2: コンテンツ Extract + Transform | Closed |
+| 4 | Phase 1-3: 変換テンプレート (ACF, Yoast) | Closed |
+| 5 | Phase 1-4: Next.js scaffold生成 | Closed |
 | 6 | 12名専門家パネル統合方針 | Closed |
 | 7 | Karpathy原則レビュー: 18件修正 | Closed |
 | 8 | ドッグフーディング: JRA tokyo | Closed |
+| 9 | Security: コード生成サニタイズ不足 | Closed |
+| 10 | Bug: Gutenbergパーサー edge case | Open |
+| 11 | Enhancement: Yoast/ACF 実運用強化 | Open |
+| 12 | Bug: 生成コード品質 (in-place sort等) | Open |
+
+## 残タスク (Open Issues)
+
+**#10**: ネストリスト構造破壊, `<br>`未処理, HTMLエンティティ不完全, ブロック間フリーフォームドロップ, Reusable/Groupブロック未テスト
+
+**#11**: Yoast %%date%%/%%author%%等未対応, ACF Repeater/Flexible Content未対応, 大規模サイト(10k+投稿)スケーラビリティ, Rank Math対応
+
+**#12**: getAllPosts() in-place sort, blog-scaffold UiFramework未統一, カテゴリ空リスト404問題, remotePatterns HTTPS固定
 
 ## 重要な設計判断
 
-1. **emdash非依存**: ACLパターンで設計知識のみ参照。`@portabletext/toolkit`のみ直接依存
-2. **リブランド**: 「完全移行ツール」→「移行アクセラレータ」
-3. **LLMの役割**: レビューアシスタント (提案型、自動適用なし)
-4. **sax primary**: OOM防止のためストリーミングパーサーを優先
-5. **XXE防御**: XMLパーサーのEntity Expansion無効化必須
-6. **セキュリティゲートP1**: シークレットスキャン、SSRF防御をPhase 1に昇格
+1. **移行アクセラレータ**: 完全自動移行ではなく、scaffoldと分析で開発者を支援
+2. **WXR Zero Trust**: 入力データは全て悪意ある可能性を前提にサニタイズ
+3. **sax primary**: OOM防止のためストリーミングパーサーを優先
+4. **fail-safe RBAC**: 未登録パスはadministratorのみアクセス可能
+5. **UiFramework option**: plain/tailwind 選択可能なscaffold出力
+6. **Gemini CLIレビュー**: 毎タスク完了時にGemini Proでレビュー (計6回実施)
 
 ## ローカル開発
 
 ```bash
 pnpm install
-npx vitest run          # 217テスト
+npx vitest run          # 339テスト
 pnpm -r typecheck       # 全パッケージ型チェック
 
 # JRA tokyo再生成
