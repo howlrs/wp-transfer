@@ -74,7 +74,7 @@ export class SiteCollector implements WxrCollector {
       case "generator": {
         const match = text.match(/\?v=([\d.]+)/);
         if (match) {
-          this.wpVersion = match[1];
+          this.wpVersion = match[1] ?? "";
         }
         break;
       }

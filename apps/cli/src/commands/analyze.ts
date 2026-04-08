@@ -48,6 +48,13 @@ export const analyzeCommand = defineCommand({
     const source = args.source as string;
     const output = args.output as string;
     const format = args.format as string;
+
+    const validFormats = ["json", "markdown", "both"];
+    if (!validFormats.includes(format)) {
+      consola.error(`Invalid format "${format}". Must be one of: ${validFormats.join(", ")}`);
+      return;
+    }
+
     const resolvedSource = resolve(process.cwd(), source);
 
     if (source.endsWith(".xml") && existsSync(resolvedSource)) {

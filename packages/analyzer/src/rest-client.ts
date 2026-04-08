@@ -106,6 +106,7 @@ export function createWpRestClient(
     baseURL,
     headers,
     redirect: "manual",
+    timeout: 30_000,
   });
 
   return {

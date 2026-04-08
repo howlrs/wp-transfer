@@ -72,7 +72,7 @@ export const pluginRegistry: Record<string, PluginRegistryEntry> = {
     category: "security",
     migrationStrategy: "not-needed",
     difficulty: 1,
-    estimatedHours: 4,
+    estimatedHours: 0,
   },
   "sitepress-multilingual-cms": {
     category: "multilingual",

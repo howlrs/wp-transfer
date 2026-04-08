@@ -27,16 +27,6 @@ export interface WxrSaxEvents {
 export interface WxrCollector extends Partial<WxrSaxEvents> {}
 
 /**
- * Internal state tracked by the stream parser.
- */
-export interface StreamParserState {
-  /** Current element path stack, e.g. ["rss", "channel", "item"] */
-  tagStack: string[];
-  /** Accumulated text content for the current element */
-  textBuffer: string;
-}
-
-/**
  * Result returned by createWxrSaxStream, including any collected parse errors.
  */
 export interface WxrSaxStreamResult {

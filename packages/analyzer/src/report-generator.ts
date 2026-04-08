@@ -53,7 +53,8 @@ function buildMigrationPlan(plugins: PluginEntry[]): MigrationPlan {
 }
 
 function difficultyStars(n: number): string {
-  return "\u2605".repeat(n) + "\u2606".repeat(5 - n);
+  const clamped = Math.max(0, Math.min(5, Math.round(n)));
+  return "\u2605".repeat(clamped) + "\u2606".repeat(5 - clamped);
 }
 
 // ── Main ───────────────────────────────────────────────────────────

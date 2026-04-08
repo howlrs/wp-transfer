@@ -148,6 +148,30 @@ describe("parseWxr — taxonomy-and-attachments.xml", () => {
   });
 });
 
+describe("parseWxr — empty.xml (valid WXR, no items)", () => {
+  function openEmpty() {
+    return createReadStream(resolve(fixturesDir, "empty.xml"), "utf-8");
+  }
+
+  it("returns empty arrays without crashing", async () => {
+    const result = await parseWxr(openEmpty());
+
+    expect(result.posts).toEqual([]);
+    expect(result.media).toEqual([]);
+    expect(result.users).toEqual([]);
+    expect(result.taxonomies).toEqual([]);
+    expect(result.errors).toEqual([]);
+  });
+
+  it("still extracts site metadata", async () => {
+    const result = await parseWxr(openEmpty());
+
+    expect(result.siteTitle).toBe("Empty Site");
+    expect(result.siteUrl).toBe("https://example.com");
+    expect(result.wpVersion).toBe("6.7");
+  });
+});
+
 describe("parseWxr — error handling", () => {
   it("collects parse errors in the result instead of throwing", async () => {
     // Create a stream with malformed XML that sax will error on
