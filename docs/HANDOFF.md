@@ -2,7 +2,7 @@
 
 **バージョン:** v0.1.0-alpha
 **日付:** 2026-04-08
-**テスト:** 329 / 329 全パス
+**テスト:** 339 / 339 全パス
 **リポジトリ:** https://github.com/howlrs/wp-transfer
 
 ## プロジェクト概要
@@ -106,12 +106,12 @@ wp-transfer analyze-php <dir> [--schema db-schema.md] [--output path]
 - [x] MIT LICENSE + package.json整備 (全パッケージ)
 - [x] GitHub Actions CI (test + typecheck, pnpm cache)
 
-## 未完了 (次のフェーズ)
+### B-Phase: ジェネレーター品質向上
+- [x] B1: RBAC強化 (fail-safe default deny, API 401/403, /unauthorized)
+- [x] B2: Tailwind CSS出力 (UiFramework option, 7テスト)
+- [x] B3: カット (C4 blog-scaffoldで基本カバー済み)
 
-### B. JRA tokyo移行の仕上げ
-- [ ] B1: RBAC微調整 (ページ遷移改善)
-- [ ] B2: UI/デザイン改善 (Tailwind/shadcn)
-- [ ] B3: 残りWPテーマページ変換
+## 未完了 (次のフェーズ)
 
 ### C. Phase 1 MVP残タスク
 - [x] C1: Gutenberg → Portable Text → React変換 (WXRブログサイト向け)
