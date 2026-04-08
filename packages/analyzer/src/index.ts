@@ -54,3 +54,20 @@ export {
 export {
   generateApiStubs,
 } from "./nextjs-stub-generator.js";
+
+export {
+  generateAdminScaffold,
+  type AdminPage,
+} from "./admin-scaffold-generator.js";
+
+export {
+  generateAuthScaffold,
+  isAuthPluginDetected,
+  ADMIN_USER_PRISMA_MODEL,
+  type AuthScaffoldFile,
+} from "./auth-scaffold-generator.js";
+
+export {
+  generateDockerScaffold,
+  type DockerScaffoldFile,
+} from "./docker-scaffold-generator.js";
