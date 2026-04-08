@@ -1,7 +1,13 @@
 {
   "name": "wp-transfer",
   "private": true,
+  "description": "WordPress to Next.js migration accelerator CLI tool",
   "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/howlrs/wp-transfer.git"
+  },
   "engines": { "node": ">=20" },
   "packageManager": "pnpm@10.33.0",
   "scripts": {

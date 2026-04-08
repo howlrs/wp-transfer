@@ -1,7 +1,15 @@
 {
   "name": "wp-transfer-cli",
   "version": "0.1.0",
+  "description": "WordPress to Next.js migration accelerator CLI tool",
   "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/howlrs/wp-transfer.git"
+  },
+  "keywords": ["wordpress", "nextjs", "migration", "cli", "wp-transfer"],
+  "files": ["dist/", "src/"],
   "bin": { "wp-transfer": "./src/index.ts" },
   "scripts": { "dev": "tsx src/index.ts", "build": "tsc", "typecheck": "tsc --noEmit" },
   "dependencies": { "@wp-transfer/core": "workspace:*", "@wp-transfer/analyzer": "workspace:*", "@wp-transfer/wxr-parser": "workspace:*", "citty": "^0.2.2", "consola": "^3.4.2" },
