@@ -14,6 +14,7 @@
 export interface PrismaSchemaResult {
   schema: string;
   tables: TableDefinition[];
+  relations: RelationDefinition[];
 }
 
 export interface TableDefinition {
@@ -30,6 +31,17 @@ export interface ColumnDefinition {
   isAutoIncrement: boolean;
   defaultValue?: string;
   comment?: string;
+}
+
+export interface RelationDefinition {
+  /** Child table (the one with the foreign key column) */
+  childTable: string;
+  /** Foreign key column name (e.g. "event_id") */
+  childColumn: string;
+  /** Parent table (the one being referenced) */
+  parentTable: string;
+  /** Referenced column (usually "id") */
+  parentColumn: string;
 }
 
 // ── MySQL → Prisma type mapping ──
@@ -223,6 +235,46 @@ function finalizeColumn(partial: Partial<ColumnDefinition>): ColumnDefinition {
   };
 }
 
+// ── Relation detection ──
+
+/**
+ * Auto-detect relations based on column naming conventions.
+ *
+ * For each column ending in `_id` in every table, strip the suffix to get
+ * a candidate parent table name. If a table with that name exists in the
+ * list (exact match), emit a relation from child.column → parent.id.
+ *
+ * Self-referencing columns (where the parent would be the same table) are
+ * skipped. Columns that don't match any table are silently ignored.
+ */
+export function detectRelations(tables: TableDefinition[]): RelationDefinition[] {
+  const tableNames = new Set(tables.map((t) => t.name));
+  const relations: RelationDefinition[] = [];
+
+  for (const table of tables) {
+    for (const col of table.columns) {
+      if (!col.name.endsWith("_id")) continue;
+
+      const candidate = col.name.slice(0, -3); // strip "_id"
+      if (!candidate) continue;
+
+      // Skip self-references
+      if (candidate === table.name) continue;
+
+      if (tableNames.has(candidate)) {
+        relations.push({
+          childTable: table.name,
+          childColumn: col.name,
+          parentTable: candidate,
+          parentColumn: "id",
+        });
+      }
+    }
+  }
+
+  return relations;
+}
+
 // ── Prisma schema generator ──
 
 function toPrismaModelName(tableName: string): string {
@@ -278,12 +330,33 @@ function prismaFieldLine(col: ColumnDefinition): string {
   return line;
 }
 
-export function generatePrismaSchema(tables: TableDefinition[]): string {
+export function generatePrismaSchema(
+  tables: TableDefinition[],
+  relations?: RelationDefinition[],
+): string {
   const lines: string[] = [];
+  const rels = relations ?? [];
+
+  // Build lookup maps for relations
+  // childTable -> relations where this table is the child (has the FK)
+  const childRels = new Map<string, RelationDefinition[]>();
+  // parentTable -> relations where this table is the parent (has the reverse)
+  const parentRels = new Map<string, RelationDefinition[]>();
+
+  for (const rel of rels) {
+    if (!childRels.has(rel.childTable)) childRels.set(rel.childTable, []);
+    childRels.get(rel.childTable)!.push(rel);
+
+    if (!parentRels.has(rel.parentTable)) parentRels.set(rel.parentTable, []);
+    parentRels.get(rel.parentTable)!.push(rel);
+  }
 
   // Header
   lines.push("// Auto-generated Prisma schema from JRA database.md");
   lines.push("// Generated at: " + new Date().toISOString());
+  if (rels.length > 0) {
+    lines.push("// Enhanced with auto-detected relations");
+  }
   lines.push("");
   lines.push("generator client {");
   lines.push('  provider = "prisma-client-js"');
@@ -308,6 +381,44 @@ export function generatePrismaSchema(tables: TableDefinition[]): string {
       lines.push(prismaFieldLine(col));
     }
 
+    // Add child-side relation fields (this table has the FK)
+    const myChildRels = childRels.get(table.name) ?? [];
+    if (myChildRels.length > 0) {
+      lines.push("");
+      lines.push("  // Relations");
+      for (const rel of myChildRels) {
+        const parentModel = toPrismaModelName(rel.parentTable);
+        // Determine relation field name from the FK column (strip _id)
+        const relationField = rel.childColumn.slice(0, -3); // e.g. "event_id" -> "event"
+        const col = table.columns.find((c) => c.name === rel.childColumn);
+        const nullable = col?.nullable ?? false;
+        const typeStr = nullable ? `${parentModel}?` : parentModel;
+        lines.push(
+          `  ${relationField}  ${typeStr}  @relation(fields: [${rel.childColumn}], references: [${rel.parentColumn}])`,
+        );
+      }
+    }
+
+    // Add parent-side reverse relation fields (other tables reference this one)
+    const myParentRels = parentRels.get(table.name) ?? [];
+    if (myParentRels.length > 0) {
+      if (myChildRels.length === 0) {
+        lines.push("");
+        lines.push("  // Relations");
+      }
+      for (const rel of myParentRels) {
+        const childModel = toPrismaModelName(rel.childTable);
+        // Use plural form of child table as the field name
+        const reverseField = rel.childTable + "s";
+        lines.push(`  ${reverseField}  ${childModel}[]`);
+      }
+    }
+
+    // Add @@index for FK columns that have relations
+    for (const rel of myChildRels) {
+      lines.push(`  @@index([${rel.childColumn}])`);
+    }
+
     // Add @@map to preserve original table name
     lines.push("");
     lines.push(`  @@map("${table.name}")`);
@@ -321,6 +432,7 @@ export function generatePrismaSchema(tables: TableDefinition[]): string {
 
 export function parseSchemaToPrisma(content: string): PrismaSchemaResult {
   const tables = parseDbSchemaMarkdown(content);
-  const schema = generatePrismaSchema(tables);
-  return { schema, tables };
+  const relations = detectRelations(tables);
+  const schema = generatePrismaSchema(tables, relations);
+  return { schema, tables, relations };
 }

@@ -3,6 +3,7 @@ import {
   parseDbSchemaMarkdown,
   generatePrismaSchema,
   parseSchemaToPrisma,
+  detectRelations,
 } from "../src/schema-to-prisma.js";
 
 // ── Minimal fixture matching JRA database.md format ──
@@ -219,10 +220,94 @@ describe("generatePrismaSchema", () => {
   });
 });
 
+describe("detectRelations", () => {
+  it("detects event_id in event_slot generates Event relation", () => {
+    const tables = parseDbSchemaMarkdown(FIXTURE);
+    const relations = detectRelations(tables);
+
+    const slotToEvent = relations.find(
+      (r) => r.childTable === "event_slot" && r.childColumn === "event_id",
+    );
+    expect(slotToEvent).toBeDefined();
+    expect(slotToEvent!.parentTable).toBe("event");
+    expect(slotToEvent!.parentColumn).toBe("id");
+  });
+
+  it("detects event_id in lottery generates Event relation", () => {
+    const tables = parseDbSchemaMarkdown(FIXTURE);
+    const relations = detectRelations(tables);
+
+    const lotteryToEvent = relations.find(
+      (r) => r.childTable === "lottery" && r.childColumn === "event_id",
+    );
+    expect(lotteryToEvent).toBeDefined();
+    expect(lotteryToEvent!.parentTable).toBe("event");
+  });
+
+  it("skips unknown _id columns that don't match any table", () => {
+    const tables = parseDbSchemaMarkdown(FIXTURE);
+    const relations = detectRelations(tables);
+
+    // user_id in lottery references "user" which is NOT in our fixture
+    const unknownRel = relations.find(
+      (r) => r.childTable === "lottery" && r.childColumn === "user_id",
+    );
+    expect(unknownRel).toBeUndefined();
+  });
+
+  it("returns empty array when no _id columns exist", () => {
+    const tables = [
+      {
+        name: "standalone",
+        columns: [
+          { name: "id", type: "Int", nullable: false, isPrimary: true, isAutoIncrement: true },
+          { name: "title", type: "String", nullable: true, isPrimary: false, isAutoIncrement: false },
+        ],
+      },
+    ];
+    const relations = detectRelations(tables);
+    expect(relations).toEqual([]);
+  });
+});
+
+describe("generatePrismaSchema with relations", () => {
+  it("adds @relation annotation for detected FK columns", () => {
+    const tables = parseDbSchemaMarkdown(FIXTURE);
+    const relations = detectRelations(tables);
+    const schema = generatePrismaSchema(tables, relations);
+
+    expect(schema).toContain("@relation(fields: [event_id], references: [id])");
+  });
+
+  it("adds reverse relation array on parent model", () => {
+    const tables = parseDbSchemaMarkdown(FIXTURE);
+    const relations = detectRelations(tables);
+    const schema = generatePrismaSchema(tables, relations);
+
+    // Event should have event_slots and lotterys reverse relations
+    expect(schema).toContain("event_slots  EventSlot[]");
+    expect(schema).toContain("lotterys  Lottery[]");
+  });
+
+  it("adds @@index for FK columns", () => {
+    const tables = parseDbSchemaMarkdown(FIXTURE);
+    const relations = detectRelations(tables);
+    const schema = generatePrismaSchema(tables, relations);
+
+    expect(schema).toContain("@@index([event_id])");
+  });
+});
+
 describe("parseSchemaToPrisma (integration)", () => {
-  it("returns both schema string and table definitions", () => {
+  it("returns schema string, table definitions, and relations", () => {
     const result = parseSchemaToPrisma(FIXTURE);
     expect(result.schema).toBeTruthy();
     expect(result.tables.length).toBeGreaterThan(0);
+    expect(result.relations.length).toBeGreaterThan(0);
+  });
+
+  it("includes auto-detected relations comment in schema", () => {
+    const result = parseSchemaToPrisma(FIXTURE);
+    expect(result.schema).toContain("Enhanced with auto-detected relations");
   });
 });
