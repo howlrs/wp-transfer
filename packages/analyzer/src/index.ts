@@ -73,3 +73,8 @@ export {
   generateDockerScaffold,
   type DockerScaffoldFile,
 } from "./docker-scaffold-generator.js";
+
+export {
+  parseGutenbergBlocks,
+  type GutenbergBlock,
+} from "./gutenberg-parser.js";

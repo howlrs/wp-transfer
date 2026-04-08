@@ -53,7 +53,21 @@
 
 <!-- wp:embed {"url":"https://www.youtube.com/watch?v=dQw4w9WgXcQ","type":"video","providerNameSlug":"youtube"} -->
 <figure class="wp-block-embed is-type-video is-provider-youtube"><div class="wp-block-embed__wrapper">https://www.youtube.com/watch?v=dQw4w9WgXcQ</div></figure>
-<!-- /wp:embed -->]]></content:encoded>
+<!-- /wp:embed -->
+
+<!-- wp:quote -->
+<blockquote class="wp-block-quote"><p>To be or not to be.</p><cite>Shakespeare</cite></blockquote>
+<!-- /wp:quote -->
+
+<!-- wp:table -->
+<figure class="wp-block-table"><table class="has-fixed-layout"><thead><tr><th>Name</th><th>Value</th></tr></thead><tbody><tr><td>Alpha</td><td>1</td></tr><tr><td>Beta</td><td>2</td></tr></tbody></table></figure>
+<!-- /wp:table -->
+
+<!-- wp:separator {"className":"is-style-wide"} /-->
+
+<!-- wp:list {"ordered":true} -->
+<ol class="wp-block-list"><li>First</li><li>Second</li><li>Third</li></ol>
+<!-- /wp:list -->]]></content:encoded>
       <excerpt:encoded><![CDATA[]]></excerpt:encoded>
       <wp:post_id>5</wp:post_id>
       <wp:post_date><![CDATA[2024-01-02 12:00:00]]></wp:post_date>
