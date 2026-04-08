@@ -37,7 +37,9 @@ export {
 
 export {
   analyzePhpFile,
+  extractWpVersionFromPhp,
   type PhpFileAnalysis,
+  type PhpVersionHint,
   type DbOperation,
   type InputParam,
 } from "./php-analyzer.js";

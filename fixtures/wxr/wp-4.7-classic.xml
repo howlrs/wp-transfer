@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<rss version="2.0"
+  xmlns:excerpt="http://wordpress.org/export/1.2/excerpt/"
+  xmlns:content="http://purl.org/rss/1.0/modules/content/"
+  xmlns:wfw="http://wellformedweb.org/CommentAPI/"
+  xmlns:dc="http://purl.org/dc/elements/1.1/"
+  xmlns:wp="http://wordpress.org/export/1.2/">
+
+  <channel>
+    <title>Classic Editor Site</title>
+    <link>https://classic.example.com</link>
+    <description>A WordPress 4.7 site with classic editor content</description>
+    <language>en-US</language>
+    <wp:wxr_version>1.2</wp:wxr_version>
+    <wp:base_site_url>https://classic.example.com</wp:base_site_url>
+    <wp:base_blog_url>https://classic.example.com</wp:base_blog_url>
+    <generator>https://wordpress.org/?v=4.7.28</generator>
+
+    <wp:author>
+      <wp:author_id>1</wp:author_id>
+      <wp:author_login><![CDATA[admin]]></wp:author_login>
+      <wp:author_email><![CDATA[admin@classic.example.com]]></wp:author_email>
+      <wp:author_display_name><![CDATA[Site Admin]]></wp:author_display_name>
+      <wp:author_first_name><![CDATA[]]></wp:author_first_name>
+      <wp:author_last_name><![CDATA[]]></wp:author_last_name>
+    </wp:author>
+
+    <wp:category>
+      <wp:term_id>1</wp:term_id>
+      <wp:category_nicename><![CDATA[uncategorized]]></wp:category_nicename>
+      <wp:category_parent><![CDATA[]]></wp:category_parent>
+      <wp:cat_name><![CDATA[Uncategorized]]></wp:cat_name>
+      <wp:category_description><![CDATA[]]></wp:category_description>
+    </wp:category>
+
+    <item>
+      <title>Classic Editor Post</title>
+      <link>https://classic.example.com/classic-editor-post/</link>
+      <pubDate>Wed, 15 Mar 2017 10:30:00 +0000</pubDate>
+      <dc:creator><![CDATA[admin]]></dc:creator>
+      <category domain="category" nicename="uncategorized"><![CDATA[Uncategorized]]></category>
+      <description></description>
+      <content:encoded><![CDATA[<h2>Welcome to Our Site</h2>
+<p>This is a classic editor post with <strong>bold text</strong>, <em>italic text</em>, and a <a href="https://example.com">hyperlink</a>.</p>
+<p>Here is a second paragraph with an image below:</p>
+<p><img src="https://classic.example.com/wp-content/uploads/2017/03/banner.jpg" alt="Banner" width="800" height="400" class="aligncenter size-full" /></p>
+<blockquote><p>This is a blockquote from a classic editor post.</p></blockquote>
+<ul>
+<li>List item one</li>
+<li>List item two</li>
+<li>List item three</li>
+</ul>]]></content:encoded>
+      <excerpt:encoded><![CDATA[A classic editor post with rich formatting.]]></excerpt:encoded>
+      <wp:post_id>1</wp:post_id>
+      <wp:post_date><![CDATA[2017-03-15 10:30:00]]></wp:post_date>
+      <wp:post_date_gmt><![CDATA[2017-03-15 10:30:00]]></wp:post_date_gmt>
+      <wp:post_modified><![CDATA[2017-03-15 10:30:00]]></wp:post_modified>
+      <wp:post_modified_gmt><![CDATA[2017-03-15 10:30:00]]></wp:post_modified_gmt>
+      <wp:comment_status><![CDATA[open]]></wp:comment_status>
+      <wp:ping_status><![CDATA[open]]></wp:ping_status>
+      <wp:post_name><![CDATA[classic-editor-post]]></wp:post_name>
+      <wp:status><![CDATA[publish]]></wp:status>
+      <wp:post_parent>0</wp:post_parent>
+      <wp:menu_order>0</wp:menu_order>
+      <wp:post_type><![CDATA[post]]></wp:post_type>
+      <wp:post_password><![CDATA[]]></wp:post_password>
+      <wp:is_sticky>0</wp:is_sticky>
+    </item>
+
+    <item>
+      <title>About Us</title>
+      <link>https://classic.example.com/about-us/</link>
+      <pubDate>Wed, 15 Mar 2017 11:00:00 +0000</pubDate>
+      <dc:creator><![CDATA[admin]]></dc:creator>
+      <description></description>
+      <content:encoded><![CDATA[<h2>About Our Company</h2>
+<p>We are a small business established in 2017. Contact us at info@classic.example.com.</p>
+<table>
+<tr><th>Service</th><th>Price</th></tr>
+<tr><td>Consulting</td><td>$100/hr</td></tr>
+<tr><td>Development</td><td>$150/hr</td></tr>
+</table>]]></content:encoded>
+      <excerpt:encoded><![CDATA[]]></excerpt:encoded>
+      <wp:post_id>2</wp:post_id>
+      <wp:post_date><![CDATA[2017-03-15 11:00:00]]></wp:post_date>
+      <wp:post_date_gmt><![CDATA[2017-03-15 11:00:00]]></wp:post_date_gmt>
+      <wp:post_modified><![CDATA[2017-03-15 11:00:00]]></wp:post_modified>
+      <wp:post_modified_gmt><![CDATA[2017-03-15 11:00:00]]></wp:post_modified_gmt>
+      <wp:comment_status><![CDATA[closed]]></wp:comment_status>
+      <wp:ping_status><![CDATA[closed]]></wp:ping_status>
+      <wp:post_name><![CDATA[about-us]]></wp:post_name>
+      <wp:status><![CDATA[publish]]></wp:status>
+      <wp:post_parent>0</wp:post_parent>
+      <wp:menu_order>0</wp:menu_order>
+      <wp:post_type><![CDATA[page]]></wp:post_type>
+      <wp:post_password><![CDATA[]]></wp:post_password>
+      <wp:is_sticky>0</wp:is_sticky>
+    </item>
+
+  </channel>
+</rss>

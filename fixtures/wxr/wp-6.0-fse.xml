@@ -1,0 +1,151 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<rss version="2.0"
+  xmlns:excerpt="http://wordpress.org/export/1.2/excerpt/"
+  xmlns:content="http://purl.org/rss/1.0/modules/content/"
+  xmlns:wfw="http://wellformedweb.org/CommentAPI/"
+  xmlns:dc="http://purl.org/dc/elements/1.1/"
+  xmlns:wp="http://wordpress.org/export/1.2/">
+
+  <channel>
+    <title>FSE Theme Site</title>
+    <link>https://fse.example.com</link>
+    <description>A WordPress 6.0 site with Full Site Editing blocks</description>
+    <language>en-US</language>
+    <wp:wxr_version>1.2</wp:wxr_version>
+    <wp:base_site_url>https://fse.example.com</wp:base_site_url>
+    <wp:base_blog_url>https://fse.example.com</wp:base_blog_url>
+    <generator>https://wordpress.org/?v=6.0.9</generator>
+
+    <wp:author>
+      <wp:author_id>1</wp:author_id>
+      <wp:author_login><![CDATA[editor]]></wp:author_login>
+      <wp:author_email><![CDATA[editor@fse.example.com]]></wp:author_email>
+      <wp:author_display_name><![CDATA[Editor]]></wp:author_display_name>
+      <wp:author_first_name><![CDATA[]]></wp:author_first_name>
+      <wp:author_last_name><![CDATA[]]></wp:author_last_name>
+    </wp:author>
+
+    <item>
+      <title>FSE Blog Post</title>
+      <link>https://fse.example.com/fse-blog-post/</link>
+      <pubDate>Thu, 01 Jun 2023 09:00:00 +0000</pubDate>
+      <dc:creator><![CDATA[editor]]></dc:creator>
+      <description></description>
+      <content:encoded><![CDATA[<!-- wp:paragraph -->
+<p>This is a post on a Full Site Editing theme with modern blocks.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":2} -->
+<h2 class="wp-block-heading">Section Title</h2>
+<!-- /wp:heading -->
+
+<!-- wp:columns -->
+<div class="wp-block-columns">
+<!-- wp:column -->
+<div class="wp-block-column">
+<!-- wp:paragraph -->
+<p>Left column content.</p>
+<!-- /wp:paragraph -->
+</div>
+<!-- /wp:column -->
+<!-- wp:column -->
+<div class="wp-block-column">
+<!-- wp:paragraph -->
+<p>Right column content.</p>
+<!-- /wp:paragraph -->
+</div>
+<!-- /wp:column -->
+</div>
+<!-- /wp:columns -->
+
+<!-- wp:group {"layout":{"type":"constrained"}} -->
+<div class="wp-block-group">
+<!-- wp:paragraph -->
+<p>A group block with constrained layout.</p>
+<!-- /wp:paragraph -->
+</div>
+<!-- /wp:group -->]]></content:encoded>
+      <excerpt:encoded><![CDATA[]]></excerpt:encoded>
+      <wp:post_id>10</wp:post_id>
+      <wp:post_date><![CDATA[2023-06-01 09:00:00]]></wp:post_date>
+      <wp:post_date_gmt><![CDATA[2023-06-01 09:00:00]]></wp:post_date_gmt>
+      <wp:post_modified><![CDATA[2023-06-01 09:00:00]]></wp:post_modified>
+      <wp:post_modified_gmt><![CDATA[2023-06-01 09:00:00]]></wp:post_modified_gmt>
+      <wp:comment_status><![CDATA[open]]></wp:comment_status>
+      <wp:ping_status><![CDATA[open]]></wp:ping_status>
+      <wp:post_name><![CDATA[fse-blog-post]]></wp:post_name>
+      <wp:status><![CDATA[publish]]></wp:status>
+      <wp:post_parent>0</wp:post_parent>
+      <wp:menu_order>0</wp:menu_order>
+      <wp:post_type><![CDATA[post]]></wp:post_type>
+      <wp:post_password><![CDATA[]]></wp:post_password>
+      <wp:is_sticky>0</wp:is_sticky>
+    </item>
+
+    <item>
+      <title>Header</title>
+      <link>https://fse.example.com/header/</link>
+      <pubDate>Mon, 01 May 2023 08:00:00 +0000</pubDate>
+      <dc:creator><![CDATA[editor]]></dc:creator>
+      <description></description>
+      <content:encoded><![CDATA[<!-- wp:template-part {"slug":"header","tagName":"header"} -->
+<!-- wp:group {"layout":{"type":"flex","justifyContent":"space-between"}} -->
+<div class="wp-block-group">
+<!-- wp:site-title /-->
+<!-- wp:navigation {"ref":42} /-->
+</div>
+<!-- /wp:group -->
+<!-- /wp:template-part -->]]></content:encoded>
+      <excerpt:encoded><![CDATA[]]></excerpt:encoded>
+      <wp:post_id>20</wp:post_id>
+      <wp:post_date><![CDATA[2023-05-01 08:00:00]]></wp:post_date>
+      <wp:post_date_gmt><![CDATA[2023-05-01 08:00:00]]></wp:post_date_gmt>
+      <wp:post_modified><![CDATA[2023-05-01 08:00:00]]></wp:post_modified>
+      <wp:post_modified_gmt><![CDATA[2023-05-01 08:00:00]]></wp:post_modified_gmt>
+      <wp:comment_status><![CDATA[closed]]></wp:comment_status>
+      <wp:ping_status><![CDATA[closed]]></wp:ping_status>
+      <wp:post_name><![CDATA[header]]></wp:post_name>
+      <wp:status><![CDATA[publish]]></wp:status>
+      <wp:post_parent>0</wp:post_parent>
+      <wp:menu_order>0</wp:menu_order>
+      <wp:post_type><![CDATA[wp_template_part]]></wp:post_type>
+      <wp:post_password><![CDATA[]]></wp:post_password>
+      <wp:is_sticky>0</wp:is_sticky>
+    </item>
+
+    <item>
+      <title>Single</title>
+      <link>https://fse.example.com/single/</link>
+      <pubDate>Mon, 01 May 2023 08:00:00 +0000</pubDate>
+      <dc:creator><![CDATA[editor]]></dc:creator>
+      <description></description>
+      <content:encoded><![CDATA[<!-- wp:template-part {"slug":"header","tagName":"header"} /-->
+
+<!-- wp:group {"tagName":"main","layout":{"type":"constrained"}} -->
+<main class="wp-block-group">
+<!-- wp:post-title {"level":1} /-->
+<!-- wp:post-content {"layout":{"type":"constrained"}} /-->
+<!-- wp:post-terms {"term":"category"} /-->
+</main>
+<!-- /wp:group -->
+
+<!-- wp:template-part {"slug":"footer","tagName":"footer"} /-->]]></content:encoded>
+      <excerpt:encoded><![CDATA[]]></excerpt:encoded>
+      <wp:post_id>21</wp:post_id>
+      <wp:post_date><![CDATA[2023-05-01 08:00:00]]></wp:post_date>
+      <wp:post_date_gmt><![CDATA[2023-05-01 08:00:00]]></wp:post_date_gmt>
+      <wp:post_modified><![CDATA[2023-05-01 08:00:00]]></wp:post_modified>
+      <wp:post_modified_gmt><![CDATA[2023-05-01 08:00:00]]></wp:post_modified_gmt>
+      <wp:comment_status><![CDATA[closed]]></wp:comment_status>
+      <wp:ping_status><![CDATA[closed]]></wp:ping_status>
+      <wp:post_name><![CDATA[single]]></wp:post_name>
+      <wp:status><![CDATA[publish]]></wp:status>
+      <wp:post_parent>0</wp:post_parent>
+      <wp:menu_order>0</wp:menu_order>
+      <wp:post_type><![CDATA[wp_template]]></wp:post_type>
+      <wp:post_password><![CDATA[]]></wp:post_password>
+      <wp:is_sticky>0</wp:is_sticky>
+    </item>
+
+  </channel>
+</rss>

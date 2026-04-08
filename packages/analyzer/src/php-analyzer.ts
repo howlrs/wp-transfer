@@ -6,6 +6,11 @@
 
 // ── Types ──
 
+export interface PhpVersionHint {
+  minVersion: string;
+  reason: string;
+}
+
 export interface PhpFileAnalysis {
   fileName: string;
   purpose: string;
@@ -14,6 +19,7 @@ export interface PhpFileAnalysis {
   outputType: "redirect" | "echo" | "json" | "html" | "unknown";
   redirectTarget?: string;
   securityIssues: string[];
+  phpVersionHints: PhpVersionHint[];
 }
 
 export interface DbOperation {
@@ -197,6 +203,47 @@ function detectSecurityIssues(content: string): string[] {
   return [...new Set(issues)];
 }
 
+// ── PHP version hint patterns ──
+
+const PHP_VERSION_PATTERNS: Array<{ re: RegExp; minVersion: string; reason: string }> = [
+  // PHP 7.4+
+  { re: /\bfn\s*\(/, minVersion: "7.4", reason: "Arrow function (fn)" },
+  { re: /(?:public|protected|private|static)\s+(?:int|float|string|bool|array|object|self|parent)\s+\$/, minVersion: "7.4", reason: "Typed property" },
+  // PHP 8.0+
+  { re: /\bmatch\s*\(/, minVersion: "8.0", reason: "match expression" },
+  { re: /\w+\s*\(\s*\w+\s*:\s*/, minVersion: "8.0", reason: "Named argument" },
+  { re: /#\[\w+/, minVersion: "8.0", reason: "PHP attribute syntax" },
+  { re: /\?\->/, minVersion: "8.0", reason: "Null-safe operator (?->)" },
+  // PHP 8.1+
+  { re: /\breadonly\b/, minVersion: "8.1", reason: "readonly keyword" },
+  { re: /\benum\s+\w+/, minVersion: "8.1", reason: "Enum declaration" },
+  { re: /\w+&\w+\s+\$/, minVersion: "8.1", reason: "Intersection type" },
+  { re: /new\s+Fiber\s*\(/, minVersion: "8.1", reason: "Fiber usage" },
+];
+
+function detectPhpVersionHints(content: string): PhpVersionHint[] {
+  const hints: PhpVersionHint[] = [];
+  const seen = new Set<string>();
+
+  for (const { re, minVersion, reason } of PHP_VERSION_PATTERNS) {
+    if (re.test(content) && !seen.has(reason)) {
+      seen.add(reason);
+      hints.push({ minVersion, reason });
+    }
+  }
+
+  return hints;
+}
+
+/**
+ * Extract WP version from `wp-includes/version.php` content.
+ * Looks for: $wp_version = '6.7';
+ */
+export function extractWpVersionFromPhp(content: string): string | undefined {
+  const match = content.match(/\$wp_version\s*=\s*['"]([\d.]+)['"]/);
+  return match ? match[1] : undefined;
+}
+
 function inferPurpose(fileName: string, content: string): string {
   const base = fileName.replace(/\.php$/, "");
 
@@ -266,6 +313,7 @@ export function analyzePhpFile(
   const { outputType, redirectTarget } = detectOutputType(content);
   const securityIssues = detectSecurityIssues(content);
   const purpose = inferPurpose(fileName, content);
+  const phpVersionHints = detectPhpVersionHints(content);
 
   return {
     fileName,
@@ -275,5 +323,6 @@ export function analyzePhpFile(
     outputType,
     ...(redirectTarget ? { redirectTarget } : {}),
     securityIssues,
+    phpVersionHints,
   };
 }

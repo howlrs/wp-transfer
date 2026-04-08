@@ -52,6 +52,17 @@ function buildMigrationPlan(plugins: PluginEntry[]): MigrationPlan {
   return { automated, template, llmAssisted, manual };
 }
 
+function wpVersionCompatibilityNote(wpVersion: string): string | undefined {
+  const major = parseFloat(wpVersion);
+  if (Number.isNaN(major)) return undefined;
+
+  if (major < 4.1) return "WXR 1.0/1.1 — custom post types and term meta may be unavailable.";
+  if (major < 4.7) return "WXR 1.2 supported. No REST API — WXR-only analysis.";
+  if (major < 5.0) return "WXR 1.2 + REST API v2. Classic editor only (no Gutenberg blocks).";
+  if (major < 6.0) return "WXR 1.2 + REST API v2 + Gutenberg block editor.";
+  return "WXR 1.2 + REST API v2 + Full Site Editing. Full feature support.";
+}
+
 function difficultyStars(n: number): string {
   const clamped = Math.max(0, Math.min(5, Math.round(n)));
   return "\u2605".repeat(clamped) + "\u2606".repeat(5 - clamped);
@@ -100,6 +111,11 @@ export function reportToMarkdown(report: MigrationReport): string {
   }
   lines.push(`| Theme | ${report.theme.name}${report.theme.version ? ` v${report.theme.version}` : ""} |`);
   lines.push(`| Child Theme | ${report.theme.isChild ? "Yes" : "No"} |`);
+  const compatNote = wpVersionCompatibilityNote(report.wpVersion);
+  if (compatNote) {
+    lines.push("");
+    lines.push(`> **Compatibility**: ${compatNote}`);
+  }
   lines.push("");
 
   // ─ Content Summary ─

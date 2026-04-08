@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { analyzePhpFile } from "../src/php-analyzer.js";
+import { analyzePhpFile, extractWpVersionFromPhp } from "../src/php-analyzer.js";
 import type { PhpFileAnalysis } from "../src/php-analyzer.js";
 
 // ── Helper to build minimal PHP content ──
@@ -201,6 +201,106 @@ describe("analyzePhpFile", () => {
       `);
       const result = analyzePhpFile(content, "custom-action.php");
       expect(result.purpose).toContain("create");
+    });
+  });
+
+  describe("PHP version hint detection", () => {
+    it("detects PHP 7.4 arrow function", () => {
+      const content = phpWrap(`$double = fn($x) => $x * 2;`);
+      const result = analyzePhpFile(content, "test.php");
+      expect(result.phpVersionHints.some((h) => h.minVersion === "7.4")).toBe(true);
+      expect(result.phpVersionHints.some((h) => h.reason.includes("Arrow function"))).toBe(true);
+    });
+
+    it("detects PHP 7.4 typed property", () => {
+      const content = phpWrap(`class Foo { public int $id; }`);
+      const result = analyzePhpFile(content, "test.php");
+      expect(result.phpVersionHints.some((h) => h.minVersion === "7.4")).toBe(true);
+      expect(result.phpVersionHints.some((h) => h.reason.includes("Typed property"))).toBe(true);
+    });
+
+    it("detects PHP 8.0 match expression", () => {
+      const content = phpWrap(`$result = match($status) { 1 => 'active', 0 => 'inactive' };`);
+      const result = analyzePhpFile(content, "test.php");
+      expect(result.phpVersionHints.some((h) => h.minVersion === "8.0")).toBe(true);
+      expect(result.phpVersionHints.some((h) => h.reason.includes("match expression"))).toBe(true);
+    });
+
+    it("detects PHP 8.0 null-safe operator", () => {
+      const content = phpWrap(`$name = $user?->getName();`);
+      const result = analyzePhpFile(content, "test.php");
+      expect(result.phpVersionHints.some((h) => h.minVersion === "8.0")).toBe(true);
+      expect(result.phpVersionHints.some((h) => h.reason.includes("Null-safe"))).toBe(true);
+    });
+
+    it("detects PHP 8.1 readonly keyword", () => {
+      const content = phpWrap(`readonly class Config { }`);
+      const result = analyzePhpFile(content, "test.php");
+      expect(result.phpVersionHints.some((h) => h.minVersion === "8.1")).toBe(true);
+      expect(result.phpVersionHints.some((h) => h.reason.includes("readonly"))).toBe(true);
+    });
+
+    it("detects PHP 8.1 enum declaration", () => {
+      const content = phpWrap(`enum Status: string { case Active = 'active'; }`);
+      const result = analyzePhpFile(content, "test.php");
+      expect(result.phpVersionHints.some((h) => h.minVersion === "8.1")).toBe(true);
+      expect(result.phpVersionHints.some((h) => h.reason.includes("Enum"))).toBe(true);
+    });
+
+    it("detects PHP 8.0 attribute syntax", () => {
+      const content = phpWrap(`#[Route('/api/users')]\nclass UserController { }`);
+      const result = analyzePhpFile(content, "test.php");
+      expect(result.phpVersionHints.some((h) => h.minVersion === "8.0")).toBe(true);
+      expect(result.phpVersionHints.some((h) => h.reason.includes("attribute"))).toBe(true);
+    });
+
+    it("returns empty hints for legacy PHP code", () => {
+      const content = phpWrap(`
+        $title = $_POST["title"];
+        $sql = "INSERT INTO event(title) VALUES ('$title');";
+      `);
+      const result = analyzePhpFile(content, "test.php");
+      expect(result.phpVersionHints).toEqual([]);
+    });
+
+    it("collects multiple hints from a single file", () => {
+      const content = phpWrap(`
+        readonly class Config {
+          public int $id;
+          public function handle(): string {
+            return match($this->id) { 1 => 'one', default => 'other' };
+          }
+        }
+      `);
+      const result = analyzePhpFile(content, "test.php");
+      expect(result.phpVersionHints.length).toBeGreaterThanOrEqual(3);
+      const versions = result.phpVersionHints.map((h) => h.minVersion);
+      expect(versions).toContain("7.4");
+      expect(versions).toContain("8.0");
+      expect(versions).toContain("8.1");
+    });
+  });
+
+  describe("extractWpVersionFromPhp", () => {
+    it("extracts version from wp-includes/version.php content", () => {
+      const content = `<?php
+/**
+ * @global string $wp_version
+ */
+$wp_version = '6.7';
+$wp_db_version = 58975;
+`;
+      expect(extractWpVersionFromPhp(content)).toBe("6.7");
+    });
+
+    it("handles double-quoted version string", () => {
+      const content = `$wp_version = "5.9.3";`;
+      expect(extractWpVersionFromPhp(content)).toBe("5.9.3");
+    });
+
+    it("returns undefined when no version found", () => {
+      const content = `<?php echo "hello"; ?>`;
+      expect(extractWpVersionFromPhp(content)).toBeUndefined();
     });
   });
 
