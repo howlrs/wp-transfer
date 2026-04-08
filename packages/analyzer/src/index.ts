@@ -60,6 +60,8 @@ export {
 export {
   generateAdminScaffold,
   type AdminPage,
+  type UiFramework,
+  type AdminScaffoldOptions,
 } from "./admin-scaffold-generator.js";
 
 export {

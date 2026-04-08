@@ -198,6 +198,90 @@ describe("Admin Scaffold Generator", () => {
     });
   });
 
+  describe("Tailwind CSS output", () => {
+    it("generates Tailwind classes when uiFramework is tailwind", () => {
+      const analyses = [makeAnalysis({ fileName: "page-event-list.php" })];
+      const tables = [makeTable("event")];
+
+      const pages = generateAdminScaffold(analyses, tables, { uiFramework: "tailwind" });
+      const listPage = findPage(pages, "events/page.tsx");
+
+      expect(listPage).toBeDefined();
+      expect(listPage!.content).toContain("className=");
+      expect(listPage!.content).not.toContain("style={");
+    });
+
+    it("defaults to plain (inline styles) when no option", () => {
+      const analyses = [makeAnalysis({ fileName: "page-event-list.php" })];
+      const tables = [makeTable("event")];
+
+      const pages = generateAdminScaffold(analyses, tables);
+      const listPage = findPage(pages, "events/page.tsx");
+
+      expect(listPage).toBeDefined();
+      expect(listPage!.content).toContain("style={");
+      expect(listPage!.content).not.toContain("className=");
+    });
+
+    it("generates Tailwind form page without inline styles", () => {
+      const analyses = [
+        makeAnalysis({
+          fileName: "page-event.php",
+          inputParams: [
+            { name: "title", source: "$_POST", usage: "$_POST[\"title\"]" },
+            { name: "status", source: "$_POST", usage: "$_POST[\"status\"]" },
+          ],
+        }),
+      ];
+      const tables = [makeTable("event")];
+
+      const pages = generateAdminScaffold(analyses, tables, { uiFramework: "tailwind" });
+      const formPage = findPage(pages, "events/new/page.tsx");
+
+      expect(formPage).toBeDefined();
+      expect(formPage!.content).toContain("className=");
+      expect(formPage!.content).not.toContain("style={");
+      expect(formPage!.content).toContain("bg-blue-600");
+      expect(formPage!.content).toContain("rounded-md");
+    });
+
+    it("generates Tailwind detail page without inline styles", () => {
+      const analyses = [makeAnalysis({ fileName: "page-event-summary.php" })];
+      const tables = [makeTable("event")];
+
+      const pages = generateAdminScaffold(analyses, tables, { uiFramework: "tailwind" });
+      const detailPage = findPage(pages, "summary/page.tsx");
+
+      expect(detailPage).toBeDefined();
+      expect(detailPage!.content).toContain("className=");
+      expect(detailPage!.content).not.toContain("style={");
+    });
+
+    it("generates Tailwind dashboard without inline styles", () => {
+      const analyses = [makeAnalysis({ fileName: "page-event-list.php" })];
+      const tables = [makeTable("event"), makeTable("user")];
+
+      const pages = generateAdminScaffold(analyses, tables, { uiFramework: "tailwind" });
+      const dashboard = findPage(pages, "(admin)/page.tsx");
+
+      expect(dashboard).toBeDefined();
+      expect(dashboard!.content).toContain("className=");
+      expect(dashboard!.content).not.toContain("style={");
+    });
+
+    it("generates Tailwind layout without inline styles", () => {
+      const analyses = [makeAnalysis({ fileName: "page-event-list.php" })];
+      const tables = [makeTable("event")];
+
+      const pages = generateAdminScaffold(analyses, tables, { uiFramework: "tailwind" });
+      const layout = findPage(pages, "layout.tsx");
+
+      expect(layout).toBeDefined();
+      expect(layout!.content).toContain("className=");
+      expect(layout!.content).not.toContain("style={");
+    });
+  });
+
   describe("multiple resources", () => {
     it("generates pages for multiple resources", () => {
       const analyses = [

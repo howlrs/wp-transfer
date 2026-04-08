@@ -9,6 +9,12 @@ import type { TableDefinition } from "./schema-to-prisma.js";
 
 // ── Types ──
 
+export type UiFramework = "plain" | "tailwind";
+
+export interface AdminScaffoldOptions {
+  uiFramework?: UiFramework;
+}
+
 export interface AdminPage {
   path: string;
   content: string;
@@ -155,11 +161,71 @@ function generateListPage(
   resource: string,
   table: TableDefinition | undefined,
   analyses: PhpFileAnalysis[],
+  fw: UiFramework,
 ): string {
   const modelName = toPascalCase(table?.name ?? resource);
   const camelModel = toCamelCase(table?.name ?? resource);
   const columns = table?.columns ?? [];
   const displayColumns = columns.slice(0, 8); // Show first 8 columns
+
+  if (fw === "tailwind") {
+    return `import { prisma } from "@/lib/db";
+import Link from "next/link";
+
+export default async function ${modelName}ListPage() {
+  const items = await prisma.${camelModel}.findMany({
+    orderBy: { id: "desc" },
+    take: 100,
+  });
+
+  return (
+    <div className="p-6">
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-2xl font-bold">${modelName} 一覧</h1>
+        <Link
+          href="/${pluralize(resource)}s/new"
+          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+        >
+          新規作成
+        </Link>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full">
+          <thead>
+            <tr className="bg-gray-100">
+${displayColumns.map((c) => `              <th className="px-4 py-3 text-left border-b-2 border-gray-200 text-sm">${c.comment ?? fieldLabel(c.name)}</th>`).join("\n")}
+              <th className="px-4 py-3 text-left border-b-2 border-gray-200 text-sm">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((item) => (
+              <tr key={item.id} className="border-b border-gray-200">
+${displayColumns.map((c) => `                <td className="px-4 py-3 text-sm">{String(item.${c.name} ?? "")}</td>`).join("\n")}
+                <td className="px-4 py-3">
+                  <Link
+                    href={\`/${pluralize(resource)}s/\${item.id}\`}
+                    className="text-blue-600 underline mr-2"
+                  >
+                    編集
+                  </Link>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {items.length === 0 && (
+        <p className="text-center py-12 text-gray-500">
+          データがありません
+        </p>
+      )}
+    </div>
+  );
+}
+`;
+  }
 
   return `import { prisma } from "@/lib/db";
 import Link from "next/link";
@@ -230,6 +296,7 @@ function generateFormPage(
   table: TableDefinition | undefined,
   analysis: PhpFileAnalysis | undefined,
   isEdit: boolean,
+  fw: UiFramework,
 ): string {
   const modelName = toPascalCase(table?.name ?? resource);
   const camelModel = toCamelCase(table?.name ?? resource);
@@ -288,7 +355,7 @@ function generateFormPage(
 
   const extraImports = isEdit ? ', useParams' : '';
 
-  return `"use client";
+  const jsxPreamble = `"use client";
 
 import { useState${isEdit ? ", useEffect" : ""}${extraImports} } from "react";
 import { useRouter } from "next/navigation";
@@ -325,7 +392,62 @@ export default function ${pageName}() {
     }
   };
 
-  return (
+`;
+
+  if (fw === "tailwind") {
+    return jsxPreamble + `  return (
+    <div className="p-6 max-w-3xl">
+      <h1 className="text-2xl font-bold mb-6">${pageTitle}</h1>
+
+      {error && (
+        <div className="p-3 bg-red-50 text-red-600 rounded-md mb-4">
+          {error}
+        </div>
+      )}
+
+      <form onSubmit={handleSubmit}>
+        <div className="grid gap-4 max-w-2xl">
+${formFields
+  .map(
+    (f) => `          <div className="flex flex-col gap-1">
+            <label className="text-sm font-medium">
+              ${f.label}
+            </label>
+            <input
+              type="${f.type}"
+              value={String(form.${f.name} ?? "")}
+              onChange={(e) => setForm({ ...form, ${f.name}: ${f.type === "number" ? "Number(e.target.value)" : f.type === "checkbox" ? "e.target.checked" : "e.target.value"} })}
+              className="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>`,
+  )
+  .join("\n")}
+        </div>
+
+        <div className="flex gap-3 mt-6">
+          <button
+            type="submit"
+            disabled={submitting}
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+          >
+            {submitting ? "保存中..." : "保存"}
+          </button>
+          <button
+            type="button"
+            onClick={() => router.back()}
+            className="px-4 py-2 bg-gray-100 text-gray-700 border border-gray-300 rounded-md hover:bg-gray-200"
+          >
+            キャンセル
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+`;
+  }
+
+  return jsxPreamble + `  return (
     <div style={{ padding: "24px", maxWidth: "800px" }}>
       <h1 style={{ fontSize: "24px", fontWeight: "bold", marginBottom: "24px" }}>${pageTitle}</h1>
 
@@ -400,10 +522,53 @@ ${formFields
 function generateDetailPage(
   resource: string,
   table: TableDefinition | undefined,
+  fw: UiFramework,
 ): string {
   const modelName = toPascalCase(table?.name ?? resource);
   const camelModel = toCamelCase(table?.name ?? resource);
   const columns = table?.columns ?? [];
+
+  if (fw === "tailwind") {
+    return `import { prisma } from "@/lib/db";
+
+export default async function ${modelName}SummaryPage() {
+  const items = await prisma.${camelModel}.findMany({
+    orderBy: { id: "desc" },
+    take: 50,
+  });
+
+  const total = await prisma.${camelModel}.count();
+
+  return (
+    <div className="p-6">
+      <h1 className="text-2xl font-bold mb-6">${modelName} サマリー</h1>
+
+      <div className="mb-6 p-4 bg-blue-50 rounded-lg">
+        <p className="text-sm text-gray-500">総件数</p>
+        <p className="text-3xl font-bold text-blue-800">{total}</p>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full">
+          <thead>
+            <tr className="bg-gray-100">
+${columns.slice(0, 6).map((c) => `              <th className="px-4 py-3 text-left border-b-2 border-gray-200 text-sm">${c.comment ?? fieldLabel(c.name)}</th>`).join("\n")}
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((item) => (
+              <tr key={item.id} className="border-b border-gray-200">
+${columns.slice(0, 6).map((c) => `                <td className="px-4 py-3 text-sm">{String(item.${c.name} ?? "")}</td>`).join("\n")}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+`;
+  }
 
   return `import { prisma } from "@/lib/db";
 
@@ -446,7 +611,7 @@ ${columns.slice(0, 6).map((c) => `                <td style={{ padding: "12px 16
 `;
 }
 
-function generateDashboardPage(tables: TableDefinition[]): string {
+function generateDashboardPage(tables: TableDefinition[], fw: UiFramework): string {
   const countQueries = tables
     .map(
       (t) =>
@@ -455,6 +620,36 @@ function generateDashboardPage(tables: TableDefinition[]): string {
     .join("\n");
 
   const destructuring = tables.map((t, i) => `count${i}`).join(", ");
+
+  if (fw === "tailwind") {
+    const twCards = tables
+      .map(
+        (t, i) => `        <div key="${t.name}" className="p-6 bg-white rounded-lg shadow-sm">
+          <p className="text-sm text-gray-500">${toPascalCase(t.name)}</p>
+          <p className="text-3xl font-bold text-blue-800">{count${i}}</p>
+        </div>`,
+      )
+      .join("\n");
+
+    return `import { prisma } from "@/lib/db";
+
+export default async function DashboardPage() {
+  const [${destructuring}] = await Promise.all([
+${countQueries}
+  ]);
+
+  return (
+    <div className="p-6">
+      <h1 className="text-2xl font-bold mb-6">ダッシュボード</h1>
+
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-4">
+${twCards}
+      </div>
+    </div>
+  );
+}
+`;
+  }
 
   const cards = tables
     .map(
@@ -493,7 +688,7 @@ ${cards}
 `;
 }
 
-function generateAdminLayout(pages: AdminPage[]): string {
+function generateAdminLayout(pages: AdminPage[], fw: UiFramework): string {
   // Derive menu items from list pages
   const menuItems: Array<{ label: string; href: string }> = [];
 
@@ -514,6 +709,43 @@ function generateAdminLayout(pages: AdminPage[]): string {
         href: `/${resource}`,
       });
     }
+  }
+
+  if (fw === "tailwind") {
+    const twMenuItems = menuItems
+      .map(
+        (item) => `            <a
+              href="${item.href}"
+              className="block px-4 py-2.5 text-gray-300 rounded-md text-sm hover:bg-gray-700 hover:text-white"
+            >
+              ${item.label}
+            </a>`,
+      )
+      .join("\n");
+
+    return `import type { ReactNode } from "react";
+
+export default function AdminLayout({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex min-h-screen">
+      {/* Sidebar */}
+      <nav className="w-60 bg-gray-800 text-white py-6 shrink-0">
+        <div className="px-4 mb-8">
+          <h2 className="text-lg font-bold">管理画面</h2>
+        </div>
+        <div className="flex flex-col gap-1">
+${twMenuItems}
+        </div>
+      </nav>
+
+      {/* Main content */}
+      <main className="flex-1 bg-gray-50 overflow-auto">
+        {children}
+      </main>
+    </div>
+  );
+}
+`;
   }
 
   const menuItemsJsx = menuItems
@@ -572,7 +804,9 @@ ${menuItemsJsx}
 export function generateAdminScaffold(
   analyses: PhpFileAnalysis[],
   tables: TableDefinition[],
+  options?: AdminScaffoldOptions,
 ): AdminPage[] {
+  const fw: UiFramework = options?.uiFramework ?? "plain";
   const pages: AdminPage[] = [];
   const processedPaths = new Set<string>();
 
@@ -594,15 +828,15 @@ export function generateAdminScaffold(
     let content: string;
     switch (mapping.type) {
       case "list":
-        content = generateListPage(mapping.resource, table, analyses);
+        content = generateListPage(mapping.resource, table, analyses, fw);
         break;
       case "form": {
         const isEdit = mapping.path.includes("[id]") && !mapping.path.includes("copy");
-        content = generateFormPage(mapping.resource, table, analysis, isEdit);
+        content = generateFormPage(mapping.resource, table, analysis, isEdit, fw);
         break;
       }
       case "detail":
-        content = generateDetailPage(mapping.resource, table);
+        content = generateDetailPage(mapping.resource, table, fw);
         break;
       default:
         continue;
@@ -614,14 +848,14 @@ export function generateAdminScaffold(
   // Generate admin layout
   pages.push({
     path: "app/(admin)/layout.tsx",
-    content: generateAdminLayout(pages),
+    content: generateAdminLayout(pages, fw),
     type: "dashboard",
   });
 
   // Generate dashboard page
   pages.push({
     path: "app/(admin)/page.tsx",
-    content: generateDashboardPage(tables),
+    content: generateDashboardPage(tables, fw),
     type: "dashboard",
   });
 
