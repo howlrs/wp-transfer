@@ -68,14 +68,23 @@ function parseInlineHtml(html: string): ParsedInline {
     const isClosing = tag.startsWith("</");
 
     if (isClosing) {
-      // Pop the most recent matching mark
       const tagName = extractTagName(tag);
-      const markName = tagToMark(tagName);
-      // Remove the last occurrence of this mark from the stack
-      for (let i = markStack.length - 1; i >= 0; i--) {
-        if (markStack[i] === markName) {
-          markStack.splice(i, 1);
-          break;
+      if (tagName === "a") {
+        // Link marks push defKey, not "a" — find and remove the last defKey
+        for (let i = markStack.length - 1; i >= 0; i--) {
+          if (markDefs.some((d) => d._key === markStack[i])) {
+            markStack.splice(i, 1);
+            break;
+          }
+        }
+      } else {
+        // Normal marks use the mark name directly
+        const markName = tagToMark(tagName);
+        for (let i = markStack.length - 1; i >= 0; i--) {
+          if (markStack[i] === markName) {
+            markStack.splice(i, 1);
+            break;
+          }
         }
       }
     } else {

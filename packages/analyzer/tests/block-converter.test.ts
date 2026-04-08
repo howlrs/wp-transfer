@@ -221,6 +221,10 @@ describe("convertBlocksToPortableText", () => {
     const linkSpan = b.children.find((c) => c.text === "Example");
     expect(linkSpan).toBeDefined();
     expect(linkSpan!.marks).toContain(def._key);
+
+    const afterLink = b.children.find((c) => "text" in c && c.text.includes("today"));
+    expect(afterLink).toBeDefined();
+    expect(afterLink!.marks).toEqual([]); // No link mark on trailing text
   });
 
   it("handles paragraph with <b> and <i> tags same as strong/em", () => {
@@ -263,5 +267,13 @@ describe("convertBlocksToPortableText", () => {
     ]);
     const b = blocks[0] as WptPortableTextBlock;
     expect(b.style).toBe("h2");
+  });
+
+  it("normalizes core/ namespace prefix", () => {
+    const blocks = [block("core/paragraph", "<p>Namespaced</p>")];
+    const result = convertBlocksToPortableText(blocks);
+    expect(result).toHaveLength(1);
+    expect((result[0] as any)._type).toBe("block");
+    expect((result[0] as any).style).toBe("normal");
   });
 });
