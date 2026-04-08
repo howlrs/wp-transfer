@@ -1,0 +1,9 @@
+{
+  "name": "wp-transfer-cli",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": { "wp-transfer": "./src/index.ts" },
+  "scripts": { "dev": "tsx src/index.ts", "build": "tsc", "typecheck": "tsc --noEmit" },
+  "dependencies": { "@wp-transfer/core": "workspace:*", "@wp-transfer/analyzer": "workspace:*", "@wp-transfer/wxr-parser": "workspace:*", "citty": "^0.2.2", "consola": "^3.4.2" },
+  "devDependencies": { "tsx": "^4.21.0", "typescript": "^6.0.2" }
+}

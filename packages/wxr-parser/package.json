@@ -1,0 +1,9 @@
+{
+  "name": "@wp-transfer/wxr-parser",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": { ".": { "import": "./src/index.ts" } },
+  "scripts": { "build": "tsc", "typecheck": "tsc --noEmit" },
+  "dependencies": { "@wp-transfer/core": "workspace:*", "sax": "^1.6.0" },
+  "devDependencies": { "@types/sax": "^1.2.7", "typescript": "^6.0.2", "vitest": "^4.1.3" }
+}

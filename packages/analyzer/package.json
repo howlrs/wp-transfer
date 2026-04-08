@@ -1,0 +1,9 @@
+{
+  "name": "@wp-transfer/analyzer",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": { ".": { "import": "./src/index.ts" } },
+  "scripts": { "build": "tsc", "typecheck": "tsc --noEmit" },
+  "dependencies": { "@wp-transfer/core": "workspace:*", "@wp-transfer/wxr-parser": "workspace:*", "ofetch": "^1.5.1" },
+  "devDependencies": { "typescript": "^6.0.2", "vitest": "^4.1.3" }
+}

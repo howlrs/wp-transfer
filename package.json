@@ -1,0 +1,13 @@
+{
+  "name": "wp-transfer",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "packageManager": "pnpm@10.33.0",
+  "scripts": {
+    "build": "pnpm -r build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "pnpm -r typecheck"
+  }
+}
