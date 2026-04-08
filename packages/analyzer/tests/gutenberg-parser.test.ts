@@ -1,6 +1,5 @@
 import { describe, it, expect } from "vitest";
 import { parseGutenbergBlocks } from "../src/gutenberg-parser.js";
-import type { GutenbergBlock } from "../src/gutenberg-parser.js";
 
 describe("parseGutenbergBlocks", () => {
   it("parses a single paragraph block", () => {
