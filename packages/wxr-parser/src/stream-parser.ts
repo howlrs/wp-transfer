@@ -3,6 +3,15 @@ import sax from "sax";
 import type { Tag } from "sax";
 
 /**
+ * A parse error collected during SAX streaming.
+ */
+export interface WxrParseError {
+  message: string;
+  line?: number;
+  column?: number;
+}
+
+/**
  * Events emitted by the WXR stream parser to collectors.
  */
 export interface WxrSaxEvents {
@@ -28,6 +37,13 @@ export interface StreamParserState {
 }
 
 /**
+ * Result returned by createWxrSaxStream, including any collected parse errors.
+ */
+export interface WxrSaxStreamResult {
+  errors: WxrParseError[];
+}
+
+/**
  * Parse a WXR XML stream using SAX, dispatching events to collectors.
  *
  * sax.createStream(strict=false) is used because WXR exports are not
@@ -37,8 +53,11 @@ export interface StreamParserState {
 export function createWxrSaxStream(
   stream: Readable,
   collectors: WxrCollector[],
-): Promise<void> {
-  return new Promise<void>((resolve, reject) => {
+  onWarning?: (error: WxrParseError) => void,
+): Promise<WxrSaxStreamResult> {
+  return new Promise<WxrSaxStreamResult>((resolve, reject) => {
+    const errors: WxrParseError[] = [];
+
     const saxStream = sax.createStream(false, {
       lowercase: true,
       trim: false,
@@ -69,13 +88,21 @@ export function createWxrSaxStream(
     });
 
     saxStream.on("error", (err: Error) => {
-      // sax can recover from errors in non-strict mode; resume parsing
+      const parseError: WxrParseError = {
+        message: err.message,
+        line: saxStream._parser.line,
+        column: saxStream._parser.column,
+      };
+      errors.push(parseError);
+      onWarning?.(parseError);
+
+      // sax can recover from errors in non-strict mode; clear and resume
       saxStream._parser.error = null as unknown as Error;
       saxStream._parser.resume();
     });
 
     saxStream.on("end", () => {
-      resolve();
+      resolve({ errors });
     });
 
     stream.on("error", (err: Error) => {

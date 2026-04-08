@@ -1,18 +1,104 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // Mock ofetch before importing the module under test
-const mockFetch = vi.fn();
+const mockFetch = vi.fn() as ReturnType<typeof vi.fn> & { raw: ReturnType<typeof vi.fn> };
+mockFetch.raw = vi.fn();
+
 vi.mock("ofetch", () => ({
   ofetch: {
     create: () => mockFetch,
   },
 }));
 
-import { createWpRestClient } from "../src/rest-client.js";
+import { createWpRestClient, validateUrl } from "../src/rest-client.js";
+
+describe("validateUrl", () => {
+  it("allows http URLs", () => {
+    expect(() => validateUrl("http://example.com")).not.toThrow();
+  });
+
+  it("allows https URLs", () => {
+    expect(() => validateUrl("https://example.com")).not.toThrow();
+  });
+
+  it("rejects ftp scheme", () => {
+    expect(() => validateUrl("ftp://example.com")).toThrow("Invalid URL scheme");
+  });
+
+  it("rejects javascript scheme", () => {
+    expect(() => validateUrl("javascript:alert(1)")).toThrow("Invalid URL scheme");
+  });
+
+  it("rejects file scheme", () => {
+    expect(() => validateUrl("file:///etc/passwd")).toThrow("Invalid URL scheme");
+  });
+
+  it("rejects invalid URLs", () => {
+    expect(() => validateUrl("not-a-url")).toThrow("Invalid URL");
+  });
+
+  it("rejects localhost", () => {
+    expect(() => validateUrl("http://localhost")).toThrow("private/reserved");
+  });
+
+  it("rejects 127.0.0.1", () => {
+    expect(() => validateUrl("http://127.0.0.1")).toThrow("private/reserved");
+  });
+
+  it("rejects 10.x.x.x", () => {
+    expect(() => validateUrl("http://10.0.0.1")).toThrow("private/reserved");
+  });
+
+  it("rejects 172.16-31.x.x", () => {
+    expect(() => validateUrl("http://172.16.0.1")).toThrow("private/reserved");
+    expect(() => validateUrl("http://172.31.255.255")).toThrow("private/reserved");
+  });
+
+  it("allows 172.15.x.x (not private)", () => {
+    expect(() => validateUrl("http://172.15.0.1")).not.toThrow();
+  });
+
+  it("rejects 192.168.x.x", () => {
+    expect(() => validateUrl("http://192.168.1.1")).toThrow("private/reserved");
+  });
+
+  it("rejects 169.254.x.x", () => {
+    expect(() => validateUrl("http://169.254.169.254")).toThrow("private/reserved");
+  });
+
+  it("rejects 0.0.0.0", () => {
+    expect(() => validateUrl("http://0.0.0.0")).toThrow("private/reserved");
+  });
+
+  it("rejects [::1]", () => {
+    expect(() => validateUrl("http://[::1]")).toThrow("private/reserved");
+  });
+});
 
 describe("WpRestClient", () => {
   beforeEach(() => {
     mockFetch.mockReset();
+    mockFetch.raw.mockReset();
+  });
+
+  describe("SSRF protection", () => {
+    it("throws when creating client with private IP", () => {
+      expect(() => createWpRestClient("http://127.0.0.1")).toThrow(
+        "private/reserved",
+      );
+    });
+
+    it("throws when creating client with localhost", () => {
+      expect(() => createWpRestClient("http://localhost")).toThrow(
+        "private/reserved",
+      );
+    });
+
+    it("throws when creating client with non-http scheme", () => {
+      expect(() => createWpRestClient("ftp://example.com")).toThrow(
+        "Invalid URL scheme",
+      );
+    });
   });
 
   describe("probeSiteInfo", () => {
@@ -123,10 +209,63 @@ describe("WpRestClient", () => {
         hierarchical: true,
       });
     });
+
+    it("returns empty array when response is null", async () => {
+      mockFetch.mockResolvedValueOnce(null);
+
+      const client = createWpRestClient("https://example.com");
+      const types = await client.fetchPostTypes();
+
+      expect(types).toEqual([]);
+    });
+  });
+
+  describe("fetchPostCount", () => {
+    it("reads X-WP-Total header for accurate count", async () => {
+      mockFetch.raw.mockResolvedValueOnce({
+        headers: new Headers({ "x-wp-total": "42" }),
+        _data: [{}],
+      });
+
+      const client = createWpRestClient("https://example.com");
+      const count = await client.fetchPostCount("posts");
+
+      expect(count).toBe(42);
+    });
+
+    it("returns 0 when X-WP-Total header is missing", async () => {
+      mockFetch.raw.mockResolvedValueOnce({
+        headers: new Headers(),
+        _data: [],
+      });
+
+      const client = createWpRestClient("https://example.com");
+      const count = await client.fetchPostCount("posts");
+
+      expect(count).toBe(0);
+    });
   });
 
   describe("error handling", () => {
-    it("propagates connection errors", async () => {
+    it("sanitizes authorization headers from error messages", async () => {
+      mockFetch.mockRejectedValueOnce(
+        new Error("fetch failed: Authorization: Basic dXNlcjpwYXNz ECONNREFUSED"),
+      );
+
+      const client = createWpRestClient("https://down.example.com");
+
+      try {
+        await client.probeSiteInfo();
+        expect.unreachable("should have thrown");
+      } catch (err) {
+        const message = (err as Error).message;
+        expect(message).toContain("ECONNREFUSED");
+        expect(message).not.toContain("Basic dXNlcjpwYXNz");
+        expect(message).toContain("[REDACTED]");
+      }
+    });
+
+    it("propagates connection errors without credentials", async () => {
       mockFetch.mockRejectedValueOnce(
         new Error("fetch failed: ECONNREFUSED"),
       );

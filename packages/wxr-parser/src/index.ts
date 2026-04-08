@@ -7,6 +7,12 @@ import { UserCollector } from "./user-collector.js";
 import { MediaCollector } from "./media-collector.js";
 import { SiteCollector } from "./site-collector.js";
 
+export interface WxrParseError {
+  message: string;
+  line?: number;
+  column?: number;
+}
+
 export interface WxrParseResult {
   siteTitle: string;
   siteUrl: string;
@@ -15,6 +21,7 @@ export interface WxrParseResult {
   users: WpUser[];
   taxonomies: WpTaxonomyTerm[];
   media: WpMedia[];
+  errors: WxrParseError[];
 }
 
 /**
@@ -24,20 +31,27 @@ export interface WxrParseResult {
  * into memory. The parser dispatches events to collectors that accumulate
  * posts, users, taxonomy terms, media, and site metadata.
  */
-export async function parseWxr(stream: Readable): Promise<WxrParseResult> {
+export async function parseWxr(
+  stream: Readable,
+  onWarning?: (error: WxrParseError) => void,
+): Promise<WxrParseResult> {
   const postCollector = new PostCollector();
   const taxonomyCollector = new TaxonomyCollector();
   const userCollector = new UserCollector();
   const mediaCollector = new MediaCollector();
   const siteCollector = new SiteCollector();
 
-  await createWxrSaxStream(stream, [
-    siteCollector,
-    userCollector,
-    taxonomyCollector,
-    postCollector,
-    mediaCollector,
-  ]);
+  const { errors } = await createWxrSaxStream(
+    stream,
+    [
+      siteCollector,
+      userCollector,
+      taxonomyCollector,
+      postCollector,
+      mediaCollector,
+    ],
+    onWarning,
+  );
 
   return {
     siteTitle: siteCollector.siteTitle,
@@ -47,6 +61,7 @@ export async function parseWxr(stream: Readable): Promise<WxrParseResult> {
     users: userCollector.users,
     taxonomies: taxonomyCollector.taxonomies,
     media: mediaCollector.media,
+    errors,
   };
 }
 

@@ -133,7 +133,13 @@ async function analyzeFromUrl(
   const client = createWpRestClient(siteUrl, auth);
 
   // Probe site info
-  const siteInfo = await client.probeSiteInfo();
+  let siteInfo: Awaited<ReturnType<typeof client.probeSiteInfo>>;
+  try {
+    siteInfo = await client.probeSiteInfo();
+  } catch {
+    consola.error("Failed to connect to the WordPress site. Check the URL and ensure the REST API is accessible.");
+    return;
+  }
   consola.success(`Connected: ${siteInfo.name}`);
 
   // Fetch plugins (requires auth)
@@ -153,7 +159,13 @@ async function analyzeFromUrl(
   const plugins: PluginEntry[] = restPlugins.map(classifyPlugin);
 
   // Fetch post types
-  const postTypes = await client.fetchPostTypes();
+  let postTypes: Awaited<ReturnType<typeof client.fetchPostTypes>>;
+  try {
+    postTypes = await client.fetchPostTypes();
+  } catch {
+    consola.error("Failed to fetch post types from the WordPress REST API.");
+    return;
+  }
   consola.success(`Post types: ${postTypes.map((pt) => pt.slug).join(", ")}`);
 
   // Build minimal schema analysis from REST data

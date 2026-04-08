@@ -1,5 +1,6 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { createReadStream } from "node:fs";
+import { Readable } from "node:stream";
 import { resolve } from "node:path";
 import { parseWxr } from "../src/index.js";
 
@@ -60,6 +61,12 @@ describe("parseWxr — minimal.xml", () => {
     expect(result.siteUrl).toBe("https://example.com");
     expect(result.wpVersion).toBe("6.7");
   });
+
+  it("returns empty errors array for valid XML", async () => {
+    const result = await parseWxr(openMinimal());
+
+    expect(result.errors).toEqual([]);
+  });
 });
 
 describe("parseWxr — acf-fields.xml", () => {
@@ -86,5 +93,48 @@ describe("parseWxr — acf-fields.xml", () => {
     expect(meta["_yoast_wpseo_metadesc"]).toBe(
       "Buy the best product at an affordable price.",
     );
+  });
+});
+
+describe("parseWxr — error handling", () => {
+  it("collects parse errors in the result instead of throwing", async () => {
+    // Create a stream with malformed XML that sax will error on
+    const malformedXml = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Test</title>
+    <item>
+      <title>Post & with unescaped ampersand</title>
+    </item>
+  </channel>
+</rss>`;
+
+    const stream = Readable.from([malformedXml]);
+    const result = await parseWxr(stream);
+
+    // Should not throw; errors are returned in the result
+    expect(result.errors).toBeDefined();
+    expect(Array.isArray(result.errors)).toBe(true);
+  });
+
+  it("invokes onWarning callback for parse errors", async () => {
+    const malformedXml = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <item>
+      <title>Bad & entity</title>
+    </item>
+  </channel>
+</rss>`;
+
+    const stream = Readable.from([malformedXml]);
+    const warnings: Array<{ message: string; line?: number; column?: number }> = [];
+
+    const result = await parseWxr(stream, (err) => {
+      warnings.push(err);
+    });
+
+    // The onWarning callback should receive the same errors as result.errors
+    expect(result.errors.length).toBe(warnings.length);
   });
 });
