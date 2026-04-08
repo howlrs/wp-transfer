@@ -2,7 +2,7 @@
 
 **バージョン:** v0.1.0-alpha
 **日付:** 2026-04-08
-**テスト:** 290 / 290 全パス
+**テスト:** 329 / 329 全パス
 **リポジトリ:** https://github.com/howlrs/wp-transfer
 
 ## プロジェクト概要
@@ -92,6 +92,20 @@ wp-transfer analyze-php <dir> [--schema db-schema.md] [--output path]
 - [x] Playwright Verify scaffold生成 (スモークテスト + ビルド検証, 6テスト)
 - [x] 統合テスト (WXR→scaffold全パイプライン, 2テスト)
 
+### セキュリティ修正 (Issue #9)
+- [x] sanitize.ts ユーティリティ (7関数, 29テスト)
+- [x] ACFフィールド名RCE防止 (toSafeIdentifier)
+- [x] XSS防止 (PT Renderer React要素化, dangerouslySetInnerHTML排除)
+- [x] URLプロトコル検証 (javascript:/data:/protocol-relative拒否)
+- [x] コード生成インジェクション防止 (siteTitle/mediaDomains エスケープ)
+- [x] パストラバーサル防止 (path.relative ガード)
+- [x] Gemini Proレビュー3回, 指摘3件反映
+
+### D-Phase: OSS公開準備
+- [x] README全面改訂 (英語, Quick Start, コマンドリファレンス, アーキテクチャ)
+- [x] MIT LICENSE + package.json整備 (全パッケージ)
+- [x] GitHub Actions CI (test + typecheck, pnpm cache)
+
 ## 未完了 (次のフェーズ)
 
 ### B. JRA tokyo移行の仕上げ
@@ -107,9 +121,9 @@ wp-transfer analyze-php <dir> [--schema db-schema.md] [--output path]
 - [x] C5: Verify最小版 (Playwright)
 
 ### D. OSS公開準備
-- [ ] D1: README改善
-- [ ] D2: npm publish準備 (`npx wp-transfer`)
-- [ ] D3: CI/CD (GitHub Actions)
+- [x] D1: README改善 (英語、フル書き直し)
+- [x] D2: npm publish準備 (MIT LICENSE, package.json整備)
+- [x] D3: CI/CD (GitHub Actions — test + typecheck)
 
 ## Issue一覧
 
