@@ -54,6 +54,9 @@ importers:
 
   packages/core:
     dependencies:
+      '@portabletext/types':
+        specifier: ^4.0.2
+        version: 4.0.2
       zod:
         specifier: ^4.3.6
         version: 4.3.6
@@ -262,6 +265,10 @@ packages:
 
   '@oxc-project/types@0.123.0':
     resolution: {integrity: sha512-YtECP/y8Mj1lSHiUWGSRzy/C6teUKlS87dEfuVKT09LgQbUsBW1rNg+MiJ4buGu3yuADV60gbIvo9/HplA56Ew==}
+
+  '@portabletext/types@4.0.2':
+    resolution: {integrity: sha512-djfIGU9n6DRrunlvj2nIDAp17URo/nA4jSXGvf+Gupx8NLLy9fmJBZ3GL8yhqn9lSVc+cKCharjOa3aOBnWbRw==}
+    engines: {node: '>=20.19 <22 || >=22.12'}
 
   '@rolldown/binding-android-arm64@1.0.0-rc.13':
     resolution: {integrity: sha512-5ZiiecKH2DXAVJTNN13gNMUcCDg4Jy8ZjbXEsPnqa248wgOVeYRX0iqXXD5Jz4bI9BFHgKsI2qmyJynstbmr+g==}
@@ -830,6 +837,8 @@ snapshots:
     optional: true
 
   '@oxc-project/types@0.123.0': {}
+
+  '@portabletext/types@4.0.2': {}
 
   '@rolldown/binding-android-arm64@1.0.0-rc.13':
     optional: true
