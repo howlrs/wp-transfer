@@ -1,4 +1,5 @@
 import type { AcfFieldInfo, InferredType } from "./schema-analyzer.js";
+import { toSafeIdentifier, escapeForStringLiteral } from "./sanitize.js";
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -33,7 +34,7 @@ export function generateAcfTemplate(fields: AcfFieldInfo[]): AcfTemplateResult {
   // ── schemaCode ──────────────────────────────────────────────────
 
   const schemaFieldLines = fields.map(
-    (f) => `  ${f.name}: ${toZodType(f.inferredType)}, // ${f.fieldKey}`,
+    (f) => `  ${toSafeIdentifier(f.name)}: ${toZodType(f.inferredType)}, // ${f.fieldKey}`,
   );
 
   const schemaCode = [
@@ -49,11 +50,11 @@ export function generateAcfTemplate(fields: AcfFieldInfo[]): AcfTemplateResult {
   // ── accessorCode ────────────────────────────────────────────────
 
   const keyMappingComment = fields
-    .map((f) => ` *   ${f.name} → ${f.fieldKey}`)
+    .map((f) => ` *   ${toSafeIdentifier(f.name)} → ${f.fieldKey}`)
     .join("\n");
 
   const rawAssignments = fields.map(
-    (f) => `  raw.${f.name} = meta["${f.name}"];`,
+    (f) => `  raw.${toSafeIdentifier(f.name)} = meta["${escapeForStringLiteral(f.name)}"];`,
   );
 
   const accessorCode = [

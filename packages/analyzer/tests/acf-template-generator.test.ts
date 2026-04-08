@@ -110,4 +110,38 @@ describe("generateAcfTemplate", () => {
     expect(schemaCode).not.toContain("myCustomField");
     expect(schemaCode).not.toContain("anotherFieldName");
   });
+
+  it("sanitizes malicious field names to prevent code injection", () => {
+    const fields: AcfFieldInfo[] = [
+      makeField({ name: 'test"]; process.exit(1); ("x', fieldKey: "field_evil", inferredType: "string" }),
+    ];
+    const result = generateAcfTemplate(fields);
+
+    // Schema identifier must be sanitized — no unescaped special chars that break TS syntax
+    expect(result.schemaCode).not.toContain('"]; process.exit(1); ("x');
+
+    // Accessor identifier must be sanitized
+    expect(result.accessorCode).not.toContain('"]; process.exit(1); ("x');
+
+    // Identifier must be sanitized (special chars replaced with _)
+    expect(result.schemaCode).toContain("test____process_exit_1_____");
+    expect(result.accessorCode).toContain("test____process_exit_1_____");
+
+    // The meta lookup key must have the double-quote escaped so it can't break out of the string literal
+    expect(result.accessorCode).toContain('\\"');
+    // Raw unescaped quote must NOT appear in meta["..."] lookup position
+    expect(result.accessorCode).not.toContain('meta["test"');
+
+    // Must still reference the correct Zod type
+    expect(result.schemaCode).toContain("z.string()");
+  });
+
+  it("sanitizes field names starting with numbers", () => {
+    const fields: AcfFieldInfo[] = [
+      makeField({ name: "123field", fieldKey: "field_num", inferredType: "number" }),
+    ];
+    const result = generateAcfTemplate(fields);
+
+    expect(result.schemaCode).toContain("_123field:");
+  });
 });
