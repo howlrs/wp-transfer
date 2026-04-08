@@ -266,8 +266,16 @@ function generateSeedScript(
   return lines.join("\n");
 }
 
-/** Write file with automatic directory creation */
-async function writeFileWithDir(filePath: string, content: string): Promise<void> {
+/** Write file with automatic directory creation and path traversal protection */
+async function writeFileWithDir(filePath: string, content: string, outputDir?: string): Promise<void> {
+  if (outputDir) {
+    const resolvedOut = resolve(outputDir);
+    const resolvedFile = resolve(filePath);
+    if (!resolvedFile.startsWith(resolvedOut + "/") && resolvedFile !== resolvedOut) {
+      consola.warn(`Skipping file outside output directory: ${filePath}`);
+      return;
+    }
+  }
   await mkdir(dirname(filePath), { recursive: true });
   await writeFile(filePath, content, "utf-8");
 }
@@ -392,28 +400,28 @@ export const analyzePhpCommand = defineCommand({
     // API route stubs
     for (const [routePath, content] of stubs) {
       const fullPath = join(outputDir, routePath);
-      await writeFileWithDir(fullPath, content);
+      await writeFileWithDir(fullPath, content, outputDir);
       totalFiles++;
     }
 
     // Admin pages
     for (const page of adminPages) {
       const fullPath = join(outputDir, page.path);
-      await writeFileWithDir(fullPath, page.content);
+      await writeFileWithDir(fullPath, page.content, outputDir);
       totalFiles++;
     }
 
     // Auth files
     for (const file of authFiles) {
       const fullPath = join(outputDir, file.path);
-      await writeFileWithDir(fullPath, file.content);
+      await writeFileWithDir(fullPath, file.content, outputDir);
       totalFiles++;
     }
 
     // Docker files
     for (const file of dockerFiles) {
       const fullPath = join(outputDir, file.path);
-      await writeFileWithDir(fullPath, file.content);
+      await writeFileWithDir(fullPath, file.content, outputDir);
       totalFiles++;
     }
 
@@ -442,6 +450,7 @@ export const analyzePhpCommand = defineCommand({
     await writeFileWithDir(
       join(outputDir, "lib/db.ts"),
       generateDbLib(),
+      outputDir,
     );
     totalFiles++;
 
@@ -449,6 +458,7 @@ export const analyzePhpCommand = defineCommand({
     await writeFileWithDir(
       join(outputDir, "prisma/seed.ts"),
       generateSeedScript(tables, hasAuth),
+      outputDir,
     );
     totalFiles++;
 
