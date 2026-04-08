@@ -47,9 +47,9 @@ describe("Auth Scaffold Generator", () => {
       expect(files).toHaveLength(0);
     });
 
-    it("generates all 9 auth files when auth plugin detected", () => {
+    it("generates all 10 auth files when auth plugin detected", () => {
       const files = generateAuthScaffold(["wpfront-user-role-editor"]);
-      expect(files.length).toBe(9);
+      expect(files.length).toBe(10);
     });
 
     it("generates lib/auth.ts with NextAuth config", () => {
@@ -130,6 +130,35 @@ describe("Auth Scaffold Generator", () => {
 
       expect(accountsPage).toBeDefined();
       expect(accountsPage!.content).toContain("アカウント管理");
+    });
+
+    it("generates fail-safe RBAC with default deny", () => {
+      const files = generateAuthScaffold(["wpfront-user-role-editor"]);
+      const rbac = files.find(f => f.path === "lib/rbac.ts");
+      expect(rbac!.content).toContain("Default deny");
+      expect(rbac!.content).toContain("PATH_PERMISSIONS");
+    });
+
+    it("generates middleware with API route protection", () => {
+      const files = generateAuthScaffold(["wpfront-user-role-editor"]);
+      const mw = files.find(f => f.path === "middleware.ts");
+      expect(mw!.content).toContain("/api/");
+      expect(mw!.content).toContain("403");
+      expect(mw!.content).toContain("Forbidden");
+    });
+
+    it("generates unauthorized page", () => {
+      const files = generateAuthScaffold(["wpfront-user-role-editor"]);
+      const unauth = files.find(f => f.path === "app/unauthorized/page.tsx");
+      expect(unauth).toBeDefined();
+      expect(unauth!.content).toContain("403");
+    });
+
+    it("redirects to /unauthorized instead of /", () => {
+      const files = generateAuthScaffold(["wpfront-user-role-editor"]);
+      const mw = files.find(f => f.path === "middleware.ts");
+      expect(mw!.content).toContain("/unauthorized");
+      expect(mw!.content).not.toMatch(/redirect\(new URL\("\/",/);
     });
   });
 

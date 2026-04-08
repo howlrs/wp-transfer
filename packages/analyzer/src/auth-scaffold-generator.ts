@@ -123,6 +123,16 @@ export const ROLES: Record<Role, { label: string; level: number }> = {
   support_admin: { label: "サポート管理者", level: 30 },
 };
 
+// IMPORTANT: Default deny — unregistered paths require administrator role
+const PATH_PERMISSIONS: Record<string, number> = {
+  "/": 0,                    // Dashboard — all roles
+  "/events": 50,             // Event management — editor+
+  "/information": 50,        // Information management — editor+
+  "/lottery": 50,            // Lottery — editor+
+  "/users": 100,             // User management — admin only
+  "/accounts": 100,          // Account management — admin only
+};
+
 export interface MenuItem {
   label: string;
   href: string;
@@ -146,11 +156,16 @@ export function filterMenuByRole(
 export function canAccess(role: Role, path: string): boolean {
   const level = ROLES[role]?.level ?? 0;
 
-  // Account management requires administrator
-  if (path.startsWith("/accounts")) return level >= 100;
+  // Find the most specific matching path prefix
+  let requiredLevel = 100; // Default: admin only (fail-safe)
+  for (const [prefix, minLevel] of Object.entries(PATH_PERMISSIONS)) {
+    if (path === prefix || path.startsWith(prefix + "/")) {
+      requiredLevel = minLevel;
+      break;
+    }
+  }
 
-  // All authenticated users can access other admin pages
-  return level > 0;
+  return level >= requiredLevel;
 }
 `;
 }
@@ -177,7 +192,7 @@ export default auth((req) => {
   const { pathname } = req.nextUrl;
 
   // Public routes
-  if (pathname === "/login" || pathname.startsWith("/api/auth")) {
+  if (pathname === "/login" || pathname === "/unauthorized" || pathname.startsWith("/api/auth")) {
     return NextResponse.next();
   }
 
@@ -188,10 +203,25 @@ export default auth((req) => {
     return NextResponse.redirect(loginUrl);
   }
 
-  // RBAC enforcement
+  // API routes also need RBAC
+  if (pathname.startsWith("/api/") && !pathname.startsWith("/api/auth")) {
+    const role = (req.auth.user as { role?: string }).role as Role | undefined;
+    if (!role) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    // Map API paths to their page equivalent for permission check
+    // e.g., /api/events/123 -> /events
+    const resourcePath = "/" + pathname.split("/").slice(2, 3).join("/");
+    if (!canAccess(role, resourcePath)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+    return NextResponse.next();
+  }
+
+  // RBAC enforcement for page routes
   const role = (req.auth.user as { role?: string }).role as Role | undefined;
   if (role && !canAccess(role, pathname)) {
-    return NextResponse.redirect(new URL("/", req.url));
+    return NextResponse.redirect(new URL("/unauthorized", req.url));
   }
 
   return NextResponse.next();
@@ -446,6 +476,19 @@ export async function DELETE(
 `;
 }
 
+function generateUnauthorizedPage(): string {
+  return `export default function UnauthorizedPage() {
+  return (
+    <div style={{ textAlign: "center", padding: "4rem" }}>
+      <h1 style={{ fontSize: "2rem", marginBottom: "1rem" }}>403 - アクセス権限がありません</h1>
+      <p style={{ color: "#6b7280" }}>このページにアクセスする権限がありません。</p>
+      <a href="/" style={{ color: "#2563eb" }}>ダッシュボードに戻る</a>
+    </div>
+  );
+}
+`;
+}
+
 function generateAccountsPage(): string {
   return `"use client";
 
@@ -678,5 +721,6 @@ export function generateAuthScaffold(plugins: string[]): AuthScaffoldFile[] {
     { path: "app/api/accounts/route.ts", content: generateAccountsApiRoute() },
     { path: "app/api/accounts/[id]/route.ts", content: generateAccountIdApiRoute() },
     { path: "app/(admin)/accounts/page.tsx", content: generateAccountsPage() },
+    { path: "app/unauthorized/page.tsx", content: generateUnauthorizedPage() },
   ];
 }
