@@ -729,12 +729,13 @@ function generateDirectBody(
       if (hasPathParams) {
         lines.push(`      where: { id: ${pathParams[0]} },`);
       } else {
-        lines.push("      where: { id: data.delete ?? data.id },");
+        // Fallback: parse id from query or body
+        lines.push("      where: { id: parseInt(request.nextUrl.searchParams.get('id') ?? '0') },");
       }
       lines.push("    });");
       lines.push("");
       lines.push(
-        "    return NextResponse.json({ success: true });",
+        '    return NextResponse.json({ success: true });',
       );
       break;
 
@@ -766,8 +767,14 @@ export function generateApiStubs(
     const stub = generateRouteHandler(analysis, mapping, tables);
 
     if (existing) {
-      // Merge multiple handlers into the same route file
-      stubs.set(mapping.path, existing + "\n\n" + stub);
+      // Merge multiple handlers into the same route file:
+      // Extract only the export function from the new stub (skip duplicate imports)
+      const funcMatch = stub.match(/(export async function \w+[\s\S]*$)/);
+      if (funcMatch) {
+        stubs.set(mapping.path, existing + "\n\n" + funcMatch[1]);
+      } else {
+        stubs.set(mapping.path, existing + "\n\n" + stub);
+      }
     } else {
       stubs.set(mapping.path, stub);
     }
