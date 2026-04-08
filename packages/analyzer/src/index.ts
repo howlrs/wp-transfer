@@ -34,3 +34,23 @@ export {
   reportToMarkdown,
   type ReportInput,
 } from "./report-generator.js";
+
+export {
+  analyzePhpFile,
+  type PhpFileAnalysis,
+  type DbOperation,
+  type InputParam,
+} from "./php-analyzer.js";
+
+export {
+  parseDbSchemaMarkdown,
+  generatePrismaSchema,
+  parseSchemaToPrisma,
+  type PrismaSchemaResult,
+  type TableDefinition,
+  type ColumnDefinition,
+} from "./schema-to-prisma.js";
+
+export {
+  generateApiStubs,
+} from "./nextjs-stub-generator.js";

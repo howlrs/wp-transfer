@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { defineCommand, runMain } from "citty";
 import { analyzeCommand } from "./commands/analyze.js";
+import { analyzePhpCommand } from "./commands/analyze-php.js";
 
 const main = defineCommand({
   meta: {
@@ -10,6 +11,7 @@ const main = defineCommand({
   },
   subCommands: {
     analyze: analyzeCommand,
+    "analyze-php": analyzePhpCommand,
   },
 });
 
