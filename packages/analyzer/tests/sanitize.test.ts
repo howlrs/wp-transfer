@@ -107,6 +107,10 @@ describe("sanitizeUrl", () => {
     expect(sanitizeUrl("JAVASCRIPT:alert(1)")).toBe("");
     expect(sanitizeUrl("JaVaScRiPt:alert(1)")).toBe("");
   });
+  it("rejects protocol-relative URLs", () => {
+    expect(sanitizeUrl("//malicious.com/steal")).toBe("");
+    expect(sanitizeUrl("//evil.com")).toBe("");
+  });
 });
 
 describe("sanitizeSlug", () => {

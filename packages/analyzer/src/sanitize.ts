@@ -26,6 +26,8 @@ export function sanitizeUrl(url: string): string {
   if (!url) return "";
   const trimmed = url.trim();
   if (!trimmed) return "";
+  // Reject protocol-relative URLs (//malicious.com)
+  if (trimmed.startsWith("//")) return "";
   if (
     trimmed.startsWith("/") ||
     trimmed.startsWith("./") ||

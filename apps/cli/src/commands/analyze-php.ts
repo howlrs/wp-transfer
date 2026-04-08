@@ -2,7 +2,7 @@ import { defineCommand } from "citty";
 import { consola } from "consola";
 import { existsSync } from "node:fs";
 import { readFile, writeFile, mkdir, readdir } from "node:fs/promises";
-import { resolve, join, dirname, basename } from "node:path";
+import { resolve, join, dirname, basename, relative, isAbsolute } from "node:path";
 import {
   analyzePhpFile,
   parseSchemaToPrisma,
@@ -271,7 +271,8 @@ async function writeFileWithDir(filePath: string, content: string, outputDir?: s
   if (outputDir) {
     const resolvedOut = resolve(outputDir);
     const resolvedFile = resolve(filePath);
-    if (!resolvedFile.startsWith(resolvedOut + "/") && resolvedFile !== resolvedOut) {
+    const rel = relative(resolvedOut, resolvedFile);
+    if (rel.startsWith("..") || isAbsolute(rel)) {
       consola.warn(`Skipping file outside output directory: ${filePath}`);
       return;
     }
