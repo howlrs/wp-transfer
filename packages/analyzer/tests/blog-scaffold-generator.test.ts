@@ -140,4 +140,41 @@ describe("Blog Scaffold Generator", () => {
     expect(config).toBeDefined();
     expect(config!.content).not.toContain("redirects");
   });
+
+  // ── Security tests ──
+
+  it("escapes site title with special characters", () => {
+    const result = generateBlogScaffold(makeInput({
+      siteTitle: 'My "Blog"; import("evil")//',
+    }));
+    const layout = findFile(result, "app/layout.tsx");
+    // Quotes must be escaped — the title string literal must not close prematurely
+    expect(layout!.content).toContain('My \\"Blog\\"; import(\\"evil\\")//');
+    // The not-found page also embeds siteTitle
+    const notFound = findFile(result, "app/not-found.tsx");
+    expect(notFound!.content).toContain('Back to My \\"Blog\\"');
+  });
+
+  it("filters out invalid media domains", () => {
+    const result = generateBlogScaffold(makeInput({
+      mediaDomains: ["cdn.example.com", 'evil.com"}, {hostname: "hack.com'],
+    }));
+    const config = findFile(result, "next.config.ts");
+    expect(config!.content).toContain("cdn.example.com");
+    expect(config!.content).not.toContain("hack.com");
+  });
+
+  it("generates PT renderer without dangerouslySetInnerHTML for text blocks", () => {
+    const result = generateBlogScaffold(makeInput());
+    const pt = findFile(result, "lib/portable-text.tsx");
+    // renderSpan should return React elements, not HTML strings
+    expect(pt!.content).not.toMatch(/renderSpan.*return.*`<strong>/);
+  });
+
+  it("generates safeUrl helper for URL validation", () => {
+    const result = generateBlogScaffold(makeInput());
+    const pt = findFile(result, "lib/portable-text.tsx");
+    expect(pt!.content).toContain("safeUrl");
+    expect(pt!.content).toContain("protocol");
+  });
 });

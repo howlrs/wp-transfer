@@ -36,15 +36,20 @@ export interface BlogScaffoldInput {
   wpPermalinkStructure: string | null;
 }
 
+// ── Sanitization imports ──
+
+import { escapeForStringLiteral, isValidHostname } from "./sanitize.js";
+
 // ── File generators ──
 
 function generateRootLayout(input: BlogScaffoldInput): string {
+  const safeTitle = escapeForStringLiteral(input.siteTitle);
   return `import type { ReactNode } from "react";
 import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "${input.siteTitle}",
+  title: "${safeTitle}",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
@@ -59,7 +64,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         </header>
         <main>{children}</main>
         <footer>
-          <p>&copy; ${input.siteTitle}</p>
+          <p>&copy; ${safeTitle}</p>
         </footer>
       </body>
     </html>
@@ -233,12 +238,13 @@ export default async function CategoryArchivePage({ params }: { params: Promise<
 }
 
 function generateNotFoundPage(input: BlogScaffoldInput): string {
+  const safeTitle = escapeForStringLiteral(input.siteTitle);
   return `export default function NotFound() {
   return (
     <div style={{ textAlign: "center", padding: "4rem 1rem" }}>
       <h1>404</h1>
       <p>Page not found</p>
-      <a href="/">Back to ${input.siteTitle}</a>
+      <a href="/">Back to ${safeTitle}</a>
     </div>
   );
 }
@@ -289,34 +295,58 @@ export function getAllCategories(): Category[] {
 function generatePortableTextRenderer(): string {
   return `"use client";
 
+import type { ReactNode } from "react";
 import type { WptContentBlock } from "wp-transfer-core";
 
 interface Props {
   blocks: WptContentBlock[];
 }
 
-function renderSpan(span: { text?: string; marks?: string[] }): string {
-  let text = span.text ?? "";
-  if (span.marks?.includes("strong")) text = \`<strong>\${text}</strong>\`;
-  if (span.marks?.includes("em")) text = \`<em>\${text}</em>\`;
-  if (span.marks?.includes("code")) text = \`<code>\${text}</code>\`;
-  return text;
+function safeUrl(url: string): string {
+  if (!url) return "";
+  if (url.startsWith("/") || url.startsWith("./")) return url;
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol === "http:" || parsed.protocol === "https:") return url;
+    return "";
+  } catch { return ""; }
 }
 
-function renderBlock(block: WptContentBlock & { _type: "block"; style?: string; children?: Array<{ text?: string; marks?: string[] }>; listItem?: string }): JSX.Element {
-  const html = (block.children ?? []).map(renderSpan).join("");
+function renderSpan(span: { text?: string; marks?: string[]; _key?: string }, markDefs?: any[]): JSX.Element {
+  let content: ReactNode = span.text ?? "";
+
+  for (const mark of span.marks ?? []) {
+    if (mark === "strong") {
+      content = <strong>{content}</strong>;
+    } else if (mark === "em") {
+      content = <em>{content}</em>;
+    } else if (mark === "code") {
+      content = <code>{content}</code>;
+    } else {
+      const def = markDefs?.find((d: any) => d._key === mark);
+      if (def?._type === "link" && def.href) {
+        content = <a href={safeUrl(def.href)}>{content}</a>;
+      }
+    }
+  }
+
+  return <span key={span._key}>{content}</span>;
+}
+
+function renderBlock(block: WptContentBlock & { _type: "block"; style?: string; children?: Array<{ text?: string; marks?: string[]; _key?: string }>; markDefs?: any[]; listItem?: string }): JSX.Element {
+  const children = (block.children ?? []).map((s) => renderSpan(s, block.markDefs));
   const style = block.style ?? "normal";
 
   switch (style) {
-    case "h1": return <h1 className="pt-h1" dangerouslySetInnerHTML={{ __html: html }} />;
-    case "h2": return <h2 className="pt-h2" dangerouslySetInnerHTML={{ __html: html }} />;
-    case "h3": return <h3 className="pt-h3" dangerouslySetInnerHTML={{ __html: html }} />;
-    case "h4": return <h4 className="pt-h4" dangerouslySetInnerHTML={{ __html: html }} />;
-    case "h5": return <h5 className="pt-h5" dangerouslySetInnerHTML={{ __html: html }} />;
-    case "h6": return <h6 className="pt-h6" dangerouslySetInnerHTML={{ __html: html }} />;
-    case "blockquote": return <blockquote className="pt-blockquote" dangerouslySetInnerHTML={{ __html: html }} />;
+    case "h1": return <h1 className="pt-h1">{children}</h1>;
+    case "h2": return <h2 className="pt-h2">{children}</h2>;
+    case "h3": return <h3 className="pt-h3">{children}</h3>;
+    case "h4": return <h4 className="pt-h4">{children}</h4>;
+    case "h5": return <h5 className="pt-h5">{children}</h5>;
+    case "h6": return <h6 className="pt-h6">{children}</h6>;
+    case "blockquote": return <blockquote className="pt-blockquote">{children}</blockquote>;
     case "separator": return <hr className="pt-separator" />;
-    default: return <p className="pt-block" dangerouslySetInnerHTML={{ __html: html }} />;
+    default: return <p className="pt-block">{children}</p>;
   }
 }
 
@@ -330,7 +360,7 @@ export function PortableTextRenderer({ blocks }: Props) {
     if (block._type === "image") {
       elements.push(
         <figure key={block._key} className="pt-image">
-          <img src={(block as any).src} alt={(block as any).alt ?? ""} />
+          <img src={safeUrl((block as any).src)} alt={(block as any).alt ?? ""} />
           {(block as any).caption && <figcaption>{(block as any).caption}</figcaption>}
         </figure>
       );
@@ -351,7 +381,7 @@ export function PortableTextRenderer({ blocks }: Props) {
     if (block._type === "embed") {
       elements.push(
         <div key={block._key} className="pt-embed">
-          <iframe src={(block as any).url} title="Embedded content" />
+          <iframe src={safeUrl((block as any).url)} title="Embedded content" />
         </div>
       );
       i++;
@@ -359,6 +389,8 @@ export function PortableTextRenderer({ blocks }: Props) {
     }
 
     if (block._type === "htmlBlock") {
+      // WARNING: htmlBlock contains raw WordPress HTML that could not be converted.
+      // Consider adding DOMPurify sanitization for production use.
       elements.push(
         <div key={block._key} dangerouslySetInnerHTML={{ __html: (block as any).html }} />
       );
@@ -375,8 +407,8 @@ export function PortableTextRenderer({ blocks }: Props) {
         while (i < blocks.length) {
           const cur = blocks[i] as any;
           if (cur._type !== "block" || cur.listItem !== b.listItem) break;
-          const html = (cur.children ?? []).map(renderSpan).join("");
-          items.push(<li key={cur._key} dangerouslySetInnerHTML={{ __html: html }} />);
+          const children = (cur.children ?? []).map((s: any) => renderSpan(s, cur.markDefs));
+          items.push(<li key={cur._key}>{children}</li>);
           i++;
         }
         if (tag === "ol") {
@@ -401,16 +433,17 @@ export function PortableTextRenderer({ blocks }: Props) {
 }
 
 function generateNextConfig(input: BlogScaffoldInput): string {
+  const safeDomains = input.mediaDomains.filter(isValidHostname);
   const lines: string[] = [];
   lines.push("import type { NextConfig } from \"next\";");
   lines.push("");
   lines.push("const nextConfig: NextConfig = {");
 
   // Image remote patterns
-  if (input.mediaDomains.length > 0) {
+  if (safeDomains.length > 0) {
     lines.push("  images: {");
     lines.push("    remotePatterns: [");
-    for (const domain of input.mediaDomains) {
+    for (const domain of safeDomains) {
       lines.push(`      { protocol: "https", hostname: "${domain}" },`);
     }
     lines.push("    ],");
@@ -429,10 +462,10 @@ function generateNextConfig(input: BlogScaffoldInput): string {
     lines.push("");
     lines.push("const nextConfig: NextConfig = {");
 
-    if (input.mediaDomains.length > 0) {
+    if (safeDomains.length > 0) {
       lines.push("  images: {");
       lines.push("    remotePatterns: [");
-      for (const domain of input.mediaDomains) {
+      for (const domain of safeDomains) {
         lines.push(`      { protocol: "https", hostname: "${domain}" },`);
       }
       lines.push("    ],");
