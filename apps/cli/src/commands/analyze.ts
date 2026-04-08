@@ -11,6 +11,8 @@ import {
   reportToMarkdown,
   createWpRestClient,
   classifyPlugin,
+  parseGutenbergBlocks,
+  convertBlocksToPortableText,
 } from "@wp-transfer/analyzer";
 import type { PluginEntry } from "@wp-transfer/core";
 
@@ -86,6 +88,19 @@ async function analyzeFromWxr(
   // Analyze schema
   consola.start("Analyzing schema...");
   const schema = analyzeSchema(wxr.posts, wxr.taxonomies, wxr.media, wxr.users.length);
+
+  // Convert Gutenberg content to Portable Text
+  consola.start("Converting content to Portable Text...");
+  let convertedCount = 0;
+  for (const post of wxr.posts) {
+    if (post.content && post.content.includes("<!-- wp:")) {
+      const blocks = parseGutenbergBlocks(post.content);
+      const ptBlocks = convertBlocksToPortableText(blocks);
+      (post as Record<string, unknown>).portableText = ptBlocks;
+      convertedCount++;
+    }
+  }
+  consola.success(`Converted ${convertedCount}/${wxr.posts.length} posts to Portable Text`);
 
   // Estimate cost (no plugin data from WXR)
   const plugins: PluginEntry[] = [];

@@ -82,3 +82,30 @@ export {
 export {
   convertBlocksToPortableText,
 } from "./block-converter.js";
+
+export {
+  extractYoastMeta,
+  resolveYoastPlaceholders,
+  generateYoastMetadataCode,
+  type YoastMeta,
+  type YoastPlaceholderContext,
+} from "./yoast-extractor.js";
+
+export {
+  generateAcfTemplate,
+  type AcfTemplateResult,
+} from "./acf-template-generator.js";
+
+export {
+  generateBlogScaffold,
+  type BlogScaffoldInput,
+  type BlogPostInfo,
+  type CategoryInfo,
+  type ScaffoldFile,
+} from "./blog-scaffold-generator.js";
+
+export {
+  generateVerifyScaffold,
+  type VerifyInput,
+  type VerifyScaffoldFile,
+} from "./verify-generator.js";
