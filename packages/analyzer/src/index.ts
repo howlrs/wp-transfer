@@ -109,3 +109,13 @@ export {
   type VerifyInput,
   type VerifyScaffoldFile,
 } from "./verify-generator.js";
+
+export {
+  isValidJsIdentifier,
+  toSafeIdentifier,
+  escapeForStringLiteral,
+  sanitizeUrl,
+  sanitizeSlug,
+  isValidHostname,
+  isPathSafe,
+} from "./sanitize.js";
