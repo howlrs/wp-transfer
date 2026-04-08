@@ -2,7 +2,7 @@
 
 **バージョン:** v0.1.0-alpha
 **日付:** 2026-04-08
-**テスト:** 217 / 217 全パス
+**テスト:** 290 / 290 全パス
 **リポジトリ:** https://github.com/howlrs/wp-transfer
 
 ## プロジェクト概要
@@ -83,6 +83,15 @@ wp-transfer analyze-php <dir> [--schema db-schema.md] [--output path]
 - [x] Docker環境 (MySQL 8.0 + Next.js)
 - [x] E2E APIテスト 15件
 
+### C-Phase: Phase 1 MVP (WXRブログサイト対応)
+- [x] Gutenbergブロックパーサー (ネスト対応, Global Styles JSON, 16テスト)
+- [x] ブロック→Portable Text変換 (paragraph/heading/list/image/code/embed/quote/separator, 20テスト)
+- [x] Yoast SEOメタデータ抽出 (%%var%%プレースホルダー解決, Next.js Metadata API生成, 10テスト)
+- [x] ACFテンプレート生成 (Zodスキーマ + 型付きアクセサ, 7テスト)
+- [x] WXRブログscaffold生成 (投稿/アーカイブ/カテゴリ/404/PT renderer/next.config, 12テスト)
+- [x] Playwright Verify scaffold生成 (スモークテスト + ビルド検証, 6テスト)
+- [x] 統合テスト (WXR→scaffold全パイプライン, 2テスト)
+
 ## 未完了 (次のフェーズ)
 
 ### B. JRA tokyo移行の仕上げ
@@ -91,11 +100,11 @@ wp-transfer analyze-php <dir> [--schema db-schema.md] [--output path]
 - [ ] B3: 残りWPテーマページ変換
 
 ### C. Phase 1 MVP残タスク
-- [ ] C1: Gutenberg → Portable Text → React変換 (WXRブログサイト向け)
-- [ ] C2: Yoast SEOメタデータ移行テンプレート
-- [ ] C3: ACFスキーマ移行テンプレート
-- [ ] C4: Next.js scaffold生成 (WXR版)
-- [ ] C5: Verify最小版 (Playwright)
+- [x] C1: Gutenberg → Portable Text → React変換 (WXRブログサイト向け)
+- [x] C2: Yoast SEOメタデータ移行テンプレート
+- [x] C3: ACFスキーマ移行テンプレート
+- [x] C4: Next.js scaffold生成 (WXR版)
+- [x] C5: Verify最小版 (Playwright)
 
 ### D. OSS公開準備
 - [ ] D1: README改善
