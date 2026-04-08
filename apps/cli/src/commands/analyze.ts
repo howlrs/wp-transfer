@@ -48,7 +48,7 @@ export const analyzeCommand = defineCommand({
     const source = args.source as string;
     const output = args.output as string;
     const format = args.format as string;
-    const resolvedSource = resolve(source);
+    const resolvedSource = resolve(process.cwd(), source);
 
     if (source.endsWith(".xml") && existsSync(resolvedSource)) {
       await analyzeFromWxr(resolvedSource, output, format);
