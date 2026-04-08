@@ -78,3 +78,7 @@ export {
   parseGutenbergBlocks,
   type GutenbergBlock,
 } from "./gutenberg-parser.js";
+
+export {
+  convertBlocksToPortableText,
+} from "./block-converter.js";
