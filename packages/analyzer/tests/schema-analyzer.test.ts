@@ -120,4 +120,46 @@ describe("analyzeSchema", () => {
     expect(result.contentSummary.taxonomies).toHaveLength(1);
     expect(result.contentSummary.taxonomies[0].slug).toBe("category");
   });
+
+  it("detects hierarchical taxonomy from parentId", () => {
+    const taxonomies = [
+      makeTaxonomy({ id: 1, slug: "parent-cat", taxonomy: "category" }),
+      makeTaxonomy({
+        id: 2,
+        slug: "child-cat",
+        taxonomy: "category",
+        parentId: 1,
+      }),
+      makeTaxonomy({ id: 3, slug: "flat-tag", taxonomy: "post_tag" }),
+    ];
+
+    const result = analyzeSchema([], taxonomies, []);
+
+    const catSummary = result.contentSummary.taxonomies.find(
+      (t) => t.slug === "category",
+    );
+    expect(catSummary).toBeDefined();
+    expect(catSummary!.hierarchical).toBe(true);
+
+    const tagSummary = result.contentSummary.taxonomies.find(
+      (t) => t.slug === "post_tag",
+    );
+    expect(tagSummary).toBeDefined();
+    expect(tagSummary!.hierarchical).toBe(false);
+  });
+
+  it("marks taxonomy as non-hierarchical when no terms have parentId", () => {
+    const taxonomies = [
+      makeTaxonomy({ id: 1, slug: "cat-a", taxonomy: "category" }),
+      makeTaxonomy({ id: 2, slug: "cat-b", taxonomy: "category" }),
+    ];
+
+    const result = analyzeSchema([], taxonomies, []);
+
+    const catSummary = result.contentSummary.taxonomies.find(
+      (t) => t.slug === "category",
+    );
+    expect(catSummary).toBeDefined();
+    expect(catSummary!.hierarchical).toBe(false);
+  });
 });

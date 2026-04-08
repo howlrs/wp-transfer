@@ -1,6 +1,23 @@
-import type { WpPost } from "@wp-transfer/core";
+import type { WpPost, WpPostStatus } from "@wp-transfer/core";
 import type { Tag } from "sax";
 import type { WxrCollector } from "./stream-parser.js";
+
+const VALID_POST_STATUSES = new Set<string>([
+  "publish",
+  "draft",
+  "pending",
+  "private",
+  "future",
+  "trash",
+  "inherit",
+  "auto-draft",
+]);
+
+function toValidStatus(raw: string): WpPostStatus {
+  return VALID_POST_STATUSES.has(raw)
+    ? (raw as WpPostStatus)
+    : "draft";
+}
 
 interface PostMetaEntry {
   key: string;
@@ -166,7 +183,9 @@ export class PostCollector implements WxrCollector {
         this.currentPost.menuOrder = parseInt(text, 10) || 0;
         break;
       case "item":
-        this.posts.push(this.buildPost());
+        if (this.currentPost.type !== "attachment") {
+          this.posts.push(this.buildPost());
+        }
         this.inItem = false;
         break;
     }
@@ -180,7 +199,7 @@ export class PostCollector implements WxrCollector {
       id: p.id,
       title: p.title,
       slug: p.slug,
-      status: p.status as WpPost["status"],
+      status: toValidStatus(p.status),
       type: p.type,
       content: p.content,
       excerpt: p.excerpt,

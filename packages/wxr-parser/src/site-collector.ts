@@ -42,6 +42,12 @@ export class SiteCollector implements WxrCollector {
   }
 
   onCloseTag(name: string): void {
+    if (name === "channel") {
+      this.inChannel = false;
+      this.textBuffer = "";
+      return;
+    }
+
     if (name === "item") {
       this.inItem = false;
       this.textBuffer = "";

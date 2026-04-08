@@ -25,7 +25,7 @@ const PATTERNS: PatternDef[] = [
   },
   {
     type: "wp-auth-key",
-    pattern: /define\(\s*'AUTH_KEY'\s*,\s*'[^']+'\s*\)/g,
+    pattern: /define\(\s*'(?:AUTH_KEY|SECURE_AUTH_KEY|LOGGED_IN_KEY|NONCE_KEY|AUTH_SALT|SECURE_AUTH_SALT|LOGGED_IN_SALT|NONCE_SALT)'\s*,\s*'[^']+'\s*\)/g,
     severity: "high",
   },
   {
@@ -41,6 +41,21 @@ const PATTERNS: PatternDef[] = [
   {
     type: "slack-token",
     pattern: /xox[baprs]-[A-Za-z0-9\-]+/g,
+    severity: "high",
+  },
+  {
+    type: "google-api-key",
+    pattern: /AIzaSy[A-Za-z0-9_-]{33}/g,
+    severity: "high",
+  },
+  {
+    type: "stripe-key",
+    pattern: /[sr]k_live_[A-Za-z0-9]{24,}/g,
+    severity: "high",
+  },
+  {
+    type: "sendgrid-key",
+    pattern: /SG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}/g,
     severity: "high",
   },
   {

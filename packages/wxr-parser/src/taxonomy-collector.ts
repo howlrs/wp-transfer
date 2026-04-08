@@ -10,6 +10,9 @@ import type { WxrCollector } from "./stream-parser.js";
 export class TaxonomyCollector implements WxrCollector {
   readonly taxonomies: WpTaxonomyTerm[] = [];
 
+  /** Stores parent slug for each category (keyed by category slug) */
+  private parentSlugMap = new Map<string, string>();
+
   private inCategory = false;
   private inTag = false;
   private textBuffer = "";
@@ -88,6 +91,9 @@ export class TaxonomyCollector implements WxrCollector {
             taxonomy: "category",
             description: this.catDescription || undefined,
           });
+          if (this.catParent) {
+            this.parentSlugMap.set(this.catNicename, this.catParent);
+          }
           this.inCategory = false;
           break;
       }
@@ -121,5 +127,32 @@ export class TaxonomyCollector implements WxrCollector {
     }
 
     this.textBuffer = "";
+  }
+
+  /**
+   * Resolves parent slugs to parent IDs for categories.
+   * Must be called after all categories have been collected.
+   */
+  resolveParentIds(): void {
+    // Build a slug→id lookup from collected categories
+    const slugToId = new Map<string, number>();
+    for (const term of this.taxonomies) {
+      if (term.taxonomy === "category") {
+        slugToId.set(term.slug, term.id);
+      }
+    }
+
+    // Resolve parentSlug → parentId
+    for (const term of this.taxonomies) {
+      if (term.taxonomy === "category") {
+        const parentSlug = this.parentSlugMap.get(term.slug);
+        if (parentSlug) {
+          const parentId = slugToId.get(parentSlug);
+          if (parentId !== undefined) {
+            term.parentId = parentId;
+          }
+        }
+      }
+    }
   }
 }

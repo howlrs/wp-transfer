@@ -123,11 +123,18 @@ export function analyzeSchema(
 
   const taxonomySummaries: TaxonomySummary[] = [];
   for (const [slug, info] of taxMap) {
+    // Infer hierarchy from whether any term in this taxonomy has a parentId
+    const hierarchical = taxonomies.some(
+      (t) =>
+        t.taxonomy === slug &&
+        t.parentId !== undefined &&
+        t.parentId > 0,
+    );
     taxonomySummaries.push({
       slug,
       name: info.name,
       count: info.count,
-      hierarchical: slug === "category",
+      hierarchical,
     });
   }
 

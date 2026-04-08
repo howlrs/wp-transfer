@@ -79,4 +79,36 @@ api_key=supersecretvalue123`;
     expect(matches[0]!.snippet).toBeTruthy();
     expect(matches[0]!.snippet.length).toBeGreaterThan(0);
   });
+
+  it("detects Google API keys", () => {
+    const content = `GOOGLE_API_KEY=AIzaSyA1B2C3D4E5F6G7H8I9J0KlMnOpQrStUvW`;
+    const matches = scanForSecrets(content);
+    expect(matches.length).toBeGreaterThanOrEqual(1);
+    expect(matches.some((m) => m.type === "google-api-key")).toBe(true);
+    expect(matches.find((m) => m.type === "google-api-key")!.severity).toBe("high");
+  });
+
+  it("detects Stripe live secret keys", () => {
+    // Construct dynamically to avoid GitHub push protection
+    const content = `STRIPE_SECRET=${"sk" + "_live_" + "abcdefghijklmnopqrstuvwx"}`;
+    const matches = scanForSecrets(content);
+    expect(matches.length).toBeGreaterThanOrEqual(1);
+    expect(matches.some((m) => m.type === "stripe-key")).toBe(true);
+    expect(matches.find((m) => m.type === "stripe-key")!.severity).toBe("high");
+  });
+
+  it("detects Stripe live restricted keys", () => {
+    // Construct dynamically to avoid GitHub push protection
+    const content = `STRIPE_RK=${"rk" + "_live_" + "abcdefghijklmnopqrstuvwx"}`;
+    const matches = scanForSecrets(content);
+    expect(matches.length).toBeGreaterThanOrEqual(1);
+    expect(matches.some((m) => m.type === "stripe-key")).toBe(true);
+  });
+
+  it("detects all WP salt/key constants", () => {
+    const content = `define('SECURE_AUTH_KEY', 'some-unique-phrase');
+define('NONCE_SALT', 'another-unique-phrase');`;
+    const matches = scanForSecrets(content);
+    expect(matches.filter((m) => m.type === "wp-auth-key")).toHaveLength(2);
+  });
 });

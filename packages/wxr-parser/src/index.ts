@@ -53,6 +53,9 @@ export async function parseWxr(
     onWarning,
   );
 
+  // Resolve parent slugs to parent IDs for categories
+  taxonomyCollector.resolveParentIds();
+
   return {
     siteTitle: siteCollector.siteTitle,
     siteUrl: siteCollector.siteUrl,

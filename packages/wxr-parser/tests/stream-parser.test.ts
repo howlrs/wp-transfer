@@ -96,6 +96,58 @@ describe("parseWxr — acf-fields.xml", () => {
   });
 });
 
+describe("parseWxr — taxonomy-and-attachments.xml", () => {
+  function openFixture() {
+    return createReadStream(
+      resolve(fixturesDir, "taxonomy-and-attachments.xml"),
+      "utf-8",
+    );
+  }
+
+  it("resolves parent category slugs to parent IDs", async () => {
+    const result = await parseWxr(openFixture());
+
+    const localNews = result.taxonomies.find((t) => t.slug === "local-news");
+    expect(localNews).toBeDefined();
+    expect(localNews!.taxonomy).toBe("category");
+    // "local-news" has parent slug "news" which has id=1
+    expect(localNews!.parentId).toBe(1);
+
+    const news = result.taxonomies.find((t) => t.slug === "news");
+    expect(news).toBeDefined();
+    expect(news!.parentId).toBeUndefined();
+  });
+
+  it("excludes attachment items from posts array", async () => {
+    const result = await parseWxr(openFixture());
+
+    // Should have 2 posts (normal post + custom status post), NOT the attachment
+    expect(result.posts).toHaveLength(2);
+    expect(result.posts.every((p) => p.type !== "attachment")).toBe(true);
+  });
+
+  it("still collects attachment items in media array", async () => {
+    const result = await parseWxr(openFixture());
+
+    expect(result.media).toHaveLength(1);
+    expect(result.media[0].title).toBe("my-photo.jpg");
+    expect(result.media[0].url).toBe(
+      "https://example.com/wp-content/uploads/my-photo.jpg",
+    );
+  });
+
+  it("defaults unknown post status to draft", async () => {
+    const result = await parseWxr(openFixture());
+
+    const customStatusPost = result.posts.find(
+      (p) => p.slug === "custom-status-post",
+    );
+    expect(customStatusPost).toBeDefined();
+    // "wc-processing" is not a valid status, should fall back to "draft"
+    expect(customStatusPost!.status).toBe("draft");
+  });
+});
+
 describe("parseWxr — error handling", () => {
   it("collects parse errors in the result instead of throwing", async () => {
     // Create a stream with malformed XML that sax will error on

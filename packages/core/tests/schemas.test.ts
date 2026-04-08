@@ -82,6 +82,42 @@ describe("WpPostSchema", () => {
     const result = WpPostSchema.safeParse(post);
     expect(result.success).toBe(false);
   });
+
+  it("accepts 'inherit' status", () => {
+    const post = {
+      id: 1,
+      title: "Revision",
+      slug: "revision-1",
+      status: "inherit",
+      type: "revision",
+      content: "",
+      excerpt: "",
+      date: "2024-01-01T00:00:00",
+      modified: "2024-01-01T00:00:00",
+      author: 1,
+      meta: {},
+    };
+    const result = WpPostSchema.safeParse(post);
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts 'auto-draft' status", () => {
+    const post = {
+      id: 1,
+      title: "",
+      slug: "",
+      status: "auto-draft",
+      type: "post",
+      content: "",
+      excerpt: "",
+      date: "2024-01-01T00:00:00",
+      modified: "2024-01-01T00:00:00",
+      author: 1,
+      meta: {},
+    };
+    const result = WpPostSchema.safeParse(post);
+    expect(result.success).toBe(true);
+  });
 });
 
 describe("PluginEntrySchema", () => {

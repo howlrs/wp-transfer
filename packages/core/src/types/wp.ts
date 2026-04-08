@@ -7,6 +7,8 @@ export const WpPostStatusSchema = z.enum([
   "private",
   "future",
   "trash",
+  "inherit",
+  "auto-draft",
 ]);
 
 export type WpPostStatus = z.infer<typeof WpPostStatusSchema>;

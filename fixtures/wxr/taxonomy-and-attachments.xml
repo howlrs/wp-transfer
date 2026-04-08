@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<rss version="2.0"
+  xmlns:excerpt="http://wordpress.org/export/1.2/excerpt/"
+  xmlns:content="http://purl.org/rss/1.0/modules/content/"
+  xmlns:wfw="http://wellformedweb.org/CommentAPI/"
+  xmlns:dc="http://purl.org/dc/elements/1.1/"
+  xmlns:wp="http://wordpress.org/export/1.2/">
+
+  <channel>
+    <title>Taxonomy Test Site</title>
+    <wp:base_site_url>https://example.com</wp:base_site_url>
+    <generator>https://wordpress.org/?v=6.7</generator>
+
+    <wp:author>
+      <wp:author_id>1</wp:author_id>
+      <wp:author_login><![CDATA[admin]]></wp:author_login>
+      <wp:author_email><![CDATA[admin@example.com]]></wp:author_email>
+      <wp:author_display_name><![CDATA[Admin]]></wp:author_display_name>
+      <wp:author_first_name><![CDATA[]]></wp:author_first_name>
+      <wp:author_last_name><![CDATA[]]></wp:author_last_name>
+    </wp:author>
+
+    <wp:category>
+      <wp:term_id>1</wp:term_id>
+      <wp:category_nicename><![CDATA[news]]></wp:category_nicename>
+      <wp:category_parent><![CDATA[]]></wp:category_parent>
+      <wp:cat_name><![CDATA[News]]></wp:cat_name>
+      <wp:category_description><![CDATA[]]></wp:category_description>
+    </wp:category>
+
+    <wp:category>
+      <wp:term_id>2</wp:term_id>
+      <wp:category_nicename><![CDATA[local-news]]></wp:category_nicename>
+      <wp:category_parent><![CDATA[news]]></wp:category_parent>
+      <wp:cat_name><![CDATA[Local News]]></wp:cat_name>
+      <wp:category_description><![CDATA[]]></wp:category_description>
+    </wp:category>
+
+    <wp:tag>
+      <wp:term_id>3</wp:term_id>
+      <wp:tag_slug><![CDATA[featured]]></wp:tag_slug>
+      <wp:tag_name><![CDATA[Featured]]></wp:tag_name>
+      <wp:tag_description><![CDATA[]]></wp:tag_description>
+    </wp:tag>
+
+    <!-- Normal post -->
+    <item>
+      <title>A News Post</title>
+      <dc:creator><![CDATA[admin]]></dc:creator>
+      <content:encoded><![CDATA[<p>Some news content.</p>]]></content:encoded>
+      <excerpt:encoded><![CDATA[]]></excerpt:encoded>
+      <wp:post_id>10</wp:post_id>
+      <wp:post_date><![CDATA[2024-06-01 10:00:00]]></wp:post_date>
+      <wp:post_modified><![CDATA[2024-06-01 10:00:00]]></wp:post_modified>
+      <wp:comment_status><![CDATA[open]]></wp:comment_status>
+      <wp:post_name><![CDATA[a-news-post]]></wp:post_name>
+      <wp:status><![CDATA[publish]]></wp:status>
+      <wp:post_parent>0</wp:post_parent>
+      <wp:menu_order>0</wp:menu_order>
+      <wp:post_type><![CDATA[post]]></wp:post_type>
+    </item>
+
+    <!-- Attachment — should NOT appear in posts -->
+    <item>
+      <title>my-photo.jpg</title>
+      <dc:creator><![CDATA[admin]]></dc:creator>
+      <content:encoded><![CDATA[]]></content:encoded>
+      <excerpt:encoded><![CDATA[]]></excerpt:encoded>
+      <wp:post_id>20</wp:post_id>
+      <wp:post_date><![CDATA[2024-06-01 10:05:00]]></wp:post_date>
+      <wp:post_modified><![CDATA[2024-06-01 10:05:00]]></wp:post_modified>
+      <wp:comment_status><![CDATA[closed]]></wp:comment_status>
+      <wp:post_name><![CDATA[my-photo-jpg]]></wp:post_name>
+      <wp:status><![CDATA[inherit]]></wp:status>
+      <wp:post_parent>10</wp:post_parent>
+      <wp:menu_order>0</wp:menu_order>
+      <wp:post_type><![CDATA[attachment]]></wp:post_type>
+      <wp:attachment_url>https://example.com/wp-content/uploads/my-photo.jpg</wp:attachment_url>
+      <wp:post_mime_type><![CDATA[image/jpeg]]></wp:post_mime_type>
+    </item>
+
+    <!-- Post with unknown status — should default to "draft" -->
+    <item>
+      <title>Custom Status Post</title>
+      <dc:creator><![CDATA[admin]]></dc:creator>
+      <content:encoded><![CDATA[<p>Unknown status.</p>]]></content:encoded>
+      <excerpt:encoded><![CDATA[]]></excerpt:encoded>
+      <wp:post_id>30</wp:post_id>
+      <wp:post_date><![CDATA[2024-06-02 12:00:00]]></wp:post_date>
+      <wp:post_modified><![CDATA[2024-06-02 12:00:00]]></wp:post_modified>
+      <wp:comment_status><![CDATA[open]]></wp:comment_status>
+      <wp:post_name><![CDATA[custom-status-post]]></wp:post_name>
+      <wp:status><![CDATA[wc-processing]]></wp:status>
+      <wp:post_parent>0</wp:post_parent>
+      <wp:menu_order>0</wp:menu_order>
+      <wp:post_type><![CDATA[post]]></wp:post_type>
+    </item>
+
+  </channel>
+</rss>
