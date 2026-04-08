@@ -276,4 +276,27 @@ describe("convertBlocksToPortableText", () => {
     expect((result[0] as any)._type).toBe("block");
     expect((result[0] as any).style).toBe("normal");
   });
+
+  it("rejects javascript: protocol in image src", () => {
+    const blocks = [block("image", '<figure><img src="javascript:alert(1)" alt="xss" /></figure>')];
+    const result = convertBlocksToPortableText(blocks);
+    const img = result[0] as any;
+    expect(img._type).toBe("image");
+    expect(img.src).toBe(""); // Rejected
+  });
+
+  it("rejects data: protocol in embed url", () => {
+    const blocks = [block("embed", '<figure></figure>', { url: "data:text/html,<script>alert(1)</script>" })];
+    const result = convertBlocksToPortableText(blocks);
+    const embed = result[0] as any;
+    expect(embed._type).toBe("embed");
+    expect(embed.url).toBe(""); // Rejected
+  });
+
+  it("allows https URLs in image src", () => {
+    const blocks = [block("image", '<figure><img src="https://example.com/photo.jpg" alt="Photo" /></figure>')];
+    const result = convertBlocksToPortableText(blocks);
+    const img = result[0] as any;
+    expect(img.src).toBe("https://example.com/photo.jpg");
+  });
 });

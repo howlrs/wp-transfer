@@ -13,6 +13,7 @@ import type {
   WptHtmlBlock,
 } from "@wp-transfer/core";
 import type { GutenbergBlock } from "./gutenberg-parser.js";
+import { sanitizeUrl } from "./sanitize.js";
 
 /** Minimal span shape compatible with PortableTextSpan. */
 interface Span { _type: "span"; _key: string; text: string; marks: string[] }
@@ -262,11 +263,12 @@ function convertList(gb: GutenbergBlock): WptPortableTextBlock[] {
 
 function convertImage(gb: GutenbergBlock): WptImageBlock {
   const { src, alt } = extractImgAttrs(gb.innerHTML);
+  const safeSrc = sanitizeUrl(src);
   const caption = extractCaption(gb.innerHTML);
   return {
     _type: "image",
     _key: makeKey(),
-    src,
+    src: safeSrc,
     ...(alt !== undefined ? { alt } : {}),
     ...(caption !== undefined ? { caption } : {}),
   };
@@ -285,11 +287,12 @@ function convertCode(gb: GutenbergBlock): WptCodeBlock {
 
 function convertEmbed(gb: GutenbergBlock): WptEmbedBlock {
   const url = typeof gb.attributes.url === "string" ? gb.attributes.url : "";
+  const safeUrl = sanitizeUrl(url);
   const provider = typeof gb.attributes.providerNameSlug === "string" ? gb.attributes.providerNameSlug : undefined;
   return {
     _type: "embed",
     _key: makeKey(),
-    url,
+    url: safeUrl,
     ...(provider ? { provider } : {}),
   };
 }
