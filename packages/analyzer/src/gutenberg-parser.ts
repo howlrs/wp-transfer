@@ -14,12 +14,37 @@ export interface GutenbergBlock {
   innerHTML: string;
 }
 
-// Matches self-closing: <!-- wp:name {json} /-->
-// Matches opening:      <!-- wp:name {json} -->
-// Matches closing:      <!-- /wp:name -->
-const BLOCK_OPEN_RE =
-  /<!--\s+wp:([\w-]+(?:\/[\w-]+)?)\s*(\{[^}]*\})?\s*(\/)?-->/g;
+// Matches the start of an opening/self-closing comment up to the block name.
+// Attribute extraction uses brace-balanced parsing instead of regex to handle
+// nested JSON (e.g. WordPress 5.9+ Global Styles).
+const BLOCK_OPEN_PREFIX_RE =
+  /<!--\s+wp:([\w-]+(?:\/[\w-]+)?)\s*/g;
 const BLOCK_CLOSE_RE = /<!--\s+\/wp:([\w-]+(?:\/[\w-]+)?)\s*-->/g;
+
+/**
+ * Starting from `pos` in `str`, if the character is `{`, walk forward counting
+ * braces until balanced and return the JSON substring. Handles nested objects.
+ * Returns `undefined` if `str[pos]` is not `{` or braces never balance.
+ */
+function extractBraceBalanced(str: string, pos: number): string | undefined {
+  if (pos >= str.length || str[pos] !== "{") return undefined;
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+  for (let i = pos; i < str.length; i++) {
+    const ch = str[i]!;
+    if (escape) { escape = false; continue; }
+    if (ch === "\\") { escape = true; continue; }
+    if (ch === '"') { inString = !inString; continue; }
+    if (inString) continue;
+    if (ch === "{") depth++;
+    else if (ch === "}") {
+      depth--;
+      if (depth === 0) return str.slice(pos, i + 1);
+    }
+  }
+  return undefined;
+}
 
 function tryParseJson(raw: string | undefined): Record<string, unknown> {
   if (!raw) return {};
@@ -57,17 +82,35 @@ export function parseGutenbergBlocks(html: string): GutenbergBlock[] {
   const tokens: Token[] = [];
 
   // Gather opening / self-closing tokens
-  BLOCK_OPEN_RE.lastIndex = 0;
+  BLOCK_OPEN_PREFIX_RE.lastIndex = 0;
   let m: RegExpExecArray | null;
-  while ((m = BLOCK_OPEN_RE.exec(html)) !== null) {
+  while ((m = BLOCK_OPEN_PREFIX_RE.exec(html)) !== null) {
     const name = m[1]!;
-    const attrs = tryParseJson(m[2]);
-    const selfClosing = m[3] === "/";
+    let cursor = m.index + m[0].length;
+
+    // Try brace-balanced JSON extraction
+    const jsonStr = extractBraceBalanced(html, cursor);
+    if (jsonStr !== undefined) cursor += jsonStr.length;
+    const attrs = tryParseJson(jsonStr);
+
+    // Skip optional whitespace then check for self-closing `/` before `-->`
+    while (cursor < html.length && (html[cursor] === " " || html[cursor] === "\t" || html[cursor] === "\n" || html[cursor] === "\r")) cursor++;
+    const selfClosing = html[cursor] === "/";
+    if (selfClosing) cursor++;
+
+    // Must end with `-->`
+    if (html.slice(cursor, cursor + 3) !== "-->") continue;
+    cursor += 3;
+
+    const length = cursor - m.index;
     tokens.push(
       selfClosing
-        ? { type: "self-closing", name, attrs, index: m.index, length: m[0].length }
-        : { type: "open", name, attrs, index: m.index, length: m[0].length },
+        ? { type: "self-closing", name, attrs, index: m.index, length }
+        : { type: "open", name, attrs, index: m.index, length },
     );
+
+    // Advance the regex past the full comment we just consumed
+    BLOCK_OPEN_PREFIX_RE.lastIndex = cursor;
   }
 
   // Gather closing tokens

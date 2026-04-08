@@ -136,6 +136,39 @@ describe("parseGutenbergBlocks", () => {
     expect(names).toContain("heading");
   });
 
+  it("parses nested JSON attributes (Global Styles)", () => {
+    const html = `<!-- wp:columns {"style":{"spacing":{"padding":{"top":"20px"}}}} -->
+<div class="wp-block-columns">content</div>
+<!-- /wp:columns -->`;
+
+    const blocks = parseGutenbergBlocks(html);
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0]!.name).toBe("columns");
+    expect(blocks[0]!.attributes).toEqual({
+      style: { spacing: { padding: { top: "20px" } } },
+    });
+  });
+
+  it("recovers valid blocks when a block has no closing comment", () => {
+    const html = `<!-- wp:paragraph -->
+<p>Good block</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":2} -->
+<h2>No closing comment for this heading</h2>
+
+<!-- wp:paragraph -->
+<p>Another good block</p>
+<!-- /wp:paragraph -->`;
+
+    const blocks = parseGutenbergBlocks(html);
+    // The unclosed heading should be skipped; both paragraphs recovered
+    const names = blocks.map((b) => b.name);
+    expect(names).toContain("paragraph");
+    expect(names).not.toContain("heading");
+    expect(blocks.filter((b) => b.name === "paragraph")).toHaveLength(2);
+  });
+
   it("parses quote block", () => {
     const html = `<!-- wp:quote -->
 <blockquote class="wp-block-quote"><p>To be or not to be.</p><cite>Shakespeare</cite></blockquote>
