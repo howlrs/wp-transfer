@@ -160,7 +160,7 @@ git clone https://github.com/howlrs/wp-transfer.git
 cd wp-transfer
 pnpm install
 
-npx vitest run          # 831 tests
+npx vitest run          # 901 tests
 pnpm -r typecheck       # typecheck all packages
 ```
 
@@ -170,4 +170,4 @@ MIT
 
 ## Status
 
-**v0.4.0-alpha** -- All phases complete plus 5 PDCA improvement cycles. 831 tests (65 files), 35 issues closed. New in v0.4: Elementor conversion, one-command `run`, migration dashboard, pre-flight checks, enhanced Playwright test generation (API/Auth/Admin), soft-delete detection, loop/batch processing, schema-driven GET endpoints. See `HANDOFF.md` for details.
+**v0.4.0-alpha** -- All phases complete plus 6 PDCA improvement cycles. 901 tests (66 files), 38 issues closed. New in v0.4: Elementor conversion, one-command `run`, migration dashboard, pre-flight checks, enhanced Playwright test generation (API/Auth/Admin), soft-delete detection, loop/batch processing, schema-driven GET endpoints, full CLI integration (preflight + config + dashboard + verify specs). JRA Tokyo full-pipeline integration test (69 cases) proves end-to-end completeness. See `HANDOFF.md` for details.
