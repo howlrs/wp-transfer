@@ -195,3 +195,9 @@ export {
   detectPageBuilder,
   type PageBuilderAnalysis,
 } from "./page-builder-detector.js";
+
+export {
+  detectMetaBox,
+  type MetaBoxDetectionResult,
+  type MetaBoxField,
+} from "./metabox-detector.js";

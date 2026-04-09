@@ -27,6 +27,7 @@ import {
   generateMultisiteScaffold,
   resolveTemplate,
   detectPageBuilder,
+  detectMetaBox,
 } from "@wp-transfer/analyzer";
 import type { PluginEntry } from "@wp-transfer/core";
 
@@ -378,6 +379,12 @@ async function analyzeFromWxr(
     await mkdir(dirname(guidePath), { recursive: true });
     await writeFile(guidePath, builderAnalysis.migrationGuide, "utf-8");
     consola.success(`Written: ${guidePath}`);
+  }
+
+  // Meta Box: detect custom fields not belonging to known plugins
+  const metaBoxResult = detectMetaBox(wxr.posts);
+  if (metaBoxResult.detected) {
+    consola.success(`Custom fields detected: ${metaBoxResult.fieldCount} fields (possible Meta Box)`);
   }
 
   // Estimate cost (no plugin data from WXR)
