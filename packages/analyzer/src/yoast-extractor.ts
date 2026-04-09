@@ -107,6 +107,8 @@ export function resolveYoastPlaceholders(
     modified: context.modified ?? "",
     excerpt: context.excerpt ?? "",
     category_title: context.categoryTitle ?? "",
+    page: "" /* page number - resolve at runtime */,
+    focuskw: "" /* focus keyword - resolve from SEO settings */,
   };
 
   // Replace known placeholders with their values, unknown ones with empty string

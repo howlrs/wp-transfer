@@ -240,3 +240,36 @@ describe("extractSeoMeta (Rank Math support)", () => {
     expect(extractYoastMeta).toBe(extractSeoMeta);
   });
 });
+
+describe("resolveYoastPlaceholders — page and focuskw", () => {
+  it("resolves %%page%% to empty string (runtime placeholder)", () => {
+    const context = {
+      postTitle: "My Post",
+      siteName: "My Site",
+      separator: "|",
+    };
+    const result = resolveYoastPlaceholders("%%title%% %%sep%% Page %%page%%", context);
+    expect(result).toBe("My Post | Page");
+  });
+
+  it("resolves %%focuskw%% to empty string (SEO settings placeholder)", () => {
+    const context = {
+      postTitle: "My Post",
+      siteName: "My Site",
+      separator: "|",
+    };
+    const result = resolveYoastPlaceholders("%%title%% - %%focuskw%%", context);
+    expect(result).toBe("My Post -");
+  });
+
+  it("resolves %%excerpt%% from context", () => {
+    const context = {
+      postTitle: "My Post",
+      siteName: "My Site",
+      separator: "|",
+      excerpt: "A short summary",
+    };
+    const result = resolveYoastPlaceholders("%%excerpt%% %%sep%% %%sitename%%", context);
+    expect(result).toBe("A short summary | My Site");
+  });
+});
