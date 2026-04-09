@@ -160,6 +160,12 @@ describe("Auth Scaffold Generator", () => {
       expect(mw!.content).toContain("/unauthorized");
       expect(mw!.content).not.toMatch(/redirect\(new URL\("\/",/);
     });
+
+    it("includes /api/health in public routes", () => {
+      const files = generateAuthScaffold(["wpfront-user-role-editor"]);
+      const mw = files.find(f => f.path === "middleware.ts");
+      expect(mw!.content).toContain("/api/health");
+    });
   });
 
   describe("AdminUser Prisma model", () => {

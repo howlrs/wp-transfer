@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { generatePackageJson } from "../src/commands/analyze-php";
+import { generatePackageJson, sortTablesByFkDependency } from "../src/commands/analyze-php";
+import type { TableDefinition } from "@wp-transfer/analyzer";
 
 describe("generatePackageJson", () => {
   const pkg = JSON.parse(generatePackageJson("test-project"));
@@ -37,5 +38,50 @@ describe("generatePackageJson", () => {
 
   it("includes prisma seed config", () => {
     expect(pkg.prisma.seed).toContain("tsx");
+  });
+
+  it("pins next-auth to 5.0.0-beta.30 (v5 stable not yet on npm)", () => {
+    expect(pkg.dependencies["next-auth"]).toBe("5.0.0-beta.30");
+  });
+});
+
+describe("sortTablesByFkDependency", () => {
+  const col = (name: string, type = "String") => ({
+    name,
+    type,
+    nullable: false,
+    isPrimary: name === "id",
+    isAutoIncrement: name === "id",
+  });
+
+  it("puts FK parent tables before children", () => {
+    const tables: TableDefinition[] = [
+      { name: "lottery", columns: [col("id"), col("user_id", "Int")] },
+      { name: "user", columns: [col("id"), col("name")] },
+    ];
+    const sorted = sortTablesByFkDependency(tables);
+    const names = sorted.map(t => t.name);
+    expect(names.indexOf("user")).toBeLessThan(names.indexOf("lottery"));
+  });
+
+  it("returns tables unchanged when no FK columns exist", () => {
+    const tables: TableDefinition[] = [
+      { name: "category", columns: [col("id"), col("title")] },
+      { name: "tag", columns: [col("id"), col("label")] },
+    ];
+    const sorted = sortTablesByFkDependency(tables);
+    expect(sorted.map(t => t.name)).toEqual(["category", "tag"]);
+  });
+
+  it("handles multi-level dependencies", () => {
+    const tables: TableDefinition[] = [
+      { name: "comment", columns: [col("id"), col("post_id", "Int")] },
+      { name: "post", columns: [col("id"), col("user_id", "Int")] },
+      { name: "user", columns: [col("id"), col("name")] },
+    ];
+    const sorted = sortTablesByFkDependency(tables);
+    const names = sorted.map(t => t.name);
+    expect(names.indexOf("user")).toBeLessThan(names.indexOf("post"));
+    expect(names.indexOf("post")).toBeLessThan(names.indexOf("comment"));
   });
 });

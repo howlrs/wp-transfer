@@ -192,7 +192,7 @@ export default auth((req) => {
   const { pathname } = req.nextUrl;
 
   // Public routes
-  if (pathname === "/login" || pathname === "/unauthorized" || pathname.startsWith("/api/auth")) {
+  if (pathname === "/login" || pathname === "/unauthorized" || pathname.startsWith("/api/auth") || pathname === "/api/health") {
     return NextResponse.next();
   }
 
