@@ -90,23 +90,20 @@ volumes:
 function generateDockerfile(): string {
   return `# Stage 1: Install dependencies
 FROM node:20-slim AS deps
-RUN corepack enable && corepack prepare pnpm@latest --activate
 WORKDIR /app
-COPY package.json pnpm-lock.yaml* ./
-RUN pnpm install --frozen-lockfile
+COPY package.json package-lock.json* ./
+RUN npm ci
 
 # Stage 2: Build
 FROM node:20-slim AS builder
-RUN corepack enable && corepack prepare pnpm@latest --activate
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN pnpm prisma generate
-RUN pnpm build
+RUN npx prisma generate
+RUN npm run build
 
 # Stage 3: Production
 FROM node:20-slim AS runner
-RUN corepack enable && corepack prepare pnpm@latest --activate
 WORKDIR /app
 
 ENV NODE_ENV=production

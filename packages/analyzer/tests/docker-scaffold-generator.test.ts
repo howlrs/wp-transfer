@@ -117,10 +117,13 @@ describe("Docker Scaffold Generator", () => {
       expect(dockerfile.content).toContain("node:20-slim");
     });
 
-    it("includes pnpm setup", () => {
+    it("uses npm (not pnpm) for package management", () => {
       const files = generateDockerScaffold("my-project", "mysql");
       const dockerfile = findFile(files, "Dockerfile")!;
-      expect(dockerfile.content).toContain("pnpm");
+      expect(dockerfile.content).toContain("npm ci");
+      expect(dockerfile.content).toContain("npm run build");
+      expect(dockerfile.content).not.toContain("pnpm");
+      expect(dockerfile.content).not.toContain("corepack");
     });
 
     it("includes prisma generate step", () => {
