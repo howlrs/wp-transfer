@@ -8,6 +8,10 @@ export interface RewriteResult {
 const HREF_RE = /href="([^"]+)"/g;
 const DATE_PERMALINK_RE = /\/\d{4}\/\d{2}\/\d{2}\/([\w-]+)\/?$/;
 
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 export function rewriteCrossSiteUrls(
   content: string,
   sourceSiteId: number,
@@ -17,37 +21,54 @@ export function rewriteCrossSiteUrls(
 ): RewriteResult {
   const links: CrossSiteLink[] = [];
 
-  // Build baseUrl -> site map (sorted by URL length desc to match longest first)
-  const siteMap = [...sites]
-    .sort((a, b) => b.baseUrl.length - a.baseUrl.length);
+  // Filter out source site, normalize URLs, sort by length desc (longest match first)
+  const otherSites = sites
+    .filter((s) => s.siteId !== sourceSiteId)
+    .map((s) => ({ ...s, baseNormalized: s.baseUrl.replace(/\/$/, "") }))
+    .sort((a, b) => b.baseNormalized.length - a.baseNormalized.length);
+
+  // No cross-site targets → skip entirely
+  if (otherSites.length === 0) {
+    return { rewritten: content, links };
+  }
+
+  // Build a single compiled regex: matches any target site's baseUrl
+  // Sorted longest-first in alternation so the regex engine matches greedily
+  const sitePattern = new RegExp(
+    otherSites.map((s) => escapeRegex(s.baseNormalized)).join("|"),
+  );
+
+  // Build a lookup map: normalized baseUrl → site entry
+  const siteLookup = new Map(
+    otherSites.map((s) => [s.baseNormalized, s]),
+  );
 
   const rewritten = content.replace(HREF_RE, (match, url: string) => {
-    for (const site of siteMap) {
-      if (site.siteId === sourceSiteId) continue;
+    const m = sitePattern.exec(url);
+    if (!m) return match;
 
-      const baseNormalized = site.baseUrl.replace(/\/$/, "");
-      if (!url.startsWith(baseNormalized + "/") && url !== baseNormalized) continue;
+    const matched = m[0]!;
+    // Ensure the match is a proper prefix: URL must be exactly baseUrl or baseUrl + "/"
+    const rest = url.slice(matched.length);
+    if (rest !== "" && !rest.startsWith("/")) return match;
 
-      const relativePath = url.slice(baseNormalized.length);
-      const slug = extractSlug(relativePath);
-      if (!slug) continue;
+    const site = siteLookup.get(matched)!;
+    const slug = extractSlug(rest);
+    if (!slug) return match;
 
-      const rewrittenPath = mode === "subpath"
-        ? `/${site.slug}/blog/${slug}`
-        : `/blog/${slug}`;
+    const rewrittenPath = mode === "subpath"
+      ? `/${site.slug}/blog/${slug}`
+      : `/blog/${slug}`;
 
-      links.push({
-        sourceSiteId,
-        targetSiteId: site.siteId,
-        sourcePostId,
-        originalUrl: url,
-        rewrittenPath,
-      });
+    links.push({
+      sourceSiteId,
+      targetSiteId: site.siteId,
+      sourcePostId,
+      originalUrl: url,
+      rewrittenPath,
+    });
 
-      return `href="${rewrittenPath}"`;
-    }
-
-    return match;
+    return `href="${rewrittenPath}"`;
   });
 
   return { rewritten, links };
