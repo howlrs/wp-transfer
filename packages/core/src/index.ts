@@ -55,6 +55,7 @@ export type {
   WptEmbedBlock,
   WptCodeBlock,
   WptHtmlBlock,
+  WptReferenceBlock,
   WptContentBlock,
 } from "./types/portable-text.js";
 

@@ -7,6 +7,7 @@ import type {
   WptCodeBlock,
   WptEmbedBlock,
   WptHtmlBlock,
+  WptReferenceBlock,
 } from "@wp-transfer/core";
 
 function block(name: string, innerHTML: string, attributes: Record<string, unknown> = {}): GutenbergBlock {
@@ -298,5 +299,123 @@ describe("convertBlocksToPortableText", () => {
     const result = convertBlocksToPortableText(blocks);
     const img = result[0] as any;
     expect(img.src).toBe("https://example.com/photo.jpg");
+  });
+
+  // Task 10: HTML entity decoding
+  it("decodes numeric HTML entities (decimal and hex)", () => {
+    const blocks = convertBlocksToPortableText([
+      block("paragraph", "<p>Smart &#8220;quotes&#8221; and em&#8212;dash</p>"),
+    ]);
+    const b = blocks[0] as WptPortableTextBlock;
+    const text = b.children.map((c) => c.text).join("");
+    expect(text).toBe('Smart \u201Cquotes\u201D and em\u2014dash');
+  });
+
+  it("decodes hex HTML entities", () => {
+    const blocks = convertBlocksToPortableText([
+      block("paragraph", "<p>&#x2603; snowman &#x2764; heart</p>"),
+    ]);
+    const b = blocks[0] as WptPortableTextBlock;
+    const text = b.children.map((c) => c.text).join("");
+    expect(text).toBe('\u2603 snowman \u2764 heart');
+  });
+
+  it("decodes named HTML entities beyond the basic 5", () => {
+    const blocks = convertBlocksToPortableText([
+      block("paragraph", "<p>Hello&nbsp;world &mdash; &copy; 2024 &hellip;</p>"),
+    ]);
+    const b = blocks[0] as WptPortableTextBlock;
+    const text = b.children.map((c) => c.text).join("");
+    expect(text).toBe('Hello\u00A0world \u2014 \u00A9 2024 \u2026');
+  });
+
+  it("preserves unknown named entities as-is", () => {
+    const blocks = convertBlocksToPortableText([
+      block("paragraph", "<p>Unknown &foobar; entity</p>"),
+    ]);
+    const b = blocks[0] as WptPortableTextBlock;
+    const text = b.children.map((c) => c.text).join("");
+    expect(text).toBe("Unknown &foobar; entity");
+  });
+
+  // Task 11: <br> tags
+  it("converts <br> tags to newline spans", () => {
+    const blocks = convertBlocksToPortableText([
+      block("paragraph", "<p>Line one<br>Line two<br/>Line three<br />Line four</p>"),
+    ]);
+    const b = blocks[0] as WptPortableTextBlock;
+    const text = b.children.map((c) => c.text).join("");
+    expect(text).toBe("Line one\nLine two\nLine three\nLine four");
+  });
+
+  // Task 12: Nested lists
+  it("converts nested unordered list with level tracking", () => {
+    const html = `<ul>
+      <li>Parent 1
+        <ul>
+          <li>Child 1.1</li>
+          <li>Child 1.2</li>
+        </ul>
+      </li>
+      <li>Parent 2</li>
+    </ul>`;
+    const blocks = convertBlocksToPortableText([block("list", html)]);
+    expect(blocks.length).toBe(4);
+    expect((blocks[0] as any).level).toBe(1);
+    expect((blocks[0] as any).children[0].text).toContain("Parent 1");
+    expect((blocks[1] as any).level).toBe(2);
+    expect((blocks[1] as any).children[0].text).toContain("Child 1.1");
+    expect((blocks[2] as any).level).toBe(2);
+    expect((blocks[2] as any).children[0].text).toContain("Child 1.2");
+    expect((blocks[3] as any).level).toBe(1);
+    expect((blocks[3] as any).children[0].text).toContain("Parent 2");
+  });
+
+  it("converts nested ordered list preserving listItem type per level", () => {
+    const html = `<ol>
+      <li>First
+        <ul>
+          <li>Nested bullet</li>
+        </ul>
+      </li>
+      <li>Second</li>
+    </ol>`;
+    const blocks = convertBlocksToPortableText([
+      block("list", html, { ordered: true }),
+    ]);
+    expect(blocks.length).toBe(3);
+    expect((blocks[0] as any).listItem).toBe("number");
+    expect((blocks[0] as any).level).toBe(1);
+    expect((blocks[1] as any).listItem).toBe("bullet");
+    expect((blocks[1] as any).level).toBe(2);
+    expect((blocks[2] as any).listItem).toBe("number");
+    expect((blocks[2] as any).level).toBe(1);
+  });
+
+  // Task 13: Group blocks
+  it("recursively expands group blocks", () => {
+    const groupInnerHtml =
+      '<!-- wp:paragraph --><p>Inside group</p><!-- /wp:paragraph -->' +
+      '<!-- wp:heading {"level":3} --><h3>Group heading</h3><!-- /wp:heading -->';
+    const blocks = convertBlocksToPortableText([
+      block("group", groupInnerHtml),
+    ]);
+    expect(blocks.length).toBe(2);
+    expect((blocks[0] as any)._type).toBe("block");
+    expect((blocks[0] as any).style).toBe("normal");
+    expect((blocks[0] as any).children[0].text).toBe("Inside group");
+    expect((blocks[1] as any)._type).toBe("block");
+    expect((blocks[1] as any).style).toBe("h3");
+  });
+
+  // Task 14: Reusable blocks
+  it("converts reusable block (wp:block) to referenceBlock with ref", () => {
+    const blocks = convertBlocksToPortableText([
+      block("block", "", { ref: 42 }),
+    ]);
+    expect(blocks).toHaveLength(1);
+    const b = blocks[0] as any;
+    expect(b._type).toBe("referenceBlock");
+    expect(b.ref).toBe(42);
   });
 });

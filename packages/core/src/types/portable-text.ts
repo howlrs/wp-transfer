@@ -56,6 +56,17 @@ export interface WptHtmlBlock {
 }
 
 /**
+ * Reference block for reusable blocks (wp:block).
+ * The ref is the WordPress post ID of the reusable block content.
+ */
+export interface WptReferenceBlock {
+  _type: "referenceBlock";
+  _key: string;
+  ref: number;
+  locale?: string;
+}
+
+/**
  * Union type of all wp-transfer content blocks.
  */
 export type WptContentBlock =
@@ -63,4 +74,5 @@ export type WptContentBlock =
   | WptImageBlock
   | WptEmbedBlock
   | WptCodeBlock
-  | WptHtmlBlock;
+  | WptHtmlBlock
+  | WptReferenceBlock;

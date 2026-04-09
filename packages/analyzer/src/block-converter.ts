@@ -11,9 +11,12 @@ import type {
   WptEmbedBlock,
   WptCodeBlock,
   WptHtmlBlock,
+  WptReferenceBlock,
 } from "@wp-transfer/core";
 import type { GutenbergBlock } from "./gutenberg-parser.js";
+import { parseGutenbergBlocks } from "./gutenberg-parser.js";
 import { sanitizeUrl } from "./sanitize.js";
+import { parse as parseHtml } from "node-html-parser";
 
 /** Minimal span shape compatible with PortableTextSpan. */
 interface Span { _type: "span"; _key: string; text: string; marks: string[] }
@@ -51,7 +54,7 @@ function parseInlineHtml(html: string): ParsedInline {
   const markStack: string[] = [];
 
   // Tokenize: split into tags and text runs
-  const TAG_RE = /<\/?(?:strong|b|em|i|code|a)(?:\s[^>]*)?\s*\/?>/gi;
+  const TAG_RE = /<\/?(?:strong|b|em|i|code|a|br)(?:\s[^>]*)?\s*\/?>/gi;
   let lastIndex = 0;
   let match: RegExpExecArray | null;
 
@@ -66,6 +69,13 @@ function parseInlineHtml(html: string): ParsedInline {
     lastIndex = match.index + match[0].length;
 
     const tag = match[0];
+
+    // Handle <br>, <br/>, <br /> as newline
+    if (/^<br\s*\/?>/i.test(tag)) {
+      children.push({ _type: "span", _key: makeKey(), text: "\n", marks: [...markStack] });
+      continue;
+    }
+
     const isClosing = tag.startsWith("</");
 
     if (isClosing) {
@@ -142,13 +152,30 @@ function extractHref(tag: string): string {
   return m ? m[1]! : "";
 }
 
+const NAMED_ENTITIES: Record<string, string> = {
+  amp: "&", lt: "<", gt: ">", quot: '"', "#39": "'",
+  nbsp: "\u00A0", mdash: "\u2014", ndash: "\u2013",
+  lsquo: "\u2018", rsquo: "\u2019", ldquo: "\u201C", rdquo: "\u201D",
+  hellip: "\u2026", copy: "\u00A9", reg: "\u00AE", trade: "\u2122",
+  times: "\u00D7", divide: "\u00F7", bull: "\u2022", middot: "\u00B7",
+  ensp: "\u2002", emsp: "\u2003", thinsp: "\u2009", zwj: "\u200D", zwnj: "\u200C",
+};
+
 function decodeHtmlEntities(text: string): string {
-  return text
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'");
+  return text.replace(/&(#x?[0-9a-fA-F]+|\w+);/g, (match, entity: string) => {
+    // Numeric decimal: &#8220;
+    if (entity.startsWith("#") && !entity.startsWith("#x")) {
+      const code = parseInt(entity.slice(1), 10);
+      return Number.isNaN(code) ? match : String.fromCodePoint(code);
+    }
+    // Numeric hex: &#x2603;
+    if (entity.startsWith("#x")) {
+      const code = parseInt(entity.slice(2), 16);
+      return Number.isNaN(code) ? match : String.fromCodePoint(code);
+    }
+    // Named entity
+    return NAMED_ENTITIES[entity] ?? match;
+  });
 }
 
 // ---- Extract text from simple HTML wrappers ---------------------------------
@@ -180,14 +207,51 @@ function extractHeadingContent(html: string): string {
   return m ? m[1]! : stripTags(html);
 }
 
-/** Extract list items from <ul> or <ol>. */
-function extractListItems(html: string): string[] {
-  const items: string[] = [];
-  const re = /<li[^>]*>([\s\S]*?)<\/li>/gi;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(html)) !== null) {
-    items.push(m[1]!);
+interface ListItemInfo {
+  html: string;
+  level: number;
+  listType: "bullet" | "number";
+}
+
+function extractListItemsNested(html: string, parentListType: "bullet" | "number"): ListItemInfo[] {
+  const root = parseHtml(html);
+  const items: ListItemInfo[] = [];
+
+  function walk(node: ReturnType<typeof parseHtml>, level: number, listType: "bullet" | "number"): void {
+    for (const child of node.childNodes) {
+      if (child.nodeType !== 1) continue; // skip text nodes
+      const el = child as unknown as { tagName: string; childNodes: typeof node.childNodes; innerHTML: string; outerHTML: string; text: string };
+      const tag = el.tagName?.toUpperCase();
+
+      if (tag === "LI") {
+        // Collect direct text content (exclude nested lists)
+        let directHtml = "";
+        for (const liChild of el.childNodes) {
+          const liChildEl = liChild as unknown as { tagName?: string; outerHTML?: string; text?: string };
+          const childTag = liChildEl.tagName?.toUpperCase();
+          if (childTag === "UL" || childTag === "OL") continue;
+          directHtml += liChildEl.outerHTML ?? liChildEl.text ?? "";
+        }
+        items.push({ html: directHtml.trim(), level, listType });
+
+        // Recurse into nested lists
+        for (const liChild of el.childNodes) {
+          const liChildEl = liChild as unknown as { tagName: string; childNodes: typeof node.childNodes };
+          const childTag = liChildEl.tagName?.toUpperCase();
+          if (childTag === "UL") {
+            walk(liChildEl as any, level + 1, "bullet");
+          } else if (childTag === "OL") {
+            walk(liChildEl as any, level + 1, "number");
+          }
+        }
+      } else if (tag === "UL" || tag === "OL") {
+        const nestedType = tag === "OL" ? "number" : "bullet";
+        walk(el as any, level, nestedType);
+      }
+    }
   }
+
+  walk(root, 1, parentListType);
   return items;
 }
 
@@ -244,17 +308,17 @@ function convertHeading(gb: GutenbergBlock): WptPortableTextBlock {
 
 function convertList(gb: GutenbergBlock): WptPortableTextBlock[] {
   const ordered = gb.attributes.ordered === true;
-  const listItem = ordered ? "number" : "bullet";
-  const items = extractListItems(gb.innerHTML);
+  const parentListType = ordered ? "number" : "bullet";
+  const items = extractListItemsNested(gb.innerHTML, parentListType);
 
-  return items.map((itemHtml) => {
-    const { children, markDefs } = parseInlineHtml(itemHtml);
+  return items.map((item) => {
+    const { children, markDefs } = parseInlineHtml(item.html);
     return {
       _type: "block" as const,
       _key: makeKey(),
       style: "normal",
-      listItem,
-      level: 1,
+      listItem: item.listType,
+      level: item.level,
       children,
       markDefs,
     };
@@ -328,6 +392,20 @@ function convertToHtmlBlock(gb: GutenbergBlock): WptHtmlBlock {
   };
 }
 
+function convertGroup(gb: GutenbergBlock): WptContentBlock[] {
+  const innerBlocks = parseGutenbergBlocks(gb.innerHTML);
+  return convertBlocksToPortableText(innerBlocks);
+}
+
+function convertReusableBlock(gb: GutenbergBlock): WptReferenceBlock {
+  const ref = typeof gb.attributes.ref === "number" ? gb.attributes.ref : 0;
+  return {
+    _type: "referenceBlock",
+    _key: makeKey(),
+    ref,
+  };
+}
+
 // ---- Main entry point -------------------------------------------------------
 
 export function convertBlocksToPortableText(blocks: GutenbergBlock[]): WptContentBlock[] {
@@ -364,6 +442,12 @@ export function convertBlocksToPortableText(blocks: GutenbergBlock[]): WptConten
       case "table":
       case "freeform":
         result.push(convertToHtmlBlock(gb));
+        break;
+      case "block":
+        result.push(convertReusableBlock(gb));
+        break;
+      case "group":
+        result.push(...convertGroup(gb));
         break;
       default:
         result.push(convertToHtmlBlock(gb));
