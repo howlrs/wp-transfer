@@ -70,6 +70,7 @@ ${dbService}
     environment:
       - DATABASE_URL=${dbUrl}
       - AUTH_SECRET=change-me-generate-with-openssl-rand-base64-32
+      - AUTH_TRUST_HOST=true
     depends_on:
       db:
         condition: service_healthy
