@@ -32,3 +32,10 @@ jobs:
       - name: Coverage
         run: npx vitest run --coverage
         continue-on-error: true
+
+      - name: Security audit
+        run: pnpm audit --prod
+        continue-on-error: true
+
+      - name: Build
+        run: pnpm -r build
