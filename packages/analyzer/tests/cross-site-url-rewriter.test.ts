@@ -62,4 +62,36 @@ describe("rewriteCrossSiteUrls", () => {
 
     expect(result.links[0]!.rewrittenPath).toBe("/site2/blog/hello-from-sub");
   });
+
+  it("handles 100 sites x 100KB content efficiently", () => {
+    // Create 100 mock sites
+    const manySites: WpSite[] = Array.from({ length: 100 }, (_, i) => ({
+      siteId: i + 1,
+      slug: `site${i + 1}`,
+      title: `Site ${i + 1}`,
+      baseUrl: `https://network.example.com/site${i + 1}`,
+      networkUrl: "https://network.example.com",
+      path: `/site${i + 1}`,
+    }));
+
+    // Build ~100KB content with ~50 cross-site links scattered among filler text
+    const filler = "<p>Lorem ipsum dolor sit amet, consectetur adipiscing elit.</p>\n";
+    const chunks: string[] = [];
+    for (let i = 0; i < 50; i++) {
+      // ~2KB filler between links
+      for (let j = 0; j < 31; j++) chunks.push(filler);
+      // Insert a cross-site link to a random other site (not site1)
+      const targetId = (i % 99) + 2;
+      chunks.push(`<p>See <a href="https://network.example.com/site${targetId}/post-${i}/">link</a></p>\n`);
+    }
+    const content = chunks.join("");
+    expect(content.length).toBeGreaterThan(100_000);
+
+    const start = performance.now();
+    const result = rewriteCrossSiteUrls(content, 1, 1, manySites, "subpath");
+    const elapsed = performance.now() - start;
+
+    expect(result.links).toHaveLength(50);
+    expect(elapsed).toBeLessThan(50);
+  });
 });
