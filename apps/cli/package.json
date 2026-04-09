@@ -9,8 +9,11 @@
     "url": "https://github.com/howlrs/wp-transfer.git"
   },
   "keywords": ["wordpress", "nextjs", "migration", "cli", "wp-transfer"],
-  "files": ["dist/", "src/"],
-  "bin": { "wp-transfer": "./src/index.ts" },
+  "files": ["dist/"],
+  "main": "./dist/index.js",
+  "bin": { "wp-transfer": "./dist/index.js" },
+  "engines": { "node": ">=20" },
+  "publishConfig": { "access": "public" },
   "scripts": { "dev": "tsx src/index.ts", "build": "tsc", "typecheck": "tsc --noEmit" },
   "dependencies": { "@wp-transfer/core": "workspace:*", "@wp-transfer/analyzer": "workspace:*", "@wp-transfer/wxr-parser": "workspace:*", "citty": "^0.2.2", "consola": "^3.4.2" },
   "devDependencies": { "tsx": "^4.21.0", "typescript": "^6.0.2" }
