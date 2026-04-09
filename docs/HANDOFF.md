@@ -1,11 +1,11 @@
 # wp-transfer 引き継ぎ資料
 
-**バージョン:** v0.1.0-alpha
+**バージョン:** v0.2.0-alpha
 **日付:** 2026-04-09
-**テスト:** 424 / 424 全パス (31ファイル)
-**カバレッジ:** 91.5% lines, 80.4% branches
+**テスト:** 516 / 516 全パス (46ファイル)
+**カバレッジ:** 92.1% lines, 81.3% branches
 **リポジトリ:** https://github.com/howlrs/wp-transfer
-**リリース:** https://github.com/howlrs/wp-transfer/releases/tag/v0.1.0-alpha
+**リリース:** https://github.com/howlrs/wp-transfer/releases/tag/v0.2.0-alpha
 **ライセンス:** MIT
 
 ## プロジェクト概要
@@ -23,10 +23,11 @@ wp-transfer (pnpm monorepo)
 │   └── analyzer/       # REST client, Plugin検出, スキーマ分析,
 │                       # Gutenberg→PT変換, Yoast/ACF テンプレート,
 │                       # Blog/Admin/Auth/Docker scaffold, Verify生成,
+│                       # WooCommerce商品変換, i18n検出, Multisite検出,
 │                       # セキュリティサニタイザ
 ├── apps/
 │   └── cli/            # CLIエントリーポイント (citty)
-├── fixtures/           # WXRテストフィクスチャ (8 XML, 含500投稿544KB)
+├── fixtures/           # WXRテストフィクスチャ (12 XML, 含500投稿544KB)
 ├── docs/               # 設計ドキュメント, 実装計画
 ├── .github/workflows/  # CI (test + typecheck + coverage + audit + build)
 └── output/             # 生成物 (gitignored)
@@ -37,6 +38,9 @@ wp-transfer (pnpm monorepo)
 ```bash
 # WXR/REST API解析 → 移行レポート + Gutenberg→PT変換
 wp-transfer analyze <url|wxr-file> [--output path] [--format json|markdown|both]
+
+# マルチサイト解析 → マルチテナント scaffold
+wp-transfer analyze <directory> --multisite [--multisite-mode subpath|subdomain]
 
 # PHPソース解析 → 完全なNext.jsプロジェクト生成
 wp-transfer analyze-php <dir> [--schema db-schema.md] [--output path]
@@ -96,6 +100,31 @@ wp-transfer analyze-php <dir> [--schema db-schema.md] [--output path]
 - **生成コード品質**: 非破壊ソート, 空カテゴリメッセージ, protocol-aware remotePatterns
 - Playwright Verify scaffold (スモークテスト + ビルド検証)
 
+### C-1: WooCommerce 商品カタログ移行
+- WXR から商品 (simple/variable/grouped/external) 抽出・正規化
+- PHP serialize パーサー (インデックス走査, ReDoS-safe)
+- ProductTransformer: 商品ツリー構築 (親子紐付け, 属性マージ)
+- WooPrismaGenerator: 正規化 Prisma スキーマ (Product, Variation, Attribute, Category)
+- WooScaffoldGenerator: Next.js EC scaffold (商品一覧/詳細/カテゴリ/カート/チェックアウトスタブ)
+- CLI analyze コマンド統合 (WooCommerce 自動検出)
+
+### C-2: WordPress Multisite 対応
+- ディレクトリ入力による複数 WXR 一括パース
+- MultisiteDetector: base_site_url/base_blog_url 比較で subdomain/subdirectory 自動判定
+- UserMerger: email 基準 dedupe (case-insensitive) + サイト別ロール分離 + 衝突レポート
+- MediaNormalizer: blogs.dir → uploads/sites パス正規化
+- CrossSiteUrlRewriter: サイト間リンク検出・自動書き換え (subpath/subdomain 両モード)
+- MultisitePrismaGenerator: 共有 DB + siteId カラム方式
+- MultisiteScaffoldGenerator: マルチテナント Next.js scaffold (Prisma Client Extensions)
+- CLI --multisite / --multisite-mode オプション
+
+### C-3: i18n / WPML・Polylang 対応
+- WPML 検出 (wpml_language メタキー)
+- Polylang 検出 (language タクソノミー)
+- 投稿への locale 付与 + locale リスト抽出
+- Next.js App Router [locale] i18n routing scaffold (middleware + config)
+- CLI analyze コマンド統合 (i18n 自動検出)
+
 ### セキュリティ
 - Phase 1: 18件修正 (SSRF, クレデンシャル, SAX, 型安全性)
 - Issue #9: sanitize.ts (7関数), RCE/XSS/PathTraversal防止
@@ -104,7 +133,7 @@ wp-transfer analyze-php <dir> [--schema db-schema.md] [--output path]
 - DOMPurify sanitization for htmlBlocks
 
 ### テスト・品質基盤
-- **424テスト, 31ファイル, 91.5%カバレッジ**
+- **516テスト, 46ファイル, 92.1%カバレッジ**
 - CLI smokeテスト (--help, analyze実行, エラーケース)
 - 500投稿WXR fixture (544KB) + パフォーマンステスト (150ms)
 - E2E統合テスト (WXR parse → analyze → block convert → scaffold)
@@ -136,43 +165,25 @@ wp-transfer analyze-php <dir> [--schema db-schema.md] [--output path]
 | 11 | Enhancement: Yoast/ACF 実運用強化 | Closed |
 | 12 | Bug: 生成コード品質 (in-place sort等) | Closed |
 | 13 | Bug: analyze-php コード生成ブロッカー | Closed |
+| 14 | C-1: WooCommerce 商品カタログ移行 | Closed |
+| 15 | C-3: i18n / WPML・Polylang 対応 | Closed |
 
-## 次フェーズ: C. 機能拡充
+## 次フェーズ: D. 機能拡充 (次世代)
 
-### C-1: WooCommerce 対応 (EC サイト移行)
-**優先度: 高** — WooCommerce は WordPress サイトの 30%+ で使用
+### D-1: ACF Pro / Meta Box / Pods 対応
+ACF基本対応済みだがPro機能(Flexible Content, Clone)未対応。Meta Box/Podsも対象。
 
-対応内容:
-- WooCommerce プラグイン検出 (woocommerce, wc-*)
-- 商品 (product) カスタム投稿タイプの WXR パース
-- 商品バリエーション, 属性, カテゴリの抽出
-- Prisma スキーマ: 商品/注文/顧客モデル生成
-- Next.js scaffold: 商品一覧/詳細/カート/チェックアウト
-- Stripe/PayPal 連携スタブ
+### D-2: ページビルダー移行ガイド (Elementor/Divi/WPBakery)
+プラグイン検出は済みだが、移行戦略の具体scaffold未実装。
 
-### C-2: WordPress マルチサイト対応
-**優先度: 中** — 企業/大学などのネットワークサイト
+### D-3: WooCommerce 注文/顧客データ移行
+C-1はカタログのみ。REST API経由の注文データ取得。
 
-対応内容:
-- マルチサイト WXR エクスポートの分離パース
-- サイト単位のスキーマ分析
-- 共有テーブル (`wp_*`) とサイト固有テーブル (`wp_N_*`) の判別
-- マルチサイト → Next.js マルチテナント scaffold
+### D-4: C-1×C-2×C-3 クロス機能
+WooCommerce×Multisite(サイト別商品), i18n×Multisite(サイト別ロケール)。
 
-### C-3: i18n / WPML 対応
-**優先度: 中** — 多言語サイトの移行パス
-
-対応内容:
-- WPML メタキー検出 (`wpml_*`, `icl_translations`)
-- Polylang 対応 (taxonomy ベースの言語切り替え)
-- Next.js i18n routing scaffold (App Router middleware)
-- Portable Text locale フィールド活用
-
-### 着手前の準備事項
-1. 各機能の Issue 起票 (Gemini review 付き)
-2. WooCommerce テストデータの WXR fixture 作成
-3. plugin-registry.ts への WooCommerce/WPML/Polylang 追加
-4. 各機能の設計 → 実装計画 → TDD サイクル
+### D-5: DX改善
+インタラクティブモード + テンプレートカスタマイズ。
 
 ## 重要な設計判断
 
@@ -186,12 +197,15 @@ wp-transfer analyze-php <dir> [--schema db-schema.md] [--output path]
 8. **Rank Math統合**: Yoast/Rank Mathを統一 `extractSeoMeta()` で処理
 9. **大規模サイト対応**: 100件超は1投稿=1JSONファイルのファイル分割方式
 10. **Prisma PK fallback**: id → table_id → @@id(複合) → 最初のカラム
+11. **Multisite共有DB**: siteIdカラム方式 + Prisma Client Extensions で自動スコーピング
+12. **Multisiteテナント両対応**: subpath/subdomain をCLIフラグで選択、自動検出も対応
+13. **ユーザーdedupe**: email基準(case-insensitive) + loginフォールバック、メインサイト優先
 
 ## ローカル開発
 
 ```bash
 pnpm install
-pnpm test               # 424テスト (全パッケージ + CLI)
+pnpm test               # 516テスト (全パッケージ + CLI)
 pnpm -r typecheck       # 全パッケージ型チェック
 pnpm -r build           # dist/ 生成
 pnpm vitest run --config vitest.config.ts --coverage  # カバレッジ
