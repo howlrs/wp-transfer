@@ -15,8 +15,15 @@ A CLI tool that gives agencies and development teams a head start on WordPress-t
 - **Next.js API route stubs** -- Zod validation, transactions, file upload handling
 - **Admin, auth, Docker scaffolds** -- NextAuth v5 + RBAC, admin pages, Docker Compose
 - **WooCommerce migration** -- Product catalog extraction (simple/variable/grouped/external), Prisma schema, Next.js EC scaffold with cart stub
+- **WooCommerce orders/customers** -- REST API client for order and customer data migration
 - **WordPress Multisite** -- Multi-site WXR directory input, network detection (subdomain/subdirectory), user deduplication, media path normalization, cross-site URL rewriting, multi-tenant Next.js scaffold
 - **i18n / WPML / Polylang** -- Language detection from WXR metadata, Next.js App Router `[locale]` routing scaffold
+- **ACF Pro support** -- Field definition extraction from WXR, Flexible Content, Group, Clone, Nested Repeater Zod schema generation
+- **Meta Box / Pods detection** -- Custom field detection with type inference, Pods table storage warning
+- **Page builder migration guide** -- Elementor, Divi, WPBakery detection with component mapping guide
+- **AI-assisted generation** -- `--ai-assist` flag uses Claude API for high-quality API route generation from PHP
+- **Interactive mode** -- `--interactive` flag for guided analysis setup
+- **Template customization** -- `--templates` flag for scaffold template overrides
 - **Blog scaffold from WXR** -- Post pages, archive, category, 404, Portable Text renderer
 - **Playwright verify scaffold** -- Smoke tests for generated pages
 - **Secret scanner** -- Detects AWS keys, GitHub tokens, Stripe keys, WP salts
@@ -36,6 +43,10 @@ wp-transfer analyze https://example.com --username admin --password app-pass
 
 # Analyze PHP source and generate a full Next.js project
 wp-transfer analyze-php ./wp-content/themes/mytheme --schema ./database.md --output ./output
+
+# AI-assisted generation (higher quality API routes using Claude)
+export ANTHROPIC_API_KEY=sk-ant-...
+wp-transfer analyze-php ./wp-content/themes/mytheme --schema ./database.md --output ./output --ai-assist
 
 # Analyze a WordPress Multisite network (directory of WXR files)
 wp-transfer analyze ./wxr-exports/ --multisite --multisite-mode subpath
@@ -115,7 +126,7 @@ git clone https://github.com/howlrs/wp-transfer.git
 cd wp-transfer
 pnpm install
 
-npx vitest run          # 516 tests
+npx vitest run          # 631 tests
 pnpm -r typecheck       # typecheck all packages
 ```
 
@@ -125,4 +136,4 @@ MIT
 
 ## Status
 
-**v0.2.0-alpha** -- Phase 1 (core analysis and scaffold generation) and C-phase (WooCommerce, Multisite, i18n) are complete. See [Issues](https://github.com/howlrs/wp-transfer/issues) and `HANDOFF.md` for details.
+**v0.3.0-alpha** -- Phase 1, C-phase (WooCommerce, Multisite, i18n), and E/G-phase (ACF Pro, Meta Box, Pods, page builder guide, WooCommerce orders, cross-features, DX, AI assist) are complete. See [Issues](https://github.com/howlrs/wp-transfer/issues) and `HANDOFF.md` for details.
