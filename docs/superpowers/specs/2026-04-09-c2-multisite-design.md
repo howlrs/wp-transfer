@@ -1,7 +1,7 @@
 # C-2: WordPress マルチサイト対応 設計仕様
 
 **日付:** 2026-04-09
-**ステータス:** Draft
+**ステータス:** Approved
 **関連:** HANDOFF.md C-phase ロードマップ, C-1 WooCommerce (完了), C-3 i18n (完了)
 
 ## スコープ
