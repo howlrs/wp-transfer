@@ -29,6 +29,8 @@ import {
   detectPageBuilder,
   detectMetaBox,
   detectPods,
+  createWooRestClient,
+  generateWooOrderPrismaSchema,
 } from "@wp-transfer/analyzer";
 import type { PluginEntry } from "@wp-transfer/core";
 
@@ -79,6 +81,14 @@ export const analyzeCommand = defineCommand({
     templates: {
       type: "string",
       description: "Directory with template overrides for scaffold files",
+    },
+    "woo-key": {
+      type: "string",
+      description: "WooCommerce consumer key for REST API",
+    },
+    "woo-secret": {
+      type: "string",
+      description: "WooCommerce consumer secret for REST API",
     },
   },
   async run({ args }) {
@@ -180,6 +190,8 @@ export const analyzeCommand = defineCommand({
         format,
         args.username as string | undefined,
         args.password as string | undefined,
+        args["woo-key"] as string | undefined,
+        args["woo-secret"] as string | undefined,
       );
     }
   },
@@ -437,6 +449,8 @@ async function analyzeFromUrl(
   format: string,
   username?: string,
   password?: string,
+  wooKey?: string,
+  wooSecret?: string,
 ): Promise<void> {
   consola.start(`Connecting to: ${siteUrl}`);
 
@@ -505,17 +519,49 @@ async function analyzeFromUrl(
     cost,
   });
 
+  // WooCommerce orders/customers
+  let wooOrderCount = 0;
+  let wooCustomerCount = 0;
+  if (wooKey && wooSecret) {
+    consola.start("Fetching WooCommerce orders and customers...");
+    try {
+      const wooClient = createWooRestClient({
+        siteUrl: siteUrl,
+        consumerKey: wooKey,
+        consumerSecret: wooSecret,
+      });
+      const orders = await wooClient.fetchAllOrders();
+      const customers = await wooClient.fetchAllCustomers();
+      wooOrderCount = orders.length;
+      wooCustomerCount = customers.length;
+      consola.success(`WooCommerce: ${orders.length} orders, ${customers.length} customers`);
+
+      // Write order/customer Prisma schema
+      const orderSchema = generateWooOrderPrismaSchema();
+      const outputDir = resolve(output);
+      const schemaPath = resolve(outputDir, "prisma/order-schema.prisma");
+      await mkdir(dirname(schemaPath), { recursive: true });
+      await writeFile(schemaPath, orderSchema, "utf-8");
+      consola.success(`Written: ${schemaPath}`);
+    } catch (err) {
+      consola.warn(`WooCommerce fetch failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
   await writeOutput(report, output, format);
 
-  consola.box(
-    [
-      `Site: ${report.siteUrl} (${siteInfo.name})`,
-      `Plugins: ${plugins.length}`,
-      `Post Types: ${postTypes.map((pt) => pt.slug).join(", ")}`,
-      `Estimated Effort: ${report.estimatedTotalHours} hours`,
-      `Risks: ${report.risks.length}`,
-    ].join("\n"),
-  );
+  const boxLines = [
+    `Site: ${report.siteUrl} (${siteInfo.name})`,
+    `Plugins: ${plugins.length}`,
+    `Post Types: ${postTypes.map((pt) => pt.slug).join(", ")}`,
+    `Estimated Effort: ${report.estimatedTotalHours} hours`,
+    `Risks: ${report.risks.length}`,
+  ];
+  if (wooOrderCount > 0 || wooCustomerCount > 0) {
+    boxLines.push(`WooCommerce: ${wooOrderCount} orders, ${wooCustomerCount} customers`);
+  }
+
+  consola.box(boxLines.join("\n"));
 }
 
 async function writeOutput(

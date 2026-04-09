@@ -206,3 +206,17 @@ export {
   detectPods,
   type PodsDetectionResult,
 } from "./pods-detector.js";
+
+export {
+  createWooRestClient,
+  normalizeOrder,
+  normalizeCustomer,
+  buildWooUrl,
+  type WooOrder,
+  type WooCustomer,
+  type WooRestClientOptions,
+} from "./woo-rest-client.js";
+
+export {
+  generateWooOrderPrismaSchema,
+} from "./woo-order-prisma-generator.js";
