@@ -506,6 +506,91 @@ describe("DELETE pattern detection", () => {
   });
 });
 
+describe("GET endpoint auto-generation", () => {
+  it("generates list and detail GET endpoints from tables", () => {
+    const tables: TableDefinition[] = [{
+      name: "event",
+      columns: [
+        { name: "id", type: "Int", nullable: false, isPrimary: true, isAutoIncrement: true },
+        { name: "title", type: "String", nullable: false, isPrimary: false, isAutoIncrement: false },
+      ],
+    }];
+    const stubs = generateApiStubs([], tables);
+
+    expect(stubs.has("app/api/event/route.ts")).toBe(true);
+    expect(stubs.has("app/api/event/[id]/route.ts")).toBe(true);
+
+    const list = stubs.get("app/api/event/route.ts")!;
+    expect(list).toContain("findMany");
+    expect(list).toContain("count");
+    expect(list).toContain("skip");
+    expect(list).toContain("take");
+
+    const detail = stubs.get("app/api/event/[id]/route.ts")!;
+    expect(detail).toContain("findUnique");
+    expect(detail).toContain("Not found");
+  });
+
+  it("does not duplicate GET when PHP-mapped route exists at same path", () => {
+    const analyses = [makeAnalysis({
+      fileName: "insert.php",
+      dbOperations: [makeDbOp({ type: "INSERT", table: "event" })],
+    })];
+    const tables: TableDefinition[] = [{
+      name: "events",
+      columns: [{ name: "id", type: "Int", nullable: false, isPrimary: true, isAutoIncrement: false }],
+    }];
+    const stubs = generateApiStubs(analyses, tables);
+
+    // The PHP-mapped POST route exists at app/api/events/route.ts
+    const routeCode = stubs.get("app/api/events/route.ts")!;
+    expect(routeCode).toContain("POST");
+  });
+
+  it("generates GET for multiple tables", () => {
+    const tables: TableDefinition[] = [
+      { name: "event", columns: [{ name: "id", type: "Int", nullable: false, isPrimary: true, isAutoIncrement: true }] },
+      { name: "user", columns: [{ name: "id", type: "Int", nullable: false, isPrimary: true, isAutoIncrement: true }] },
+      { name: "lottery", columns: [{ name: "id", type: "Int", nullable: false, isPrimary: true, isAutoIncrement: true }] },
+    ];
+    const stubs = generateApiStubs([], tables);
+    expect(stubs.size).toBe(6); // 3 tables x 2 endpoints each (list + detail)
+  });
+
+  it("co-locates GET with existing PHP-mapped route at same path", () => {
+    const analyses = [makeAnalysis({
+      fileName: "insert.php",
+      dbOperations: [makeDbOp({ type: "INSERT", table: "event" })],
+    })];
+    // Table name "events" matches the PHP-mapped path app/api/events/route.ts
+    const tables: TableDefinition[] = [{
+      name: "events",
+      columns: [{ name: "id", type: "Int", nullable: false, isPrimary: true, isAutoIncrement: false }],
+    }];
+    const stubs = generateApiStubs(analyses, tables);
+
+    const routeCode = stubs.get("app/api/events/route.ts")!;
+    // Should have both POST (from PHP mapping) and GET (from schema)
+    expect(routeCode).toContain("export async function POST");
+    expect(routeCode).toContain("export async function GET");
+  });
+
+  it("uses correct Prisma model name for multi-word table names", () => {
+    const tables: TableDefinition[] = [{
+      name: "event_slot",
+      columns: [{ name: "id", type: "Int", nullable: false, isPrimary: true, isAutoIncrement: true }],
+    }];
+    const stubs = generateApiStubs([], tables);
+
+    const list = stubs.get("app/api/event_slot/route.ts")!;
+    expect(list).toContain("prisma.eventSlot.findMany");
+    expect(list).toContain("prisma.eventSlot.count");
+
+    const detail = stubs.get("app/api/event_slot/[id]/route.ts")!;
+    expect(detail).toContain("prisma.eventSlot.findUnique");
+  });
+});
+
 describe("Improvement 5: Loop/Batch Processing Detection", () => {
   it("generates createMany when child INSERT is inLoop", () => {
     const analysis = makeAnalysis({
@@ -541,5 +626,36 @@ describe("Improvement 5: Loop/Batch Processing Detection", () => {
 
     expect(code).toContain("tx.eventSlot.create({");
     expect(code).not.toContain("createMany");
+  });
+});
+
+describe("Zod schema for UPDATE routes", () => {
+  it("generates .optional() fields for PUT routes", () => {
+    const analysis = makeAnalysis({
+      fileName: "update.php",
+      dbOperations: [makeDbOp({ type: "UPDATE", table: "event", columns: ["title", "status"] })],
+      inputParams: [
+        makeParam({ name: "title", source: "$_POST" }),
+        makeParam({ name: "status", source: "$_POST" }),
+      ],
+    });
+    const stubs = generateApiStubs([analysis]);
+    const code = stubs.get("app/api/events/[id]/route.ts")!;
+    expect(code).toContain(".optional()");
+  });
+
+  it("does not add .optional() for POST routes", () => {
+    const analysis = makeAnalysis({
+      fileName: "insert.php",
+      dbOperations: [makeDbOp({ type: "INSERT", table: "event", columns: ["title"] })],
+      inputParams: [
+        makeParam({ name: "title", source: "$_POST" }),
+      ],
+    });
+    const stubs = generateApiStubs([analysis]);
+    const code = stubs.get("app/api/events/route.ts")!;
+    // POST should NOT have .optional() on required fields
+    const schemaLine = code.split("\n").find(l => l.includes("title:"));
+    expect(schemaLine).not.toContain(".optional()");
   });
 });
