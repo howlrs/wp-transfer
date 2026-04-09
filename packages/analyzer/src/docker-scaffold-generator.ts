@@ -189,6 +189,35 @@ export async function GET() {
 `;
 }
 
+function generateVerifyScript(): string {
+  return `#!/bin/bash
+set -euo pipefail
+
+echo "=== wp-transfer: Migration Verification ==="
+
+echo "[1/5] Installing dependencies..."
+npm ci
+
+echo "[2/5] Starting Docker services..."
+docker compose up -d --wait || echo "Docker not available, skipping..."
+
+echo "[3/5] Running database migration..."
+npx prisma migrate deploy
+
+echo "[4/5] Seeding test data..."
+npx prisma db seed || echo "Seed failed (non-critical), continuing..."
+
+echo "[5/5] Running Playwright tests..."
+npx playwright install --with-deps chromium
+npx playwright test --reporter=html
+
+echo ""
+echo "=== Verification Complete ==="
+echo "Report: test-results/index.html"
+echo "Run 'npx playwright show-report' to view."
+`;
+}
+
 // ── Public API ──
 
 export function generateDockerScaffold(
@@ -219,6 +248,10 @@ export function generateDockerScaffold(
     {
       path: "app/api/health/route.ts",
       content: generateHealthEndpoint(),
+    },
+    {
+      path: "scripts/verify.sh",
+      content: generateVerifyScript(),
     },
   ];
 }

@@ -12,9 +12,9 @@ function findFile(files: DockerScaffoldFile[], pathPattern: string): DockerScaff
 
 describe("Docker Scaffold Generator", () => {
   describe("file generation", () => {
-    it("generates 6 files (docker-compose, Dockerfile, .env.example, .gitignore, .dockerignore, health endpoint)", () => {
+    it("generates 7 files (docker-compose, Dockerfile, .env.example, .gitignore, .dockerignore, health endpoint, verify.sh)", () => {
       const files = generateDockerScaffold("my-project", "mysql");
-      expect(files).toHaveLength(6);
+      expect(files).toHaveLength(7);
     });
 
     it("generates docker-compose.yml", () => {
@@ -59,6 +59,16 @@ describe("Docker Scaffold Generator", () => {
       const health = findFile(files, "app/api/health/route.ts");
       expect(health).toBeDefined();
       expect(health!.content).toContain("NextResponse");
+    });
+
+    it("generates scripts/verify.sh", () => {
+      const files = generateDockerScaffold("my-project", "mysql");
+      const verify = findFile(files, "scripts/verify.sh");
+      expect(verify).toBeDefined();
+      expect(verify!.content).toContain("#!/bin/bash");
+      expect(verify!.content).toContain("npm ci");
+      expect(verify!.content).toContain("prisma migrate deploy");
+      expect(verify!.content).toContain("playwright test");
     });
   });
 
