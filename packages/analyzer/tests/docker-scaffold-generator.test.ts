@@ -214,10 +214,10 @@ describe("Docker Scaffold Generator", () => {
       expect(compose.content).not.toContain("/api/auth/session");
     });
 
-    it("app command includes prisma migrate deploy", () => {
+    it("app command starts server directly", () => {
       const files = generateDockerScaffold("my-project", "mysql");
       const compose = findFile(files, "docker-compose.yml")!;
-      expect(compose.content).toContain("prisma migrate deploy");
+      expect(compose.content).toContain("server.js");
     });
   });
 });
