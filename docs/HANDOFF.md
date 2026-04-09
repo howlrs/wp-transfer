@@ -1,11 +1,11 @@
 # wp-transfer 引き継ぎ資料
 
-**バージョン:** v0.3.0-alpha
+**バージョン:** v0.3.1-alpha
 **日付:** 2026-04-09
 **テスト:** 631 / 631 全パス (55ファイル)
 **カバレッジ:** 92.1% lines, 81.3% branches
 **リポジトリ:** https://github.com/howlrs/wp-transfer
-**リリース:** https://github.com/howlrs/wp-transfer/releases/tag/v0.3.0-alpha
+**リリース:** https://github.com/howlrs/wp-transfer/releases/tag/v0.3.1-alpha
 **ライセンス:** MIT
 
 ## プロジェクト概要
@@ -44,6 +44,15 @@ wp-transfer analyze <directory> --multisite [--multisite-mode subpath|subdomain]
 
 # PHPソース解析 → 完全なNext.jsプロジェクト生成
 wp-transfer analyze-php <dir> [--schema db-schema.md] [--output path]
+
+# AI補助付きPHP解析 → 高品質APIルート生成 (Claude Code CLI plan auth, 追加コスト$0)
+wp-transfer analyze-php <dir> --schema db-schema.md --ai-assist [--ai-model model]
+
+# 対話式モード
+wp-transfer analyze --interactive
+
+# テンプレートカスタマイズ
+wp-transfer analyze <file.xml> --templates ./my-templates/
 ```
 
 ## 技術スタック
@@ -166,7 +175,7 @@ wp-transfer analyze-php <dir> [--schema db-schema.md] [--output path]
 - CI: typecheck + test + coverage + security audit + build
 
 ### OSS公開
-- v0.1.0-alpha, v0.2.0-alpha, v0.3.0-alpha GitHub Release
+- v0.1.0-alpha → v0.2.0-alpha → v0.3.0-alpha → v0.3.1-alpha GitHub Release
 - README (英語, Quick Start, コマンドリファレンス)
 - MIT LICENSE + 全package.json整備
 - GitHub Actions CI
@@ -195,22 +204,21 @@ wp-transfer analyze-php <dir> [--schema db-schema.md] [--output path]
 | 18 | Fix: analyze-php品質改善 + AI Assist | Closed |
 | 19 | Fix: AI Assist CLI auth + CRITICAL #6 解消 | Closed |
 
-## 次フェーズ: D. 機能拡充 (次世代)
+## 次フェーズ: 候補
 
-### D-1: ACF Pro / Meta Box / Pods 対応
-ACF基本対応済みだがPro機能(Flexible Content, Clone)未対応。Meta Box/Podsも対象。
+### 実運用強化
+- ページビルダーコンテンツの部分変換 (Elementor JSON → React コンポーネント)
+- ACF Options Page 対応 (WXR外のサイトレベルメタ)
+- Pods Table Storage 対応 (独自テーブルからのデータ抽出)
+- WooCommerce REST API OAuth 1.0a 認証 (HTTP環境対応)
 
-### D-2: ページビルダー移行ガイド (Elementor/Divi/WPBakery)
-プラグイン検出は済みだが、移行戦略の具体scaffold未実装。
+### スケーラビリティ
+- 大規模サイト対応の強化 (10万投稿以上のストリーミング処理)
+- 差分移行 (初回移行後の増分更新)
 
-### D-3: WooCommerce 注文/顧客データ移行
-C-1はカタログのみ。REST API経由の注文データ取得。
-
-### D-4: C-1×C-2×C-3 クロス機能
-WooCommerce×Multisite(サイト別商品), i18n×Multisite(サイト別ロケール)。
-
-### D-5: DX改善
-インタラクティブモード + テンプレートカスタマイズ。
+### エコシステム
+- VS Code 拡張 (移行レポートのプレビュー)
+- GitHub Action (CI/CDパイプラインへの組み込み)
 
 ## 重要な設計判断
 
@@ -227,6 +235,8 @@ WooCommerce×Multisite(サイト別商品), i18n×Multisite(サイト別ロケ�
 11. **Multisite共有DB**: siteIdカラム方式 + Prisma Client Extensions で自動スコーピング
 12. **Multisiteテナント両対応**: subpath/subdomain をCLIフラグで選択、自動検出も対応
 13. **ユーザーdedupe**: email基準(case-insensitive) + loginフォールバック、メインサイト優先
+14. **AI Assist**: Claude Code CLI plan auth 第一、API Key フォールバック。追加コスト$0
+15. **テンプレート修正 + AI 二段構え**: 静的解析の限界(ループ検出等)をLLMで補完する仕組み化
 
 ## ローカル開発
 
@@ -237,14 +247,20 @@ pnpm -r typecheck       # 全パッケージ型チェック
 pnpm -r build           # dist/ 生成
 pnpm vitest run --config vitest.config.ts --coverage  # カバレッジ
 
-# JRA tokyo再生成
+# JRA tokyo再生成 (静的解析のみ)
 pnpm --filter wp-transfer-cli dev analyze-php \
   /path/to/wp/tokyo \
   --schema /path/to/api/docs/database.md \
-  --output output/jra-tokyo-v2
+  --output output/jra-tokyo
+
+# JRA tokyo再生成 (AI Assist付き — 高品質APIルート, 追加コスト$0)
+pnpm --filter wp-transfer-cli dev analyze-php \
+  /path/to/wp/tokyo \
+  --schema /path/to/api/docs/database.md \
+  --output output/jra-tokyo --ai-assist
 
 # 生成物の起動
-cd output/jra-tokyo-v2
+cd output/jra-tokyo
 npm install && npx prisma db push && npx tsx prisma/seed.ts && npm run dev
 ```
 
