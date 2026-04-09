@@ -1,8 +1,8 @@
 # wp-transfer 引き継ぎ資料
 
 **バージョン:** v0.1.0-alpha
-**日付:** 2026-04-08
-**テスト:** 339 / 339 全パス
+**日付:** 2026-04-09
+**テスト:** 365 / 365 全パス
 **リポジトリ:** https://github.com/howlrs/wp-transfer
 **ライセンス:** MIT
 
@@ -110,17 +110,13 @@ wp-transfer analyze-php <dir> [--schema db-schema.md] [--output path]
 | 7 | Karpathy原則レビュー: 18件修正 | Closed |
 | 8 | ドッグフーディング: JRA tokyo | Closed |
 | 9 | Security: コード生成サニタイズ不足 | Closed |
-| 10 | Bug: Gutenbergパーサー edge case | Open |
-| 11 | Enhancement: Yoast/ACF 実運用強化 | Open |
-| 12 | Bug: 生成コード品質 (in-place sort等) | Open |
+| 10 | Bug: Gutenbergパーサー edge case | Closed |
+| 11 | Enhancement: Yoast/ACF 実運用強化 | Closed |
+| 12 | Bug: 生成コード品質 (in-place sort等) | Closed |
 
-## 残タスク (Open Issues)
+## 残タスク
 
-**#10**: ネストリスト構造破壊, `<br>`未処理, HTMLエンティティ不完全, ブロック間フリーフォームドロップ, Reusable/Groupブロック未テスト
-
-**#11**: Yoast %%date%%/%%author%%等未対応, ACF Repeater/Flexible Content未対応, 大規模サイト(10k+投稿)スケーラビリティ, Rank Math対応
-
-**#12**: getAllPosts() in-place sort, blog-scaffold UiFramework未統一, カテゴリ空リスト404問題, remotePatterns HTTPS固定
+全Issueクローズ済み。Open Issueなし。
 
 ## 重要な設計判断
 
@@ -129,13 +125,16 @@ wp-transfer analyze-php <dir> [--schema db-schema.md] [--output path]
 3. **sax primary**: OOM防止のためストリーミングパーサーを優先
 4. **fail-safe RBAC**: 未登録パスはadministratorのみアクセス可能
 5. **UiFramework option**: plain/tailwind 選択可能なscaffold出力
-6. **Gemini CLIレビュー**: 毎タスク完了時にGemini Proでレビュー (計6回実施)
+6. **Gemini CLIレビュー**: 毎タスク完了時にGemini Proでレビュー (計7回実施)
+7. **node-html-parser**: ネストリスト解析にDOMパーサーを採用 (ReDoS防止)
+8. **Rank Math統合**: Yoast/Rank Mathを統一 `extractSeoMeta()` で処理
+9. **大規模サイト対応**: 100件超は1投稿=1JSONファイルのファイル分割方式
 
 ## ローカル開発
 
 ```bash
 pnpm install
-npx vitest run          # 339テスト
+npx vitest run          # 365テスト
 pnpm -r typecheck       # 全パッケージ型チェック
 
 # JRA tokyo再生成
