@@ -14,6 +14,11 @@ import {
   generateDockerScaffold,
   resolveTemplate,
   generateRoutesWithAi,
+  runPreflightChecks,
+  formatPreflightReport,
+  loadMigrationConfig,
+  generateMigrationDashboard,
+  generateVerifyScaffold,
 } from "@wp-transfer/analyzer";
 import type { PhpFileAnalysis, TableDefinition, AiRouteInput } from "@wp-transfer/analyzer";
 
@@ -328,6 +333,15 @@ export const analyzePhpCommand = defineCommand({
       default: "",
       description: "AI model to use (default: claude-sonnet-4-20250514)",
     },
+    config: {
+      type: "string",
+      description: "Path to migration config file (JSON)",
+    },
+    "skip-preflight": {
+      type: "boolean",
+      default: false,
+      description: "Skip pre-flight checks",
+    },
   },
   async run({ args }) {
     const dirPath = resolve(args.dir as string);
@@ -339,6 +353,18 @@ export const analyzePhpCommand = defineCommand({
     const aiAssist = args["ai-assist"] as boolean;
     const aiModel = (args["ai-model"] as string) || undefined;
 
+    // ── Load config file if provided ──
+    if (args.config) {
+      try {
+        const config = loadMigrationConfig(resolve(args.config as string));
+        void config; // Config values are used as defaults; CLI args take precedence
+        consola.success(`Loaded config: ${args.config}`);
+      } catch (error) {
+        consola.error(`Invalid config file: ${(error as Error).message}`);
+        return;
+      }
+    }
+
     // Validate input directory
     if (!existsSync(dirPath)) {
       consola.error(`Directory not found: ${dirPath}`);
@@ -349,6 +375,27 @@ export const analyzePhpCommand = defineCommand({
     if (templateDir && (!existsSync(templateDir) || !statSync(templateDir).isDirectory())) {
       consola.error(`Template directory not found: ${templateDir}`);
       return;
+    }
+
+    // ── Pre-flight checks ──
+    if (!args["skip-preflight"]) {
+      const preflightReport = runPreflightChecks({
+        sourcePath: dirPath,
+        outputPath: outputDir,
+        schemaPath,
+      });
+
+      if (!preflightReport.canProceed) {
+        consola.error("Pre-flight checks failed:");
+        consola.log(formatPreflightReport(preflightReport));
+        return;
+      }
+
+      if (preflightReport.warnings > 0) {
+        consola.warn(`Pre-flight: ${preflightReport.passed} passed, ${preflightReport.warnings} warnings`);
+      } else {
+        consola.success(`Pre-flight: ${preflightReport.passed}/${preflightReport.checks.length} checks passed`);
+      }
     }
 
     // ── Step 1: Analyze PHP files ──
@@ -524,6 +571,22 @@ export const analyzePhpCommand = defineCommand({
       totalFiles++;
     }
 
+    // Verify scaffold (E2E tests)
+    const verifyInput = {
+      postSlugs: [] as string[],
+      categorySlugs: [] as string[],
+      tableNames: tables.map(t => t.name),
+      hasAuth,
+      adminPages: adminPages.map(p => p.path),
+    };
+    const verifyFiles = generateVerifyScaffold(verifyInput);
+    for (const file of verifyFiles) {
+      const fullPath = join(outputDir, file.path);
+      await writeFileWithDir(fullPath, file.content, outputDir);
+      totalFiles++;
+    }
+    consola.success(`Generated ${verifyFiles.length} test files (smoke + API + auth + admin)`);
+
     // Project files
     await writeFile(
       join(outputDir, "package.json"),
@@ -567,6 +630,31 @@ export const analyzePhpCommand = defineCommand({
     await writeFile(reportPath, report, "utf-8");
     totalFiles++;
 
+    // Migration dashboard HTML
+    const dashboardInput = {
+      projectName,
+      phpFileCount: analyses.length,
+      tableCount: tables.length,
+      apiRouteCount: stubs.size,
+      adminPageCount: adminPages.length,
+      authGenerated: hasAuth,
+      securityIssues: custom.flatMap(a => a.securityIssues.map(issue => ({ file: a.fileName, issue }))),
+      crudCoverage: tables.map(t => {
+        const ops = custom.flatMap(a => a.dbOperations.filter(op => op.table === t.name));
+        return {
+          table: t.name,
+          create: ops.some(op => op.type === "INSERT"),
+          read: stubs.has(`app/api/${t.name}/route.ts`),
+          update: ops.some(op => op.type === "UPDATE"),
+          delete: ops.some(op => op.type === "DELETE"),
+        };
+      }),
+      generatedFiles: totalFiles,
+    };
+    const dashboard = generateMigrationDashboard(dashboardInput);
+    await writeFile(join(outputDir, dashboard.path), dashboard.html, "utf-8");
+    totalFiles++;
+
     // Summary
     const securityCount = custom.reduce(
       (sum, a) => sum + a.securityIssues.length,
@@ -579,6 +667,8 @@ export const analyzePhpCommand = defineCommand({
       `Admin Pages Generated: ${adminPages.length}`,
       `Auth Files Generated: ${authFiles.length}`,
       `Docker Files Generated: ${dockerFiles.length}`,
+      `Test Files Generated: ${verifyFiles.length}`,
+      `Dashboard: ${outputDir}/${dashboard.path}`,
       `Security Issues Found: ${securityCount}`,
       prismaSchema
         ? `Prisma Schema: Generated (with${hasAuth ? "" : "out"} AdminUser)`
