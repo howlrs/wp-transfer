@@ -279,3 +279,9 @@ export {
   mergeConfigWithArgs,
   type MigrationConfig,
 } from "./migration-config.js";
+
+export {
+  generateMigrationDashboard,
+  type DashboardInput,
+  type DashboardOutput,
+} from "./migration-dashboard-generator.js";
