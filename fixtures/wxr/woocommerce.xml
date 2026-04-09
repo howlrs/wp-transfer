@@ -1,0 +1,495 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<rss version="2.0"
+  xmlns:excerpt="http://wordpress.org/export/1.2/excerpt/"
+  xmlns:content="http://purl.org/rss/1.0/modules/content/"
+  xmlns:wfw="http://wellformedweb.org/CommentAPI/"
+  xmlns:dc="http://purl.org/dc/elements/1.1/"
+  xmlns:wp="http://wordpress.org/export/1.2/">
+
+  <channel>
+    <title>WooCommerce Test Shop</title>
+    <link>https://shop.example.com</link>
+    <description>A WooCommerce test shop</description>
+    <language>en-US</language>
+    <wp:wxr_version>1.2</wp:wxr_version>
+    <wp:base_site_url>https://shop.example.com</wp:base_site_url>
+    <wp:base_blog_url>https://shop.example.com</wp:base_blog_url>
+    <generator>https://wordpress.org/?v=6.7</generator>
+
+    <wp:author>
+      <wp:author_id>1</wp:author_id>
+      <wp:author_login><![CDATA[admin]]></wp:author_login>
+      <wp:author_email><![CDATA[admin@shop.example.com]]></wp:author_email>
+      <wp:author_display_name><![CDATA[Admin User]]></wp:author_display_name>
+      <wp:author_first_name><![CDATA[]]></wp:author_first_name>
+      <wp:author_last_name><![CDATA[]]></wp:author_last_name>
+    </wp:author>
+
+    <wp:category>
+      <wp:term_id>10</wp:term_id>
+      <wp:category_nicename><![CDATA[clothing]]></wp:category_nicename>
+      <wp:category_parent><![CDATA[]]></wp:category_parent>
+      <wp:cat_name><![CDATA[Clothing]]></wp:cat_name>
+      <wp:category_description><![CDATA[]]></wp:category_description>
+    </wp:category>
+
+    <wp:category>
+      <wp:term_id>11</wp:term_id>
+      <wp:category_nicename><![CDATA[electronics]]></wp:category_nicename>
+      <wp:category_parent><![CDATA[]]></wp:category_parent>
+      <wp:cat_name><![CDATA[Electronics]]></wp:cat_name>
+      <wp:category_description><![CDATA[]]></wp:category_description>
+    </wp:category>
+
+    <!-- Attachment: T-Shirt Front -->
+    <item>
+      <title>T-Shirt Front</title>
+      <dc:creator><![CDATA[admin]]></dc:creator>
+      <content:encoded><![CDATA[]]></content:encoded>
+      <excerpt:encoded><![CDATA[]]></excerpt:encoded>
+      <wp:post_id>100</wp:post_id>
+      <wp:post_date><![CDATA[2024-01-01 10:00:00]]></wp:post_date>
+      <wp:post_date_gmt><![CDATA[2024-01-01 10:00:00]]></wp:post_date_gmt>
+      <wp:post_modified><![CDATA[2024-01-01 10:00:00]]></wp:post_modified>
+      <wp:post_modified_gmt><![CDATA[2024-01-01 10:00:00]]></wp:post_modified_gmt>
+      <wp:comment_status><![CDATA[closed]]></wp:comment_status>
+      <wp:ping_status><![CDATA[closed]]></wp:ping_status>
+      <wp:post_name><![CDATA[tshirt-front]]></wp:post_name>
+      <wp:status><![CDATA[inherit]]></wp:status>
+      <wp:post_parent>1</wp:post_parent>
+      <wp:menu_order>0</wp:menu_order>
+      <wp:post_type><![CDATA[attachment]]></wp:post_type>
+      <wp:post_password><![CDATA[]]></wp:post_password>
+      <wp:is_sticky>0</wp:is_sticky>
+      <wp:attachment_url>https://shop.example.com/wp-content/uploads/tshirt-front.jpg</wp:attachment_url>
+      <wp:post_mime_type><![CDATA[image/jpeg]]></wp:post_mime_type>
+    </item>
+
+    <!-- Attachment: T-Shirt Back -->
+    <item>
+      <title>T-Shirt Back</title>
+      <dc:creator><![CDATA[admin]]></dc:creator>
+      <content:encoded><![CDATA[]]></content:encoded>
+      <excerpt:encoded><![CDATA[]]></excerpt:encoded>
+      <wp:post_id>101</wp:post_id>
+      <wp:post_date><![CDATA[2024-01-01 10:00:00]]></wp:post_date>
+      <wp:post_date_gmt><![CDATA[2024-01-01 10:00:00]]></wp:post_date_gmt>
+      <wp:post_modified><![CDATA[2024-01-01 10:00:00]]></wp:post_modified>
+      <wp:post_modified_gmt><![CDATA[2024-01-01 10:00:00]]></wp:post_modified_gmt>
+      <wp:comment_status><![CDATA[closed]]></wp:comment_status>
+      <wp:ping_status><![CDATA[closed]]></wp:ping_status>
+      <wp:post_name><![CDATA[tshirt-back]]></wp:post_name>
+      <wp:status><![CDATA[inherit]]></wp:status>
+      <wp:post_parent>1</wp:post_parent>
+      <wp:menu_order>0</wp:menu_order>
+      <wp:post_type><![CDATA[attachment]]></wp:post_type>
+      <wp:post_password><![CDATA[]]></wp:post_password>
+      <wp:is_sticky>0</wp:is_sticky>
+      <wp:attachment_url>https://shop.example.com/wp-content/uploads/tshirt-back.jpg</wp:attachment_url>
+      <wp:post_mime_type><![CDATA[image/jpeg]]></wp:post_mime_type>
+    </item>
+
+    <!-- Attachment: Laptop Image -->
+    <item>
+      <title>Laptop Image</title>
+      <dc:creator><![CDATA[admin]]></dc:creator>
+      <content:encoded><![CDATA[]]></content:encoded>
+      <excerpt:encoded><![CDATA[]]></excerpt:encoded>
+      <wp:post_id>102</wp:post_id>
+      <wp:post_date><![CDATA[2024-01-01 10:00:00]]></wp:post_date>
+      <wp:post_date_gmt><![CDATA[2024-01-01 10:00:00]]></wp:post_date_gmt>
+      <wp:post_modified><![CDATA[2024-01-01 10:00:00]]></wp:post_modified>
+      <wp:post_modified_gmt><![CDATA[2024-01-01 10:00:00]]></wp:post_modified_gmt>
+      <wp:comment_status><![CDATA[closed]]></wp:comment_status>
+      <wp:ping_status><![CDATA[closed]]></wp:ping_status>
+      <wp:post_name><![CDATA[laptop]]></wp:post_name>
+      <wp:status><![CDATA[inherit]]></wp:status>
+      <wp:post_parent>6</wp:post_parent>
+      <wp:menu_order>0</wp:menu_order>
+      <wp:post_type><![CDATA[attachment]]></wp:post_type>
+      <wp:post_password><![CDATA[]]></wp:post_password>
+      <wp:is_sticky>0</wp:is_sticky>
+      <wp:attachment_url>https://shop.example.com/wp-content/uploads/laptop.jpg</wp:attachment_url>
+      <wp:post_mime_type><![CDATA[image/jpeg]]></wp:post_mime_type>
+    </item>
+
+    <!-- Product 1: Simple Product -->
+    <item>
+      <title>Basic T-Shirt</title>
+      <link>https://shop.example.com/product/basic-tshirt/</link>
+      <pubDate>Mon, 01 Jan 2024 10:00:00 +0000</pubDate>
+      <dc:creator><![CDATA[admin]]></dc:creator>
+      <category domain="product_type" nicename="simple"><![CDATA[simple]]></category>
+      <category domain="product_cat" nicename="clothing"><![CDATA[Clothing]]></category>
+      <category domain="pa_color" nicename="red"><![CDATA[Red]]></category>
+      <description></description>
+      <content:encoded><![CDATA[<p>A comfortable basic t-shirt available in multiple colors.</p>]]></content:encoded>
+      <excerpt:encoded><![CDATA[Comfortable basic t-shirt.]]></excerpt:encoded>
+      <wp:post_id>1</wp:post_id>
+      <wp:post_date><![CDATA[2024-01-01 10:00:00]]></wp:post_date>
+      <wp:post_date_gmt><![CDATA[2024-01-01 10:00:00]]></wp:post_date_gmt>
+      <wp:post_modified><![CDATA[2024-01-01 10:00:00]]></wp:post_modified>
+      <wp:post_modified_gmt><![CDATA[2024-01-01 10:00:00]]></wp:post_modified_gmt>
+      <wp:comment_status><![CDATA[open]]></wp:comment_status>
+      <wp:ping_status><![CDATA[closed]]></wp:ping_status>
+      <wp:post_name><![CDATA[basic-tshirt]]></wp:post_name>
+      <wp:status><![CDATA[publish]]></wp:status>
+      <wp:post_parent>0</wp:post_parent>
+      <wp:menu_order>0</wp:menu_order>
+      <wp:post_type><![CDATA[product]]></wp:post_type>
+      <wp:post_password><![CDATA[]]></wp:post_password>
+      <wp:is_sticky>0</wp:is_sticky>
+      <wp:postmeta>
+        <wp:meta_key><![CDATA[_price]]></wp:meta_key>
+        <wp:meta_value><![CDATA[19.99]]></wp:meta_value>
+      </wp:postmeta>
+      <wp:postmeta>
+        <wp:meta_key><![CDATA[_regular_price]]></wp:meta_key>
+        <wp:meta_value><![CDATA[24.99]]></wp:meta_value>
+      </wp:postmeta>
+      <wp:postmeta>
+        <wp:meta_key><![CDATA[_sale_price]]></wp:meta_key>
+        <wp:meta_value><![CDATA[19.99]]></wp:meta_value>
+      </wp:postmeta>
+      <wp:postmeta>
+        <wp:meta_key><![CDATA[_sku]]></wp:meta_key>
+        <wp:meta_value><![CDATA[TSHIRT-BASIC-001]]></wp:meta_value>
+      </wp:postmeta>
+      <wp:postmeta>
+        <wp:meta_key><![CDATA[_stock_status]]></wp:meta_key>
+        <wp:meta_value><![CDATA[instock]]></wp:meta_value>
+      </wp:postmeta>
+      <wp:postmeta>
+        <wp:meta_key><![CDATA[_weight]]></wp:meta_key>
+        <wp:meta_value><![CDATA[0.2]]></wp:meta_value>
+      </wp:postmeta>
+      <wp:postmeta>
+        <wp:meta_key><![CDATA[_thumbnail_id]]></wp:meta_key>
+        <wp:meta_value><![CDATA[100]]></wp:meta_value>
+      </wp:postmeta>
+      <wp:postmeta>
+        <wp:meta_key><![CDATA[_product_image_gallery]]></wp:meta_key>
+        <wp:meta_value><![CDATA[101]]></wp:meta_value>
+      </wp:postmeta>
+      <wp:postmeta>
+        <wp:meta_key><![CDATA[_product_attributes]]></wp:meta_key>
+        <wp:meta_value><![CDATA[a:1:{s:8:"pa_color";a:6:{s:4:"name";s:8:"pa_color";s:5:"value";s:3:"red";s:8:"position";i:0;s:10:"is_visible";i:1;s:12:"is_variation";i:0;s:11:"is_taxonomy";i:1;}}]]></wp:meta_value>
+      </wp:postmeta>
+    </item>
+
+    <!-- Product 2: Variable Product -->
+    <item>
+      <title>Premium Hoodie</title>
+      <link>https://shop.example.com/product/premium-hoodie/</link>
+      <pubDate>Tue, 02 Jan 2024 10:00:00 +0000</pubDate>
+      <dc:creator><![CDATA[admin]]></dc:creator>
+      <category domain="product_type" nicename="variable"><![CDATA[variable]]></category>
+      <category domain="product_cat" nicename="clothing"><![CDATA[Clothing]]></category>
+      <category domain="pa_size" nicename="small"><![CDATA[Small]]></category>
+      <category domain="pa_size" nicename="medium"><![CDATA[Medium]]></category>
+      <category domain="pa_size" nicename="large"><![CDATA[Large]]></category>
+      <category domain="pa_color" nicename="blue"><![CDATA[Blue]]></category>
+      <category domain="pa_color" nicename="black"><![CDATA[Black]]></category>
+      <description></description>
+      <content:encoded><![CDATA[<p>A premium hoodie available in multiple sizes and colors.</p>]]></content:encoded>
+      <excerpt:encoded><![CDATA[Premium hoodie in multiple sizes and colors.]]></excerpt:encoded>
+      <wp:post_id>2</wp:post_id>
+      <wp:post_date><![CDATA[2024-01-02 10:00:00]]></wp:post_date>
+      <wp:post_date_gmt><![CDATA[2024-01-02 10:00:00]]></wp:post_date_gmt>
+      <wp:post_modified><![CDATA[2024-01-02 10:00:00]]></wp:post_modified>
+      <wp:post_modified_gmt><![CDATA[2024-01-02 10:00:00]]></wp:post_modified_gmt>
+      <wp:comment_status><![CDATA[open]]></wp:comment_status>
+      <wp:ping_status><![CDATA[closed]]></wp:ping_status>
+      <wp:post_name><![CDATA[premium-hoodie]]></wp:post_name>
+      <wp:status><![CDATA[publish]]></wp:status>
+      <wp:post_parent>0</wp:post_parent>
+      <wp:menu_order>0</wp:menu_order>
+      <wp:post_type><![CDATA[product]]></wp:post_type>
+      <wp:post_password><![CDATA[]]></wp:post_password>
+      <wp:is_sticky>0</wp:is_sticky>
+      <wp:postmeta>
+        <wp:meta_key><![CDATA[_price]]></wp:meta_key>
+        <wp:meta_value><![CDATA[49.99]]></wp:meta_value>
+      </wp:postmeta>
+      <wp:postmeta>
+        <wp:meta_key><![CDATA[_sku]]></wp:meta_key>
+        <wp:meta_value><![CDATA[HOODIE-PREM-001]]></wp:meta_value>
+      </wp:postmeta>
+      <wp:postmeta>
+        <wp:meta_key><![CDATA[_stock_status]]></wp:meta_key>
+        <wp:meta_value><![CDATA[instock]]></wp:meta_value>
+      </wp:postmeta>
+      <wp:postmeta>
+        <wp:meta_key><![CDATA[_thumbnail_id]]></wp:meta_key>
+        <wp:meta_value><![CDATA[100]]></wp:meta_value>
+      </wp:postmeta>
+      <wp:postmeta>
+        <wp:meta_key><![CDATA[_product_image_gallery]]></wp:meta_key>
+        <wp:meta_value><![CDATA[100,101]]></wp:meta_value>
+      </wp:postmeta>
+      <wp:postmeta>
+        <wp:meta_key><![CDATA[_product_attributes]]></wp:meta_key>
+        <wp:meta_value><![CDATA[a:2:{s:7:"pa_size";a:6:{s:4:"name";s:7:"pa_size";s:5:"value";s:19:"small|medium|large";s:8:"position";i:0;s:10:"is_visible";i:1;s:12:"is_variation";i:1;s:11:"is_taxonomy";i:1;}s:8:"pa_color";a:6:{s:4:"name";s:8:"pa_color";s:5:"value";s:10:"blue|black";s:8:"position";i:1;s:10:"is_visible";i:1;s:12:"is_variation";i:1;s:11:"is_taxonomy";i:1;}}]]></wp:meta_value>
+      </wp:postmeta>
+    </item>
+
+    <!-- Variation 1: Hoodie Small Blue -->
+    <item>
+      <title>Premium Hoodie - Small / Blue</title>
+      <dc:creator><![CDATA[admin]]></dc:creator>
+      <content:encoded><![CDATA[]]></content:encoded>
+      <excerpt:encoded><![CDATA[]]></excerpt:encoded>
+      <wp:post_id>3</wp:post_id>
+      <wp:post_date><![CDATA[2024-01-02 10:00:00]]></wp:post_date>
+      <wp:post_date_gmt><![CDATA[2024-01-02 10:00:00]]></wp:post_date_gmt>
+      <wp:post_modified><![CDATA[2024-01-02 10:00:00]]></wp:post_modified>
+      <wp:post_modified_gmt><![CDATA[2024-01-02 10:00:00]]></wp:post_modified_gmt>
+      <wp:comment_status><![CDATA[closed]]></wp:comment_status>
+      <wp:ping_status><![CDATA[closed]]></wp:ping_status>
+      <wp:post_name><![CDATA[premium-hoodie-small-blue]]></wp:post_name>
+      <wp:status><![CDATA[publish]]></wp:status>
+      <wp:post_parent>2</wp:post_parent>
+      <wp:menu_order>0</wp:menu_order>
+      <wp:post_type><![CDATA[product_variation]]></wp:post_type>
+      <wp:post_password><![CDATA[]]></wp:post_password>
+      <wp:is_sticky>0</wp:is_sticky>
+      <wp:postmeta>
+        <wp:meta_key><![CDATA[_price]]></wp:meta_key>
+        <wp:meta_value><![CDATA[49.99]]></wp:meta_value>
+      </wp:postmeta>
+      <wp:postmeta>
+        <wp:meta_key><![CDATA[_regular_price]]></wp:meta_key>
+        <wp:meta_value><![CDATA[49.99]]></wp:meta_value>
+      </wp:postmeta>
+      <wp:postmeta>
+        <wp:meta_key><![CDATA[_sku]]></wp:meta_key>
+        <wp:meta_value><![CDATA[HOODIE-PREM-S-BLU]]></wp:meta_value>
+      </wp:postmeta>
+      <wp:postmeta>
+        <wp:meta_key><![CDATA[_stock_status]]></wp:meta_key>
+        <wp:meta_value><![CDATA[instock]]></wp:meta_value>
+      </wp:postmeta>
+      <wp:postmeta>
+        <wp:meta_key><![CDATA[attribute_pa_size]]></wp:meta_key>
+        <wp:meta_value><![CDATA[small]]></wp:meta_value>
+      </wp:postmeta>
+      <wp:postmeta>
+        <wp:meta_key><![CDATA[attribute_pa_color]]></wp:meta_key>
+        <wp:meta_value><![CDATA[blue]]></wp:meta_value>
+      </wp:postmeta>
+    </item>
+
+    <!-- Variation 2: Hoodie Medium Black -->
+    <item>
+      <title>Premium Hoodie - Medium / Black</title>
+      <dc:creator><![CDATA[admin]]></dc:creator>
+      <content:encoded><![CDATA[]]></content:encoded>
+      <excerpt:encoded><![CDATA[]]></excerpt:encoded>
+      <wp:post_id>4</wp:post_id>
+      <wp:post_date><![CDATA[2024-01-02 10:00:00]]></wp:post_date>
+      <wp:post_date_gmt><![CDATA[2024-01-02 10:00:00]]></wp:post_date_gmt>
+      <wp:post_modified><![CDATA[2024-01-02 10:00:00]]></wp:post_modified>
+      <wp:post_modified_gmt><![CDATA[2024-01-02 10:00:00]]></wp:post_modified_gmt>
+      <wp:comment_status><![CDATA[closed]]></wp:comment_status>
+      <wp:ping_status><![CDATA[closed]]></wp:ping_status>
+      <wp:post_name><![CDATA[premium-hoodie-medium-black]]></wp:post_name>
+      <wp:status><![CDATA[publish]]></wp:status>
+      <wp:post_parent>2</wp:post_parent>
+      <wp:menu_order>0</wp:menu_order>
+      <wp:post_type><![CDATA[product_variation]]></wp:post_type>
+      <wp:post_password><![CDATA[]]></wp:post_password>
+      <wp:is_sticky>0</wp:is_sticky>
+      <wp:postmeta>
+        <wp:meta_key><![CDATA[_price]]></wp:meta_key>
+        <wp:meta_value><![CDATA[54.99]]></wp:meta_value>
+      </wp:postmeta>
+      <wp:postmeta>
+        <wp:meta_key><![CDATA[_regular_price]]></wp:meta_key>
+        <wp:meta_value><![CDATA[59.99]]></wp:meta_value>
+      </wp:postmeta>
+      <wp:postmeta>
+        <wp:meta_key><![CDATA[_sale_price]]></wp:meta_key>
+        <wp:meta_value><![CDATA[54.99]]></wp:meta_value>
+      </wp:postmeta>
+      <wp:postmeta>
+        <wp:meta_key><![CDATA[_sku]]></wp:meta_key>
+        <wp:meta_value><![CDATA[HOODIE-PREM-M-BLK]]></wp:meta_value>
+      </wp:postmeta>
+      <wp:postmeta>
+        <wp:meta_key><![CDATA[_stock_status]]></wp:meta_key>
+        <wp:meta_value><![CDATA[instock]]></wp:meta_value>
+      </wp:postmeta>
+      <wp:postmeta>
+        <wp:meta_key><![CDATA[attribute_pa_size]]></wp:meta_key>
+        <wp:meta_value><![CDATA[medium]]></wp:meta_value>
+      </wp:postmeta>
+      <wp:postmeta>
+        <wp:meta_key><![CDATA[attribute_pa_color]]></wp:meta_key>
+        <wp:meta_value><![CDATA[black]]></wp:meta_value>
+      </wp:postmeta>
+    </item>
+
+    <!-- Variation 3: Hoodie Large Blue (out of stock) -->
+    <item>
+      <title>Premium Hoodie - Large / Blue</title>
+      <dc:creator><![CDATA[admin]]></dc:creator>
+      <content:encoded><![CDATA[]]></content:encoded>
+      <excerpt:encoded><![CDATA[]]></excerpt:encoded>
+      <wp:post_id>5</wp:post_id>
+      <wp:post_date><![CDATA[2024-01-02 10:00:00]]></wp:post_date>
+      <wp:post_date_gmt><![CDATA[2024-01-02 10:00:00]]></wp:post_date_gmt>
+      <wp:post_modified><![CDATA[2024-01-02 10:00:00]]></wp:post_modified>
+      <wp:post_modified_gmt><![CDATA[2024-01-02 10:00:00]]></wp:post_modified_gmt>
+      <wp:comment_status><![CDATA[closed]]></wp:comment_status>
+      <wp:ping_status><![CDATA[closed]]></wp:ping_status>
+      <wp:post_name><![CDATA[premium-hoodie-large-blue]]></wp:post_name>
+      <wp:status><![CDATA[publish]]></wp:status>
+      <wp:post_parent>2</wp:post_parent>
+      <wp:menu_order>0</wp:menu_order>
+      <wp:post_type><![CDATA[product_variation]]></wp:post_type>
+      <wp:post_password><![CDATA[]]></wp:post_password>
+      <wp:is_sticky>0</wp:is_sticky>
+      <wp:postmeta>
+        <wp:meta_key><![CDATA[_price]]></wp:meta_key>
+        <wp:meta_value><![CDATA[49.99]]></wp:meta_value>
+      </wp:postmeta>
+      <wp:postmeta>
+        <wp:meta_key><![CDATA[_regular_price]]></wp:meta_key>
+        <wp:meta_value><![CDATA[49.99]]></wp:meta_value>
+      </wp:postmeta>
+      <wp:postmeta>
+        <wp:meta_key><![CDATA[_sku]]></wp:meta_key>
+        <wp:meta_value><![CDATA[HOODIE-PREM-L-BLU]]></wp:meta_value>
+      </wp:postmeta>
+      <wp:postmeta>
+        <wp:meta_key><![CDATA[_stock_status]]></wp:meta_key>
+        <wp:meta_value><![CDATA[outofstock]]></wp:meta_value>
+      </wp:postmeta>
+      <wp:postmeta>
+        <wp:meta_key><![CDATA[attribute_pa_size]]></wp:meta_key>
+        <wp:meta_value><![CDATA[large]]></wp:meta_value>
+      </wp:postmeta>
+      <wp:postmeta>
+        <wp:meta_key><![CDATA[attribute_pa_color]]></wp:meta_key>
+        <wp:meta_value><![CDATA[blue]]></wp:meta_value>
+      </wp:postmeta>
+    </item>
+
+    <!-- Product 3: Grouped Product -->
+    <item>
+      <title>Laptop Bundle</title>
+      <link>https://shop.example.com/product/laptop-bundle/</link>
+      <pubDate>Wed, 03 Jan 2024 10:00:00 +0000</pubDate>
+      <dc:creator><![CDATA[admin]]></dc:creator>
+      <category domain="product_type" nicename="grouped"><![CDATA[grouped]]></category>
+      <category domain="product_cat" nicename="electronics"><![CDATA[Electronics]]></category>
+      <description></description>
+      <content:encoded><![CDATA[<p>A complete laptop bundle with all accessories.</p>]]></content:encoded>
+      <excerpt:encoded><![CDATA[Complete laptop bundle.]]></excerpt:encoded>
+      <wp:post_id>6</wp:post_id>
+      <wp:post_date><![CDATA[2024-01-03 10:00:00]]></wp:post_date>
+      <wp:post_date_gmt><![CDATA[2024-01-03 10:00:00]]></wp:post_date_gmt>
+      <wp:post_modified><![CDATA[2024-01-03 10:00:00]]></wp:post_modified>
+      <wp:post_modified_gmt><![CDATA[2024-01-03 10:00:00]]></wp:post_modified_gmt>
+      <wp:comment_status><![CDATA[open]]></wp:comment_status>
+      <wp:ping_status><![CDATA[closed]]></wp:ping_status>
+      <wp:post_name><![CDATA[laptop-bundle]]></wp:post_name>
+      <wp:status><![CDATA[publish]]></wp:status>
+      <wp:post_parent>0</wp:post_parent>
+      <wp:menu_order>0</wp:menu_order>
+      <wp:post_type><![CDATA[product]]></wp:post_type>
+      <wp:post_password><![CDATA[]]></wp:post_password>
+      <wp:is_sticky>0</wp:is_sticky>
+      <wp:postmeta>
+        <wp:meta_key><![CDATA[_price]]></wp:meta_key>
+        <wp:meta_value><![CDATA[]]></wp:meta_value>
+      </wp:postmeta>
+      <wp:postmeta>
+        <wp:meta_key><![CDATA[_sku]]></wp:meta_key>
+        <wp:meta_value><![CDATA[BUNDLE-LAPTOP-001]]></wp:meta_value>
+      </wp:postmeta>
+      <wp:postmeta>
+        <wp:meta_key><![CDATA[_thumbnail_id]]></wp:meta_key>
+        <wp:meta_value><![CDATA[102]]></wp:meta_value>
+      </wp:postmeta>
+      <wp:postmeta>
+        <wp:meta_key><![CDATA[_children]]></wp:meta_key>
+        <wp:meta_value><![CDATA[a:2:{i:0;i:1;i:1;i:7;}]]></wp:meta_value>
+      </wp:postmeta>
+    </item>
+
+    <!-- Product 4: External Product -->
+    <item>
+      <title>Partner Headphones</title>
+      <link>https://shop.example.com/product/partner-headphones/</link>
+      <pubDate>Thu, 04 Jan 2024 10:00:00 +0000</pubDate>
+      <dc:creator><![CDATA[admin]]></dc:creator>
+      <category domain="product_type" nicename="external"><![CDATA[external]]></category>
+      <category domain="product_cat" nicename="electronics"><![CDATA[Electronics]]></category>
+      <description></description>
+      <content:encoded><![CDATA[<p>Premium headphones available from our partner site.</p>]]></content:encoded>
+      <excerpt:encoded><![CDATA[Premium partner headphones.]]></excerpt:encoded>
+      <wp:post_id>7</wp:post_id>
+      <wp:post_date><![CDATA[2024-01-04 10:00:00]]></wp:post_date>
+      <wp:post_date_gmt><![CDATA[2024-01-04 10:00:00]]></wp:post_date_gmt>
+      <wp:post_modified><![CDATA[2024-01-04 10:00:00]]></wp:post_modified>
+      <wp:post_modified_gmt><![CDATA[2024-01-04 10:00:00]]></wp:post_modified_gmt>
+      <wp:comment_status><![CDATA[open]]></wp:comment_status>
+      <wp:ping_status><![CDATA[closed]]></wp:ping_status>
+      <wp:post_name><![CDATA[partner-headphones]]></wp:post_name>
+      <wp:status><![CDATA[publish]]></wp:status>
+      <wp:post_parent>0</wp:post_parent>
+      <wp:menu_order>0</wp:menu_order>
+      <wp:post_type><![CDATA[product]]></wp:post_type>
+      <wp:post_password><![CDATA[]]></wp:post_password>
+      <wp:is_sticky>0</wp:is_sticky>
+      <wp:postmeta>
+        <wp:meta_key><![CDATA[_price]]></wp:meta_key>
+        <wp:meta_value><![CDATA[299.99]]></wp:meta_value>
+      </wp:postmeta>
+      <wp:postmeta>
+        <wp:meta_key><![CDATA[_regular_price]]></wp:meta_key>
+        <wp:meta_value><![CDATA[299.99]]></wp:meta_value>
+      </wp:postmeta>
+      <wp:postmeta>
+        <wp:meta_key><![CDATA[_sku]]></wp:meta_key>
+        <wp:meta_value><![CDATA[EXT-HEADPHONES-001]]></wp:meta_value>
+      </wp:postmeta>
+      <wp:postmeta>
+        <wp:meta_key><![CDATA[_product_url]]></wp:meta_key>
+        <wp:meta_value><![CDATA[https://partner.example.com/headphones]]></wp:meta_value>
+      </wp:postmeta>
+      <wp:postmeta>
+        <wp:meta_key><![CDATA[_button_text]]></wp:meta_key>
+        <wp:meta_value><![CDATA[Buy on Partner Site]]></wp:meta_value>
+      </wp:postmeta>
+    </item>
+
+    <!-- Regular blog post (NOT a product) -->
+    <item>
+      <title>Welcome to our Shop</title>
+      <link>https://shop.example.com/welcome/</link>
+      <pubDate>Fri, 05 Jan 2024 10:00:00 +0000</pubDate>
+      <dc:creator><![CDATA[admin]]></dc:creator>
+      <category domain="category" nicename="uncategorized"><![CDATA[Uncategorized]]></category>
+      <description></description>
+      <content:encoded><![CDATA[<p>Welcome to our WooCommerce shop! Browse our great selection of products.</p>]]></content:encoded>
+      <excerpt:encoded><![CDATA[Welcome to our shop.]]></excerpt:encoded>
+      <wp:post_id>8</wp:post_id>
+      <wp:post_date><![CDATA[2024-01-05 10:00:00]]></wp:post_date>
+      <wp:post_date_gmt><![CDATA[2024-01-05 10:00:00]]></wp:post_date_gmt>
+      <wp:post_modified><![CDATA[2024-01-05 10:00:00]]></wp:post_modified>
+      <wp:post_modified_gmt><![CDATA[2024-01-05 10:00:00]]></wp:post_modified_gmt>
+      <wp:comment_status><![CDATA[open]]></wp:comment_status>
+      <wp:ping_status><![CDATA[open]]></wp:ping_status>
+      <wp:post_name><![CDATA[welcome]]></wp:post_name>
+      <wp:status><![CDATA[publish]]></wp:status>
+      <wp:post_parent>0</wp:post_parent>
+      <wp:menu_order>0</wp:menu_order>
+      <wp:post_type><![CDATA[post]]></wp:post_type>
+      <wp:post_password><![CDATA[]]></wp:post_password>
+      <wp:is_sticky>0</wp:is_sticky>
+    </item>
+
+  </channel>
+</rss>
