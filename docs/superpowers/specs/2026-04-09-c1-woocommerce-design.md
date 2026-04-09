@@ -96,6 +96,8 @@ interface WooProduct {
   attributes: WooProductAttribute[];
   variations: WooProductVariation[];
   images: { url: string; alt: string }[];
+  productUrl: string;
+  buttonText: string;
 }
 
 interface WooProductVariation {
@@ -128,6 +130,9 @@ interface WooProductAttribute {
 | `_weight` | `weight` | 重量 |
 | `_product_attributes` | `attributes` | PHP serialized → パース |
 | `_thumbnail_id` | images[0] | media collector の ID と紐付け |
+| `_product_image_gallery` | images[1..N] | カンマ区切り添付ファイル ID → media collector と紐付け |
+| `_product_url` | productUrl | 外部商品の URL (type=external のみ) |
+| `_button_text` | buttonText | 外部商品のボタンテキスト (type=external のみ) |
 
 ## 商品タイプ判定ロジック
 
@@ -152,6 +157,8 @@ model Product {
   status          String             @default("publish")
   description     String             @db.Text
   shortDescription String            @db.Text
+  productUrl      String?
+  buttonText      String?
   sku             String?
   price           Decimal?           @db.Decimal(10, 2)
   regularPrice    Decimal?           @db.Decimal(10, 2)
@@ -222,7 +229,7 @@ model ProductImage {
 
 | パス | 内容 |
 |------|------|
-| `app/(shop)/products/page.tsx` | 商品一覧 + カテゴリフィルタ (Prisma クエリ) |
+| `app/(shop)/products/page.tsx` | 商品一覧 + カテゴリフィルタ (Prisma クエリ, `where: { status: 'publish' }`) |
 | `app/(shop)/products/[slug]/page.tsx` | 商品詳細 + バリエーション選択 UI |
 | `app/(shop)/categories/[slug]/page.tsx` | カテゴリ別商品一覧 |
 
@@ -250,7 +257,7 @@ model ProductImage {
 3. **Grouped product** — 複数商品をグループ化 (post_parent 参照)
 4. **External product** — 外部リンク商品 (_product_url メタ)
 
-各商品には product_cat タクソノミー、pa_* 属性タクソノミー、_thumbnail_id を含める。
+各商品には product_cat タクソノミー、pa_* 属性タクソノミー、_thumbnail_id、_product_image_gallery を含める。
 
 ## テスト戦略
 
@@ -268,12 +275,34 @@ model ProductImage {
 - `--output` 指定時に商品 scaffold ファイルも出力
 - 新規コマンドは作らない
 
+## 属性マージ戦略
+
+`_product_attributes` (PHP serialized) と WXR の `<category domain="pa_*">` は異なる情報を持つ:
+- `_product_attributes`: 属性の設定情報 (name, is_variation, is_visible, position)
+- `<category domain="pa_*">`: 属性の実際の値 (term name)
+
+ProductTransformer は両方をマージして完全な属性データを構築する:
+1. `_product_attributes` をパースし、属性定義 (name, slug, isVariation) を取得
+2. `<category domain="pa_{slug}">` から各属性の値を収集
+3. カスタム属性 (グローバルでないもの) は `_product_attributes` 内の value フィールドから取得
+
 ## PHP serialize パース
 
-`_product_attributes` メタ値は PHP serialized 形式。簡易パーサーを実装:
-- `a:N:{...}` 形式の連想配列のみ対応
+`_product_attributes` メタ値は PHP serialized 形式。npm パッケージ `php-serialize` の利用を検討し、
+パッケージサイズ・メンテナンス状態が許容範囲外であれば文字列操作ベースの簡易パーサーを実装:
+- `a:N:{...}` 形式の連想配列、`s:N:"..."` 文字列、`i:N` 整数、`b:N` 真偽値のみ対応
 - ネストされたオブジェクト (`O:`) は非対応 (WooCommerce 標準では使わない)
+- 正規表現は使わず文字列インデックス走査 (ReDoS 防止)
 - パース失敗時は空属性として扱う (fail-safe)
+- 入力長上限 (1MB) でフリーズ防止
+
+## description サニタイズ
+
+商品の `description` / `shortDescription` には Gutenberg ブロックやショートコードが含まれる可能性がある:
+- Gutenberg ブロックが含まれる場合: 既存の `block-converter.ts` で Portable Text に変換
+- ショートコード・プレーン HTML の場合: 既存の `sanitize.ts` でサニタイズ
+- scaffold 生成コードでは `dangerouslySetInnerHTML` を使わず、サニタイズ済み HTML またはPortable Text レンダラーを使用
+- scaffold テンプレートに DOMPurify インポートとサニタイズ呼び出しを含める
 
 ## C-3 (i18n) への拡張ポイント
 
