@@ -11,6 +11,7 @@
  */
 import type { PhpFileAnalysis, InputParam } from "./php-analyzer.js";
 import type { TableDefinition, ColumnDefinition } from "./schema-to-prisma.js";
+import { toPrismaModelName, toPascalModelName, toSchemaName } from "./generator-utils.js";
 
 // ── Route mapping ──
 
@@ -92,36 +93,6 @@ const PHP_TO_ROUTE: Record<string, RouteMapping> = {
     method: "DELETE",
   },
 };
-
-// ── Helpers ──
-
-function toSchemaName(fileName: string): string {
-  const base = fileName.replace(/\.php$/, "");
-  // Convert kebab-case / snake_case to PascalCase and append "Schema"
-  const pascal = base
-    .split(/[-_]/)
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join("");
-  return `${pascal}Schema`;
-}
-
-function toPrismaModelName(tableName: string): string {
-  return tableName
-    .split("_")
-    .map((p, i) =>
-      i === 0
-        ? p.charAt(0).toLowerCase() + p.slice(1)
-        : p.charAt(0).toUpperCase() + p.slice(1),
-    )
-    .join("");
-}
-
-function toPascalModelName(tableName: string): string {
-  return tableName
-    .split("_")
-    .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
-    .join("");
-}
 
 // ── Zod type inference context ──
 

@@ -58,6 +58,15 @@ export {
 } from "./nextjs-stub-generator.js";
 
 export {
+  toCamelCase,
+  toPascalCase,
+  toPrismaModelName,
+  toPascalModelName,
+  toSchemaName,
+  fieldTypeToInputType,
+} from "./generator-utils.js";
+
+export {
   generateAdminScaffold,
   type AdminPage,
   type UiFramework,

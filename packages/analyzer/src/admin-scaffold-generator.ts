@@ -6,6 +6,7 @@
  */
 import type { PhpFileAnalysis, InputParam } from "./php-analyzer.js";
 import type { TableDefinition } from "./schema-to-prisma.js";
+import { toPascalCase, toCamelCase, fieldTypeToInputType } from "./generator-utils.js";
 
 // ── Types ──
 
@@ -45,60 +46,61 @@ const ROUTE_RULES: RouteRule[] = [
   // page-*-slot.php → slots sub-page
   {
     pattern: /^page-(\w+)-slot\.php$/,
-    routeBuilder: (m) => `app/(admin)/${pluralize(m[1]!)}s/[id]/slots/page.tsx`,
+    routeBuilder: (m) => `app/(admin)/${pluralize(m[1]!)}/[id]/slots/page.tsx`,
     type: "list",
   },
   // page-*-copy.php → copy page
   {
     pattern: /^page-(\w+)-copy\.php$/,
-    routeBuilder: (m) => `app/(admin)/${pluralize(m[1]!)}s/[id]/copy/page.tsx`,
+    routeBuilder: (m) => `app/(admin)/${pluralize(m[1]!)}/[id]/copy/page.tsx`,
     type: "form",
   },
   // page-*-update.php → edit page
   {
     pattern: /^page-(\w+)-update\.php$/,
-    routeBuilder: (m) => `app/(admin)/${pluralize(m[1]!)}s/[id]/page.tsx`,
+    routeBuilder: (m) => `app/(admin)/${pluralize(m[1]!)}/[id]/page.tsx`,
     type: "form",
   },
   // page-*-list.php → list page
   {
     pattern: /^page-(\w+)-list\.php$/,
-    routeBuilder: (m) => `app/(admin)/${pluralize(m[1]!)}s/page.tsx`,
+    routeBuilder: (m) => `app/(admin)/${pluralize(m[1]!)}/page.tsx`,
     type: "list",
   },
   // page-new-*.php → new creation page
   {
     pattern: /^page-new-(\w+)\.php$/,
-    routeBuilder: (m) => `app/(admin)/${pluralize(m[1]!)}s/new/page.tsx`,
+    routeBuilder: (m) => `app/(admin)/${pluralize(m[1]!)}/new/page.tsx`,
     type: "form",
   },
   // page-*.php → new creation page (generic)
   {
     pattern: /^page-(\w+)\.php$/,
-    routeBuilder: (m) => `app/(admin)/${pluralize(m[1]!)}s/new/page.tsx`,
+    routeBuilder: (m) => `app/(admin)/${pluralize(m[1]!)}/new/page.tsx`,
     type: "form",
   },
 ];
 
 // ── Helpers ──
 
-function pluralize(word: string): string {
-  // Simple pluralization: just ensure the word is suitable for URL paths
-  // Remove trailing 's' duplication
-  if (word.endsWith("s")) return word;
-  return word;
-}
+const IRREGULARS: Record<string, string> = {
+  person: 'people',
+  child: 'children',
+  category: 'categories',
+  information: 'information',
+  status: 'statuses',
+  lottery: 'lotteries',
+  entry: 'entries',
+  analysis: 'analyses',
+};
 
-function toPascalCase(name: string): string {
-  return name
-    .split(/[-_]/)
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join("");
-}
-
-function toCamelCase(name: string): string {
-  const pascal = toPascalCase(name);
-  return pascal.charAt(0).toLowerCase() + pascal.slice(1);
+export function pluralize(word: string): string {
+  const lower = word.toLowerCase();
+  if (IRREGULARS[lower]) return IRREGULARS[lower];
+  if (lower.endsWith('s') || lower.endsWith('sh') || lower.endsWith('ch') || lower.endsWith('x') || lower.endsWith('z')) return word + 'es';
+  if (lower.endsWith('y') && !['a','e','i','o','u'].includes(lower[lower.length - 2] ?? '')) return word.slice(0, -1) + 'ies';
+  if (lower.endsWith('s')) return word;
+  return word + 's';
 }
 
 function findTableForResource(
@@ -135,21 +137,6 @@ function mapPhpToRoute(
   return null;
 }
 
-function fieldTypeToInputType(prismaType: string): string {
-  switch (prismaType) {
-    case "Int":
-    case "BigInt":
-    case "Float":
-      return "number";
-    case "Boolean":
-      return "checkbox";
-    case "DateTime":
-      return "datetime-local";
-    default:
-      return "text";
-  }
-}
-
 function fieldLabel(name: string): string {
   // Convert snake_case to readable Japanese-friendly label
   return name.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
@@ -183,7 +170,7 @@ export default async function ${modelName}ListPage() {
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">${modelName} 一覧</h1>
         <Link
-          href="/${pluralize(resource)}s/new"
+          href="/${pluralize(resource)}/new"
           className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
         >
           新規作成
@@ -204,7 +191,7 @@ ${displayColumns.map((c) => `              <th className="px-4 py-3 text-left bo
 ${displayColumns.map((c) => `                <td className="px-4 py-3 text-sm">{String(item.${c.name} ?? "")}</td>`).join("\n")}
                 <td className="px-4 py-3">
                   <Link
-                    href={\`/${pluralize(resource)}s/\${item.id}\`}
+                    href={\`/${pluralize(resource)}/\${item.id}\`}
                     className="text-blue-600 underline mr-2"
                   >
                     編集
@@ -241,7 +228,7 @@ export default async function ${modelName}ListPage() {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
         <h1 style={{ fontSize: "24px", fontWeight: "bold" }}>${modelName} 一覧</h1>
         <Link
-          href="/${pluralize(resource)}s/new"
+          href="/${pluralize(resource)}/new"
           style={{
             padding: "8px 16px",
             backgroundColor: "#2563eb",
@@ -268,7 +255,7 @@ ${displayColumns.map((c) => `              <th style={{ padding: "12px 16px", te
 ${displayColumns.map((c) => `                <td style={{ padding: "12px 16px", fontSize: "14px" }}>{String(item.${c.name} ?? "")}</td>`).join("\n")}
                 <td style={{ padding: "12px 16px" }}>
                   <Link
-                    href={\`/${pluralize(resource)}s/\${item.id}\`}
+                    href={\`/${pluralize(resource)}/\${item.id}\`}
                     style={{ color: "#2563eb", textDecoration: "underline", marginRight: "8px" }}
                   >
                     編集
@@ -333,15 +320,15 @@ function generateFormPage(
   const pageTitle = isEdit ? `${modelName} 編集` : `${modelName} 新規作成`;
   const apiMethod = isEdit ? "PUT" : "POST";
   const apiUrl = isEdit
-    ? `\`/api/${pluralize(resource)}s/\${id}\``
-    : `"/api/${pluralize(resource)}s"`;
+    ? `\`/api/${pluralize(resource)}/\${id}\``
+    : `"/api/${pluralize(resource)}"`;
 
   const editFetch = isEdit
     ? `
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(\`/api/${pluralize(resource)}s/\${id}\`)
+    fetch(\`/api/${pluralize(resource)}/\${id}\`)
       .then((res) => res.json())
       .then((data) => {
         setForm(data);
@@ -386,7 +373,7 @@ export default function ${pageName}() {
         throw new Error(data.error ?? "保存に失敗しました");
       }
 
-      router.push("/${pluralize(resource)}s");
+      router.push("/${pluralize(resource)}");
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "エラーが発生しました");
