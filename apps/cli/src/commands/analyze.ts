@@ -25,6 +25,7 @@ import {
   rewriteCrossSiteUrls,
   generateMultisitePrismaSchema,
   generateMultisiteScaffold,
+  detectPods,
 } from "@wp-transfer/analyzer";
 import type { PluginEntry } from "@wp-transfer/core";
 
@@ -298,6 +299,13 @@ async function analyzeFromWxr(
       await writeFile(filePath, file.content, "utf-8");
     }
     consola.success(`Written: ${i18nFiles.length} i18n scaffold files`);
+  }
+
+  // Pods: detect Pods framework fields
+  const podsResult = detectPods(wxr.posts);
+  if (podsResult.detected) {
+    consola.success(`Pods detected: ${podsResult.fieldCount} fields (${podsResult.storageMode} storage)`);
+    if (podsResult.warning) consola.warn(podsResult.warning);
   }
 
   // Estimate cost (no plugin data from WXR)

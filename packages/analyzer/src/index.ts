@@ -178,3 +178,8 @@ export {
   generateMultisiteScaffold,
   type MultisiteScaffoldInput,
 } from "./multisite-scaffold-generator.js";
+
+export {
+  detectPods,
+  type PodsDetectionResult,
+} from "./pods-detector.js";
