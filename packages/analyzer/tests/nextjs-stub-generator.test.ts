@@ -419,20 +419,20 @@ describe("Improvement 4: Zod Schema for PUT/DELETE", () => {
     expect(code).toContain("title:");
   });
 
-  it("generates update body for DELETE with body params (soft-delete)", () => {
+  it("DELETE routes always use .delete() even when PHP has $POST params", () => {
+    // PHP delete.php might reference $_POST['id'] but the route must still use .delete()
     const analysis = makeAnalysis({
-      fileName: "user-blacklist-out.php",
-      inputParams: [
-        makeParam({ name: "blacklist" }),
-      ],
-      dbOperations: [makeDbOp({ type: "UPDATE", table: "user", columns: ["blacklist"] })],
+      fileName: "delete.php",
+      inputParams: [makeParam({ name: "id" })],
+      dbOperations: [makeDbOp({ type: "DELETE", table: "event", columns: ["id"] })],
     });
     const stubs = generateApiStubs([analysis]);
-    const code = stubs.get("app/api/users/[id]/blacklist/route.ts")!;
+    const code = stubs.get("app/api/events/[id]/route.ts")!;
     expect(code).toBeDefined();
-    expect(code).toContain("z.object");
-    expect(code).toContain("...data");
-    expect(code).not.toMatch(/data:\s*\{\s*\}/);
+    expect(code).toContain(".delete(");
+    expect(code).not.toContain(".update(");
+    // DELETE routes should not generate a Zod schema — id comes from URL param
+    expect(code).not.toContain("z.object");
   });
 
   it("generates hard delete for DELETE without body params", () => {
@@ -446,5 +446,35 @@ describe("Improvement 4: Zod Schema for PUT/DELETE", () => {
     expect(code).toBeDefined();
     expect(code).toContain(".delete(");
     expect(code).not.toContain("z.object");
+  });
+
+  it("PUT handler schema is present when PUT and DELETE share the same route file", () => {
+    // update.php (PUT) and delete.php (DELETE) both map to app/api/events/[id]/route.ts
+    const putAnalysis = makeAnalysis({
+      fileName: "update.php",
+      inputParams: [makeParam({ name: "title" }), makeParam({ name: "status" })],
+      dbOperations: [makeDbOp({ type: "UPDATE", table: "event", columns: ["title", "status"] })],
+    });
+    const deleteAnalysis = makeAnalysis({
+      fileName: "delete.php",
+      inputParams: [],
+      dbOperations: [makeDbOp({ type: "DELETE", table: "event", columns: [] })],
+    });
+
+    // PUT is processed first, DELETE second (merged into same file)
+    const stubs = generateApiStubs([putAnalysis, deleteAnalysis]);
+    const code = stubs.get("app/api/events/[id]/route.ts")!;
+    expect(code).toBeDefined();
+
+    // Both handlers should be in the file
+    expect(code).toContain("export async function PUT");
+    expect(code).toContain("export async function DELETE");
+
+    // The PUT schema must be defined in the file
+    expect(code).toContain("const UpdateSchema = z.object(");
+    expect(code).toContain("title:");
+
+    // DELETE handler must use .delete(), not .update()
+    expect(code).toContain(".delete(");
   });
 });
