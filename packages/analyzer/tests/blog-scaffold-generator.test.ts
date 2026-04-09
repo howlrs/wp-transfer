@@ -219,4 +219,25 @@ describe("Blog Scaffold Generator", () => {
     expect(pt!.content).toContain("DOMPurify");
     expect(pt!.content).toContain("sanitize");
   });
+
+  it("generates file-based content layer for sites with >100 posts", () => {
+    const manyPosts = Array.from({ length: 150 }, (_, i) => ({
+      slug: `post-${i}`,
+      title: `Post ${i}`,
+      date: "2024-01-01",
+      categories: ["general"],
+    }));
+    const files = generateBlogScaffold(makeInput({ posts: manyPosts }));
+    const contentLib = findFile(files, "lib/content.ts");
+    expect(contentLib!.content).toContain("readdirSync");
+    expect(contentLib!.content).toContain("content/posts");
+    expect(contentLib!.content).not.toContain("const posts: Post[] = []");
+  });
+
+  it("generates static content layer for sites with <=100 posts", () => {
+    const files = generateBlogScaffold(makeInput());
+    const contentLib = findFile(files, "lib/content.ts");
+    expect(contentLib!.content).toContain("const posts: Post[] = []");
+    expect(contentLib!.content).not.toContain("readdirSync");
+  });
 });

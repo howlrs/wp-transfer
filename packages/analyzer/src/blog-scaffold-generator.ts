@@ -257,7 +257,7 @@ function generateNotFoundPage(input: BlogScaffoldInput): string {
 `;
 }
 
-function generateContentDataLayer(): string {
+function generateStaticContentLayer(): string {
   return `import type { WptContentBlock } from "wp-transfer-core";
 
 export interface Post {
@@ -297,6 +297,69 @@ export function getAllCategories(): Category[] {
   return categories;
 }
 `;
+}
+
+function generateFileBasedContentLayer(): string {
+  return `import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import type { WptContentBlock } from "wp-transfer-core";
+
+export interface Post {
+  slug: string;
+  title: string;
+  date: string;
+  categories: string[];
+  blocks: WptContentBlock[];
+}
+
+export interface Category {
+  slug: string;
+  name: string;
+  count: number;
+}
+
+const POSTS_DIR = join(process.cwd(), "content/posts");
+const CATEGORIES_FILE = join(process.cwd(), "content/categories.json");
+
+function loadPost(filename: string): Post {
+  const raw = readFileSync(join(POSTS_DIR, filename), "utf-8");
+  return JSON.parse(raw) as Post;
+}
+
+export function getAllPosts(): Post[] {
+  const files = readdirSync(POSTS_DIR).filter((f) => f.endsWith(".json"));
+  return files
+    .map((f) => loadPost(f))
+    .sort((a, b) => (a.date > b.date ? -1 : 1));
+}
+
+export function getPostBySlug(slug: string): Post | undefined {
+  try {
+    return loadPost(\`\${slug}.json\`);
+  } catch {
+    return undefined;
+  }
+}
+
+export function getPostsByCategory(categorySlug: string): Post[] {
+  return getAllPosts().filter((p) => p.categories.includes(categorySlug));
+}
+
+export function getAllCategories(): Category[] {
+  try {
+    const raw = readFileSync(CATEGORIES_FILE, "utf-8");
+    return JSON.parse(raw) as Category[];
+  } catch {
+    return [];
+  }
+}
+`;
+}
+
+function generateContentDataLayer(postCount: number): string {
+  return postCount > 100
+    ? generateFileBasedContentLayer()
+    : generateStaticContentLayer();
 }
 
 function generatePortableTextRenderer(): string {
@@ -546,7 +609,7 @@ export function generateBlogScaffold(input: BlogScaffoldInput): ScaffoldFile[] {
   files.push({ path: "app/blog/[slug]/page.tsx", content: generateBlogPostPage(input) });
   files.push({ path: "app/blog/category/[slug]/page.tsx", content: generateCategoryArchivePage() });
   files.push({ path: "app/not-found.tsx", content: generateNotFoundPage(input) });
-  files.push({ path: "lib/content.ts", content: generateContentDataLayer() });
+  files.push({ path: "lib/content.ts", content: generateContentDataLayer(input.posts.length) });
   files.push({ path: "lib/portable-text.tsx", content: generatePortableTextRenderer() });
   files.push({ path: "next.config.ts", content: generateNextConfig(input) });
 
