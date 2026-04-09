@@ -13,6 +13,14 @@ export const WpPostStatusSchema = z.enum([
 
 export type WpPostStatus = z.infer<typeof WpPostStatusSchema>;
 
+export const WpPostTermSchema = z.object({
+  domain: z.string(),
+  slug: z.string(),
+  name: z.string(),
+});
+
+export type WpPostTerm = z.infer<typeof WpPostTermSchema>;
+
 export const WpPostSchema = z.object({
   id: z.number(),
   title: z.string(),
@@ -32,6 +40,7 @@ export const WpPostSchema = z.object({
   commentStatus: z.string().optional(),
   categories: z.array(z.number()).optional(),
   tags: z.array(z.number()).optional(),
+  terms: z.array(WpPostTermSchema).optional(),
 });
 
 export type WpPost = z.infer<typeof WpPostSchema>;

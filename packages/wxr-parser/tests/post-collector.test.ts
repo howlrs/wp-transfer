@@ -5,6 +5,38 @@ import { parseWxr } from "../src/index.js";
 
 const fixturesDir = resolve(import.meta.dirname, "../../../fixtures/wxr");
 
+describe("PostCollector — minimal.xml terms field", () => {
+  it("captures all category elements as terms with domain, slug, and name", async () => {
+    const stream = createReadStream(resolve(fixturesDir, "minimal.xml"), "utf-8");
+    const result = await parseWxr(stream);
+
+    const helloWorld = result.posts.find((p) => p.slug === "hello-world");
+    expect(helloWorld).toBeDefined();
+    expect(helloWorld!.terms).toBeDefined();
+    expect(helloWorld!.terms).toHaveLength(2);
+
+    expect(helloWorld!.terms).toContainEqual({
+      domain: "category",
+      slug: "uncategorized",
+      name: "Uncategorized",
+    });
+    expect(helloWorld!.terms).toContainEqual({
+      domain: "post_tag",
+      slug: "hello",
+      name: "Hello",
+    });
+  });
+
+  it("leaves terms undefined when post has no category elements", async () => {
+    const stream = createReadStream(resolve(fixturesDir, "minimal.xml"), "utf-8");
+    const result = await parseWxr(stream);
+
+    const samplePage = result.posts.find((p) => p.slug === "sample-page");
+    expect(samplePage).toBeDefined();
+    expect(samplePage!.terms).toBeUndefined();
+  });
+});
+
 describe("PostCollector — gutenberg-blocks.xml", () => {
   function openGutenberg() {
     return createReadStream(

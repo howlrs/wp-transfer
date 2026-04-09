@@ -1,6 +1,7 @@
 // WordPress data types
 export {
   WpPostStatusSchema,
+  WpPostTermSchema,
   WpPostSchema,
   WpUserSchema,
   WpTaxonomyTermSchema,
@@ -8,6 +9,7 @@ export {
 } from "./types/wp.js";
 export type {
   WpPostStatus,
+  WpPostTerm,
   WpPost,
   WpUser,
   WpTaxonomyTerm,

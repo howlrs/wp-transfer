@@ -41,6 +41,7 @@ interface PostBuildState {
   meta: Record<string, unknown>;
   categories: string[];
   tags: string[];
+  terms: Array<{ domain: string; slug: string; name: string }>;
 }
 
 function createEmptyPost(): PostBuildState {
@@ -61,6 +62,7 @@ function createEmptyPost(): PostBuildState {
     meta: {},
     categories: [],
     tags: [],
+    terms: [],
   };
 }
 
@@ -103,6 +105,8 @@ export class PostCollector implements WxrCollector {
         } else if (domain === "post_tag") {
           this.currentPost.tags.push(nicename);
         }
+        // Store all terms for downstream consumers (WooCommerce, etc.)
+        this.currentPost.terms.push({ domain, slug: nicename, name: "" });
       }
     }
 
@@ -182,6 +186,13 @@ export class PostCollector implements WxrCollector {
       case "wp:menu_order":
         this.currentPost.menuOrder = parseInt(text, 10) || 0;
         break;
+      case "category": {
+        const lastTerm = this.currentPost.terms[this.currentPost.terms.length - 1];
+        if (lastTerm && !lastTerm.name) {
+          lastTerm.name = text;
+        }
+        break;
+      }
       case "item":
         if (this.currentPost.type !== "attachment") {
           this.posts.push(this.buildPost());
@@ -210,6 +221,7 @@ export class PostCollector implements WxrCollector {
       commentStatus: p.commentStatus,
       parentId: p.parentId || undefined,
       menuOrder: p.menuOrder || undefined,
+      terms: p.terms.length > 0 ? p.terms : undefined,
     };
   }
 }
