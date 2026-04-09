@@ -13,6 +13,9 @@ import {
   classifyPlugin,
   parseGutenbergBlocks,
   convertBlocksToPortableText,
+  transformProducts,
+  generateWooPrismaSchema,
+  generateWooScaffold,
 } from "@wp-transfer/analyzer";
 import type { PluginEntry } from "@wp-transfer/core";
 
@@ -101,6 +104,43 @@ async function analyzeFromWxr(
     }
   }
   consola.success(`Converted ${convertedCount}/${wxr.posts.length} posts to Portable Text`);
+
+  // WooCommerce: detect product posts and generate EC scaffold
+  const productPosts = wxr.posts.filter((p) => p.type === "product");
+  if (productPosts.length > 0) {
+    consola.start(`WooCommerce detected: ${productPosts.length} products`);
+
+    const wooProducts = transformProducts(wxr.posts, wxr.media);
+    consola.success(`Transformed: ${wooProducts.length} products, ${wooProducts.reduce((s, p) => s + p.variations.length, 0)} variations`);
+
+    // Write Prisma schema
+    const prismaSchema = generateWooPrismaSchema(wooProducts);
+    const outputDir = resolve(output);
+    const prismaPath = resolve(outputDir, "prisma/schema.prisma");
+    await mkdir(dirname(prismaPath), { recursive: true });
+    await writeFile(prismaPath, prismaSchema, "utf-8");
+    consola.success(`Written: ${prismaPath}`);
+
+    // Write EC scaffold files
+    const categories = [
+      ...new Map(
+        wooProducts.flatMap((p) => p.categories).map((c) => [c.slug, c]),
+      ).values(),
+    ];
+    const scaffoldFiles = generateWooScaffold({
+      siteTitle: wxr.siteTitle || "Shop",
+      products: wooProducts,
+      categories,
+      mediaDomains: [],
+    });
+
+    for (const file of scaffoldFiles) {
+      const filePath = resolve(outputDir, file.path);
+      await mkdir(dirname(filePath), { recursive: true });
+      await writeFile(filePath, file.content, "utf-8");
+    }
+    consola.success(`Written: ${scaffoldFiles.length} EC scaffold files`);
+  }
 
   // Estimate cost (no plugin data from WXR)
   const plugins: PluginEntry[] = [];
