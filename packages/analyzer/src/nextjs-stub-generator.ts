@@ -99,6 +99,8 @@ const PHP_TO_ROUTE: Record<string, RouteMapping> = {
 interface ZodTypeContext {
   tables?: TableDefinition[];
   primaryTable?: string;
+  /** Parameter names that are used as loop arrays (foreach) — should be z.array() */
+  loopArrayParams?: Set<string>;
 }
 
 /**
@@ -191,7 +193,12 @@ function inferZodType(param: InputParam, ctx: ZodTypeContext): string {
   // Strip [] suffix for matching purposes
   const baseName = name.replace(/\[\]$/, "");
 
-  // 1. Array params
+  // 0. Loop array params (foreach variable detected by php-analyzer)
+  if (ctx.loopArrayParams?.has(baseName)) {
+    return "z.array(z.object({ /* TODO: define item schema */ }))";
+  }
+
+  // 1. Array params (explicit [] suffix)
   if (param.name.endsWith("[]")) {
     return "z.array(z.string())";
   }
@@ -469,8 +476,23 @@ function generateRouteHandler(
       : "unknown";
   const modelName = toPrismaModelName(primaryTable);
 
+  // Detect loop array parameters: if a DB operation has inLoop=true,
+  // the input param with a plural-like name matching the loop is an array
+  const loopArrayParams = new Set<string>();
+  const hasLoopOps = analysis.dbOperations.some(op => op.inLoop);
+  if (hasLoopOps) {
+    // Heuristic: params whose name suggests a collection (plural, ends in 's')
+    // and are not simple scalar types (id, status, etc.)
+    for (const p of params) {
+      const lower = p.name.toLowerCase();
+      if (lower.endsWith("s") && !lower.endsWith("_status") && !lower.endsWith("ss") && lower !== "status") {
+        loopArrayParams.add(lower);
+      }
+    }
+  }
+
   // Zod type context
-  const ctx: ZodTypeContext = { tables, primaryTable };
+  const ctx: ZodTypeContext = { tables, primaryTable, loopArrayParams };
 
   // Build handler body
   // SQL DELETE operations never need a request body — the id comes from the URL param only.
