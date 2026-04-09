@@ -373,4 +373,47 @@ header('Location: https://jra-event.com/tokyo/');
       expect(result.securityIssues.length).toBeGreaterThan(0);
     });
   });
+
+  describe("loop detection", () => {
+    it("marks INSERT inside foreach as inLoop", () => {
+      const php = `<?php
+foreach ($slots as $slot) {
+  $sql = "INSERT INTO event_slot (event_id, slot_date) VALUES (?, ?)";
+  $stmt->execute();
+}`;
+      const result = analyzePhpFile(php, "test.php");
+      const insert = result.dbOperations.find(op => op.table === "event_slot");
+      expect(insert).toBeDefined();
+      expect(insert!.inLoop).toBe(true);
+    });
+
+    it("marks INSERT outside loop as not inLoop", () => {
+      const php = `<?php
+$sql = "INSERT INTO event (title) VALUES (?)";
+$stmt->execute();`;
+      const result = analyzePhpFile(php, "test.php");
+      expect(result.dbOperations[0]!.inLoop).toBe(false);
+    });
+
+    it("detects nested loops correctly", () => {
+      const php = `<?php
+foreach ($items as $item) {
+  if ($item) {
+    $sql = "INSERT INTO items (name) VALUES (?)";
+    $stmt->execute();
+  }
+}`;
+      const result = analyzePhpFile(php, "test.php");
+      expect(result.dbOperations[0]!.inLoop).toBe(true);
+    });
+
+    it("handles for loops", () => {
+      const php = `<?php
+for ($i = 0; $i < count($arr); $i++) {
+  $sql = "UPDATE items SET status = 1 WHERE id = ?";
+}`;
+      const result = analyzePhpFile(php, "test.php");
+      expect(result.dbOperations[0]!.inLoop).toBe(true);
+    });
+  });
 });
