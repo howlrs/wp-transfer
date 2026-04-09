@@ -215,22 +215,28 @@ export function generateStaticParams() {
 
 export default async function CategoryArchivePage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
+  const category = getAllCategories().find((c) => c.slug === slug);
+  if (!category) notFound();
+
   const posts = getPostsByCategory(slug);
-  if (!posts.length) notFound();
 
   return (
     <div>
-      <h1>Category: {slug}</h1>
-      <ul style={{ listStyle: "none", padding: 0 }}>
-        {posts.map((post) => (
-          <li key={post.slug} style={{ marginBottom: "1.5rem" }}>
-            <Link href={\`/blog/\${post.slug}\`}>
-              <h2>{post.title}</h2>
-            </Link>
-            <time dateTime={post.date}>{post.date}</time>
-          </li>
-        ))}
-      </ul>
+      <h1>Category: {category.name}</h1>
+      {posts.length === 0 ? (
+        <p>No posts in this category yet.</p>
+      ) : (
+        <ul style={{ listStyle: "none", padding: 0 }}>
+          {posts.map((post) => (
+            <li key={post.slug} style={{ marginBottom: "1.5rem" }}>
+              <Link href={\`/blog/\${post.slug}\`}>
+                <h2>{post.title}</h2>
+              </Link>
+              <time dateTime={post.date}>{post.date}</time>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
@@ -273,7 +279,7 @@ const posts: Post[] = [];
 const categories: Category[] = [];
 
 export function getAllPosts(): Post[] {
-  return posts.sort((a, b) => (a.date > b.date ? -1 : 1));
+  return [...posts].sort((a, b) => (a.date > b.date ? -1 : 1));
 }
 
 export function getPostBySlug(slug: string): Post | undefined {
@@ -295,6 +301,7 @@ export function getAllCategories(): Category[] {
 function generatePortableTextRenderer(): string {
   return `"use client";
 
+import DOMPurify from "isomorphic-dompurify";
 import type { ReactNode } from "react";
 import type { WptContentBlock } from "wp-transfer-core";
 
@@ -389,10 +396,8 @@ export function PortableTextRenderer({ blocks }: Props) {
     }
 
     if (block._type === "htmlBlock") {
-      // WARNING: htmlBlock contains raw WordPress HTML that could not be converted.
-      // Consider adding DOMPurify sanitization for production use.
       elements.push(
-        <div key={block._key} dangerouslySetInnerHTML={{ __html: (block as any).html }} />
+        <div key={block._key} dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize((block as any).html) }} />
       );
       i++;
       continue;
@@ -434,6 +439,10 @@ export function PortableTextRenderer({ blocks }: Props) {
 
 function generateNextConfig(input: BlogScaffoldInput): string {
   const safeDomains = input.mediaDomains.filter(isValidHostname);
+  const isHttp = input.siteUrl.startsWith("http://");
+  const protocol = isHttp ? "http" : "https";
+  const protocolComment = isHttp ? " // WARNING: HTTP — consider migrating to HTTPS" : "";
+
   const lines: string[] = [];
   lines.push("import type { NextConfig } from \"next\";");
   lines.push("");
@@ -444,7 +453,7 @@ function generateNextConfig(input: BlogScaffoldInput): string {
     lines.push("  images: {");
     lines.push("    remotePatterns: [");
     for (const domain of safeDomains) {
-      lines.push(`      { protocol: "https", hostname: "${domain}" },`);
+      lines.push(`      { protocol: "${protocol}", hostname: "${domain}" },${protocolComment}`);
     }
     lines.push("    ],");
     lines.push("  },");
@@ -466,7 +475,7 @@ function generateNextConfig(input: BlogScaffoldInput): string {
       lines.push("  images: {");
       lines.push("    remotePatterns: [");
       for (const domain of safeDomains) {
-        lines.push(`      { protocol: "https", hostname: "${domain}" },`);
+        lines.push(`      { protocol: "${protocol}", hostname: "${domain}" },${protocolComment}`);
       }
       lines.push("    ],");
       lines.push("  },");

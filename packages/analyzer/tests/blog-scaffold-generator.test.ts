@@ -177,4 +177,38 @@ describe("Blog Scaffold Generator", () => {
     expect(pt!.content).toContain("safeUrl");
     expect(pt!.content).toContain("protocol");
   });
+
+  it("generates getAllPosts with non-mutating sort", () => {
+    const files = generateBlogScaffold(makeInput());
+    const contentLib = findFile(files, "lib/content.ts");
+    expect(contentLib!.content).toContain("[...posts].sort");
+  });
+
+  it("generates category page with empty-list message instead of notFound", () => {
+    const files = generateBlogScaffold(makeInput());
+    const categoryPage = findFile(files, "app/blog/category/[slug]/page.tsx");
+    expect(categoryPage!.content).toContain("No posts in this category yet");
+    expect(categoryPage!.content).toContain("getAllCategories");
+  });
+
+  it("generates HTTPS remotePatterns by default", () => {
+    const files = generateBlogScaffold(makeInput({ siteUrl: "https://example.com" }));
+    const config = findFile(files, "next.config.ts");
+    expect(config!.content).toContain('protocol: "https"');
+    expect(config!.content).not.toContain('protocol: "http"');
+  });
+
+  it("generates HTTP remotePatterns with warning for HTTP sites", () => {
+    const files = generateBlogScaffold(makeInput({ siteUrl: "http://intranet.local" }));
+    const config = findFile(files, "next.config.ts");
+    expect(config!.content).toContain('protocol: "http"');
+    expect(config!.content).toContain("WARNING");
+  });
+
+  it("generates PT renderer with DOMPurify sanitization for htmlBlocks", () => {
+    const files = generateBlogScaffold(makeInput());
+    const pt = findFile(files, "lib/portable-text.tsx");
+    expect(pt!.content).toContain("DOMPurify");
+    expect(pt!.content).toContain("sanitize");
+  });
 });
