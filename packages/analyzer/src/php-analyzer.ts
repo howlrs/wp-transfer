@@ -26,6 +26,7 @@ export interface DbOperation {
   type: "INSERT" | "UPDATE" | "DELETE" | "SELECT";
   table: string;
   columns: string[];
+  inLoop: boolean;
 }
 
 export interface InputParam {
@@ -90,8 +91,48 @@ function extractInputParams(content: string): InputParam[] {
   return Array.from(params.values());
 }
 
+// ── Loop range detection ──
+
+interface LoopRange {
+  start: number;
+  end: number;
+}
+
+function detectLoopRanges(content: string): LoopRange[] {
+  const ranges: LoopRange[] = [];
+  const foreachRe = /\b(?:foreach|for|while)\s*\(/g;
+
+  for (const match of content.matchAll(foreachRe)) {
+    const loopStart = match.index!;
+    const braceStart = content.indexOf("{", loopStart);
+    if (braceStart === -1) continue;
+
+    let depth = 0;
+    let end = -1;
+    for (let i = braceStart; i < content.length; i++) {
+      if (content[i] === "{") depth++;
+      if (content[i] === "}") {
+        depth--;
+        if (depth === 0) {
+          end = i;
+          break;
+        }
+      }
+    }
+    if (end > braceStart) {
+      ranges.push({ start: braceStart, end });
+    }
+  }
+  return ranges;
+}
+
+function isInLoop(index: number, ranges: LoopRange[]): boolean {
+  return ranges.some((r) => index >= r.start && index <= r.end);
+}
+
 function extractDbOperations(content: string): DbOperation[] {
   const ops: DbOperation[] = [];
+  const loopRanges = detectLoopRanges(content);
 
   // INSERT INTO table(col1, col2, ...)
   for (const match of content.matchAll(INSERT_RE)) {
@@ -101,7 +142,7 @@ function extractDbOperations(content: string): DbOperation[] {
       .split(",")
       .map((c) => c.trim())
       .filter(Boolean);
-    ops.push({ type: "INSERT", table, columns });
+    ops.push({ type: "INSERT", table, columns, inLoop: isInLoop(match.index!, loopRanges) });
   }
 
   // UPDATE table SET col1=val, col2=val WHERE ...
@@ -115,12 +156,12 @@ function extractDbOperations(content: string): DbOperation[] {
         return eqIdx >= 0 ? part.slice(0, eqIdx).trim() : "";
       })
       .filter(Boolean);
-    ops.push({ type: "UPDATE", table, columns });
+    ops.push({ type: "UPDATE", table, columns, inLoop: isInLoop(match.index!, loopRanges) });
   }
 
   // DELETE FROM table
   for (const match of content.matchAll(DELETE_RE)) {
-    ops.push({ type: "DELETE", table: match[1]!, columns: [] });
+    ops.push({ type: "DELETE", table: match[1]!, columns: [], inLoop: isInLoop(match.index!, loopRanges) });
   }
 
   // SELECT cols FROM table
@@ -134,7 +175,7 @@ function extractDbOperations(content: string): DbOperation[] {
             .split(",")
             .map((c) => c.trim())
             .filter(Boolean);
-    ops.push({ type: "SELECT", table, columns });
+    ops.push({ type: "SELECT", table, columns, inLoop: isInLoop(match.index!, loopRanges) });
   }
 
   return ops;
