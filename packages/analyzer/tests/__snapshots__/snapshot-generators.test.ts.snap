@@ -1,0 +1,212 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Blog scaffold snapshot tests > generates stable blog archive page 1`] = `
+"import Link from "next/link";
+import { getAllPosts } from "@/lib/content";
+
+export default function BlogArchivePage() {
+  const posts = getAllPosts();
+
+  return (
+    <div>
+      <h1>Blog</h1>
+      <ul style={{ listStyle: "none", padding: 0 }}>
+        {posts.map((post) => (
+          <li key={post.slug} style={{ marginBottom: "1.5rem" }}>
+            <Link href={\`/blog/\${post.slug}\`}>
+              <h2>{post.title}</h2>
+            </Link>
+            <time dateTime={post.date}>{post.date}</time>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+"
+`;
+
+exports[`Blog scaffold snapshot tests > generates stable category archive page 1`] = `
+"import Link from "next/link";
+import { notFound } from "next/navigation";
+import { getPostsByCategory, getAllCategories } from "@/lib/content";
+
+export function generateStaticParams() {
+  return getAllCategories().map((cat) => ({ slug: cat.slug }));
+}
+
+export default async function CategoryArchivePage({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  const category = getAllCategories().find((c) => c.slug === slug);
+  if (!category) notFound();
+
+  const posts = getPostsByCategory(slug);
+
+  return (
+    <div>
+      <h1>Category: {category.name}</h1>
+      {posts.length === 0 ? (
+        <p>No posts in this category yet.</p>
+      ) : (
+        <ul style={{ listStyle: "none", padding: 0 }}>
+          {posts.map((post) => (
+            <li key={post.slug} style={{ marginBottom: "1.5rem" }}>
+              <Link href={\`/blog/\${post.slug}\`}>
+                <h2>{post.title}</h2>
+              </Link>
+              <time dateTime={post.date}>{post.date}</time>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+"
+`;
+
+exports[`Blog scaffold snapshot tests > generates stable content data layer 1`] = `
+"import type { WptContentBlock } from "wp-transfer-core";
+
+export interface Post {
+  slug: string;
+  title: string;
+  date: string;
+  categories: string[];
+  blocks: WptContentBlock[];
+}
+
+export interface Category {
+  slug: string;
+  name: string;
+  count: number;
+}
+
+// TODO: Replace with actual data source (JSON files, CMS, or database)
+const posts: Post[] = [];
+const categories: Category[] = [];
+
+export function getAllPosts(): Post[] {
+  return [...posts].sort((a, b) => (a.date > b.date ? -1 : 1));
+}
+
+export function getPostBySlug(slug: string): Post | undefined {
+  return posts.find((p) => p.slug === slug);
+}
+
+export function getPostsByCategory(categorySlug: string): Post[] {
+  // filter() returns a new array, so sort() here is safe (no mutation of source)
+  return posts
+    .filter((p) => p.categories.includes(categorySlug))
+    .sort((a, b) => (a.date > b.date ? -1 : 1));
+}
+
+export function getAllCategories(): Category[] {
+  return categories;
+}
+"
+`;
+
+exports[`Blog scaffold snapshot tests > generates stable next.config.ts 1`] = `
+"import type { NextConfig } from "next";
+
+const nextConfig: NextConfig = {
+  images: {
+    remotePatterns: [
+      { protocol: "https", hostname: "cdn.snapshot.example.com" },
+    ],
+  },
+  async redirects() {
+    return [
+      {
+        source: "/:year(\\d{4})/:month(\\d{2})/:slug",
+        destination: "/blog/:slug",
+        permanent: true,
+      },
+    ];
+  },
+};
+
+export default nextConfig;
+"
+`;
+
+exports[`Blog scaffold snapshot tests > generates stable root layout 1`] = `
+"import type { ReactNode } from "react";
+import type { Metadata } from "next";
+import "./globals.css";
+
+export const metadata: Metadata = {
+  title: "Snapshot Test Blog",
+};
+
+export default function RootLayout({ children }: { children: ReactNode }) {
+  return (
+    <html lang="en">
+      <body>
+        <header>
+          <nav>
+            <a href="/">Home</a>
+            <a href="/blog">Blog</a>
+          </nav>
+        </header>
+        <main>{children}</main>
+        <footer>
+          <p>&copy; Snapshot Test Blog</p>
+        </footer>
+      </body>
+    </html>
+  );
+}
+"
+`;
+
+exports[`Verify scaffold snapshot tests > generates stable playwright config 1`] = `
+"import { defineConfig } from "@playwright/test";
+
+export default defineConfig({
+  testDir: "./e2e",
+  timeout: 30_000,
+  use: {
+    baseURL: "http://localhost:3000",
+  },
+  webServer: {
+    command: "npm run dev",
+    url: "http://localhost:3000",
+    reuseExistingServer: true,
+    timeout: 60_000,
+  },
+});
+"
+`;
+
+exports[`Verify scaffold snapshot tests > generates stable smoke test 1`] = `
+"import { test, expect } from "@playwright/test";
+
+test("blog archive loads", async ({ page }) => {
+  const response = await page.goto("/blog");
+  expect(response?.status()).toBe(200);
+});
+
+test("post page loads: hello-world", async ({ page }) => {
+  const response = await page.goto("/blog/hello-world");
+  expect(response?.status()).toBe(200);
+});
+
+test("category page loads: general", async ({ page }) => {
+  const response = await page.goto("/blog/category/general");
+  expect(response?.status()).toBe(200);
+});
+
+test("no console errors on blog archive", async ({ page }) => {
+  const consoleErrors: string[] = [];
+  page.on("console", (msg) => {
+    if (msg.type() === "error") {
+      consoleErrors.push(msg.text());
+    }
+  });
+  await page.goto("/blog");
+  expect(consoleErrors).toHaveLength(0);
+});
+"
+`;
