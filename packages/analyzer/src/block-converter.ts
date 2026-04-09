@@ -16,7 +16,7 @@ import type {
 import type { GutenbergBlock } from "./gutenberg-parser.js";
 import { parseGutenbergBlocks } from "./gutenberg-parser.js";
 import { sanitizeUrl } from "./sanitize.js";
-import { parse as parseHtml } from "node-html-parser";
+import { parse as parseHtml, type HTMLElement as NhpElement } from "node-html-parser";
 
 /** Minimal span shape compatible with PortableTextSpan. */
 interface Span { _type: "span"; _key: string; text: string; marks: string[] }
@@ -217,17 +217,17 @@ function extractListItemsNested(html: string, parentListType: "bullet" | "number
   const root = parseHtml(html);
   const items: ListItemInfo[] = [];
 
-  function walk(node: ReturnType<typeof parseHtml>, level: number, listType: "bullet" | "number"): void {
+  function walk(node: NhpElement, level: number, listType: "bullet" | "number"): void {
     for (const child of node.childNodes) {
       if (child.nodeType !== 1) continue; // skip text nodes
-      const el = child as unknown as { tagName: string; childNodes: typeof node.childNodes; innerHTML: string; outerHTML: string; text: string };
+      const el = child as NhpElement;
       const tag = el.tagName?.toUpperCase();
 
       if (tag === "LI") {
         // Collect direct text content (exclude nested lists)
         let directHtml = "";
         for (const liChild of el.childNodes) {
-          const liChildEl = liChild as unknown as { tagName?: string; outerHTML?: string; text?: string };
+          const liChildEl = liChild as NhpElement;
           const childTag = liChildEl.tagName?.toUpperCase();
           if (childTag === "UL" || childTag === "OL") continue;
           directHtml += liChildEl.outerHTML ?? liChildEl.text ?? "";
@@ -236,17 +236,17 @@ function extractListItemsNested(html: string, parentListType: "bullet" | "number
 
         // Recurse into nested lists
         for (const liChild of el.childNodes) {
-          const liChildEl = liChild as unknown as { tagName: string; childNodes: typeof node.childNodes };
+          const liChildEl = liChild as NhpElement;
           const childTag = liChildEl.tagName?.toUpperCase();
           if (childTag === "UL") {
-            walk(liChildEl as any, level + 1, "bullet");
+            walk(liChildEl, level + 1, "bullet");
           } else if (childTag === "OL") {
-            walk(liChildEl as any, level + 1, "number");
+            walk(liChildEl, level + 1, "number");
           }
         }
       } else if (tag === "UL" || tag === "OL") {
         const nestedType = tag === "OL" ? "number" : "bullet";
-        walk(el as any, level, nestedType);
+        walk(el, level, nestedType);
       }
     }
   }
