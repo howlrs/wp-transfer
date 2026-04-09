@@ -78,10 +78,11 @@ ${dbService}
       db:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/api/auth/session"]
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
+    command: ["sh", "-c", "npx prisma migrate deploy && node server.js"]
 
 volumes:
   db_data:
@@ -160,6 +161,34 @@ npm-debug.log*
 `;
 }
 
+function generateDockerignore(): string {
+  return `node_modules
+.next
+.git
+.gitignore
+.env
+.env.local
+*.md
+docker-compose*.yml
+.dockerignore
+`;
+}
+
+function generateHealthEndpoint(): string {
+  return `import { NextResponse } from "next/server";
+import { prisma } from "@/lib/db";
+
+export async function GET() {
+  try {
+    await prisma.$queryRaw\`SELECT 1\`;
+    return NextResponse.json({ status: "ok" });
+  } catch {
+    return NextResponse.json({ status: "error" }, { status: 503 });
+  }
+}
+`;
+}
+
 // ── Public API ──
 
 export function generateDockerScaffold(
@@ -182,6 +211,14 @@ export function generateDockerScaffold(
     {
       path: ".gitignore",
       content: generateGitignore(),
+    },
+    {
+      path: ".dockerignore",
+      content: generateDockerignore(),
+    },
+    {
+      path: "app/api/health/route.ts",
+      content: generateHealthEndpoint(),
     },
   ];
 }
