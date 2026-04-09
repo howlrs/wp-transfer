@@ -54,16 +54,12 @@ function generateDockerCompose(
       timeout: 5s
       retries: 5`;
 
-  const dbDataVolume =
+  const dbUrl =
     dbProvider === "mysql"
-      ? "db_data:/var/lib/mysql"
-      : "db_data:/var/lib/postgresql/data";
+      ? `mysql://appuser:apppassword@db:3306/${projectName}`
+      : `postgresql://appuser:apppassword@db:5432/${projectName}`;
 
-  const dbPort = dbProvider === "mysql" ? "3306" : "5432";
-
-  return `version: "3.9"
-
-services:
+  return `services:
 ${dbService}
 
   app:
@@ -72,7 +68,7 @@ ${dbService}
     ports:
       - "3000:3000"
     environment:
-      - DATABASE_URL=\${DATABASE_URL}
+      - DATABASE_URL=${dbUrl}
       - AUTH_SECRET=\${AUTH_SECRET}
     depends_on:
       db:
@@ -93,6 +89,7 @@ function generateDockerfile(): string {
   return `# Stage 1: Install dependencies
 FROM node:20-slim AS deps
 WORKDIR /app
+RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
 COPY package.json package-lock.json* ./
 RUN npm ci
 
@@ -101,12 +98,14 @@ FROM node:20-slim AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+RUN mkdir -p public
 RUN npx prisma generate
 RUN npm run build
 
 # Stage 3: Production
 FROM node:20-slim AS runner
 WORKDIR /app
+RUN apt-get update -y && apt-get install -y openssl curl && rm -rf /var/lib/apt/lists/*
 
 ENV NODE_ENV=production
 

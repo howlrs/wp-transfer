@@ -159,6 +159,8 @@ function generateListPage(
     return `import { prisma } from "@/lib/db";
 import Link from "next/link";
 
+export const dynamic = "force-dynamic";
+
 export default async function ${modelName}ListPage() {
   const items = await prisma.${camelModel}.findMany({
     orderBy: { id: "desc" },
@@ -216,6 +218,8 @@ ${displayColumns.map((c) => `                <td className="px-4 py-3 text-sm">{
 
   return `import { prisma } from "@/lib/db";
 import Link from "next/link";
+
+export const dynamic = "force-dynamic";
 
 export default async function ${modelName}ListPage() {
   const items = await prisma.${camelModel}.findMany({
@@ -521,6 +525,8 @@ function generateDetailPage(
   if (fw === "tailwind") {
     return `import { prisma } from "@/lib/db";
 
+export const dynamic = "force-dynamic";
+
 export default async function ${modelName}SummaryPage() {
   const items = await prisma.${camelModel}.findMany({
     orderBy: { id: "desc" },
@@ -561,6 +567,8 @@ ${columns.slice(0, 6).map((c) => `                <td className="px-4 py-3 text-
   }
 
   return `import { prisma } from "@/lib/db";
+
+export const dynamic = "force-dynamic";
 
 export default async function ${modelName}SummaryPage() {
   const items = await prisma.${camelModel}.findMany({
@@ -623,6 +631,8 @@ function generateDashboardPage(tables: TableDefinition[], fw: UiFramework): stri
 
     return `import { prisma } from "@/lib/db";
 
+export const dynamic = "force-dynamic";
+
 export default async function DashboardPage() {
   const [${destructuring}] = await Promise.all([
 ${countQueries}
@@ -659,6 +669,8 @@ ${twCards}
     .join("\n");
 
   return `import { prisma } from "@/lib/db";
+
+export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
   const [${destructuring}] = await Promise.all([
