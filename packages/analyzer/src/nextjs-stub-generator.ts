@@ -455,7 +455,10 @@ function generateRouteHandler(
   const ctx: ZodTypeContext = { tables, primaryTable };
 
   // Build handler body
-  const bodyParams = params.filter((p) => p.source !== "$_FILES");
+  // SQL DELETE operations never need a request body — the id comes from the URL param only.
+  const primaryOpType = analysis.dbOperations.length > 0 ? analysis.dbOperations[0]!.type : null;
+  const isDeleteOp = primaryOpType === "DELETE";
+  const bodyParams = isDeleteOp ? [] : params.filter((p) => p.source !== "$_FILES");
   const hasBody = bodyParams.length > 0;
 
   // File upload detection
@@ -725,31 +728,15 @@ function generateDirectBody(
       break;
 
     case "DELETE":
-      if (hasBody) {
-        // Soft-delete / flag update pattern
-        lines.push(`    const result = await prisma.${modelName}.update({`);
-        if (hasPathParams) {
-          lines.push(`      where: { id: ${pathParams[0]} },`);
-        } else {
-          lines.push("      where: { id: parseInt(request.nextUrl.searchParams.get('id') ?? '0') },");
-        }
-        lines.push("      data: {");
-        lines.push("        ...data,");
-        lines.push("      },");
-        lines.push("    });");
-        lines.push("");
-        lines.push("    return NextResponse.json(result);");
+      lines.push(`    await prisma.${modelName}.delete({`);
+      if (hasPathParams) {
+        lines.push(`      where: { id: ${pathParams[0]} },`);
       } else {
-        lines.push(`    await prisma.${modelName}.delete({`);
-        if (hasPathParams) {
-          lines.push(`      where: { id: ${pathParams[0]} },`);
-        } else {
-          lines.push("      where: { id: parseInt(request.nextUrl.searchParams.get('id') ?? '0') },");
-        }
-        lines.push("    });");
-        lines.push("");
-        lines.push('    return NextResponse.json({ success: true });');
+        lines.push("      where: { id: parseInt(request.nextUrl.searchParams.get('id') ?? '0') },");
       }
+      lines.push("    });");
+      lines.push("");
+      lines.push('    return NextResponse.json({ success: true });');
       break;
 
     case "SELECT":
@@ -781,10 +768,11 @@ export function generateApiStubs(
 
     if (existing) {
       // Merge multiple handlers into the same route file:
-      // Extract only the export function from the new stub (skip duplicate imports)
-      const funcMatch = stub.match(/(export async function \w+[\s\S]*$)/);
-      if (funcMatch) {
-        stubs.set(mapping.path, existing + "\n\n" + funcMatch[1]);
+      // Capture the schema definition (if present) AND the export function,
+      // skipping only the duplicate import lines at the top.
+      const schemaAndFuncMatch = stub.match(/((?:const \w+Schema\s*=[\s\S]*?\n\n)?export async function \w+[\s\S]*$)/);
+      if (schemaAndFuncMatch) {
+        stubs.set(mapping.path, existing + "\n\n" + schemaAndFuncMatch[1]);
       } else {
         stubs.set(mapping.path, existing + "\n\n" + stub);
       }
