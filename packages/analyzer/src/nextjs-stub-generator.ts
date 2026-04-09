@@ -456,7 +456,7 @@ function generateRouteHandler(
 
   // Build handler body
   const bodyParams = params.filter((p) => p.source !== "$_FILES");
-  const hasBody = bodyParams.length > 0 && mapping.method !== "DELETE";
+  const hasBody = bodyParams.length > 0;
 
   // File upload detection
   const fileUpload = detectFileUploads(params);
@@ -725,18 +725,31 @@ function generateDirectBody(
       break;
 
     case "DELETE":
-      lines.push(`    await prisma.${modelName}.delete({`);
-      if (hasPathParams) {
-        lines.push(`      where: { id: ${pathParams[0]} },`);
+      if (hasBody) {
+        // Soft-delete / flag update pattern
+        lines.push(`    const result = await prisma.${modelName}.update({`);
+        if (hasPathParams) {
+          lines.push(`      where: { id: ${pathParams[0]} },`);
+        } else {
+          lines.push("      where: { id: parseInt(request.nextUrl.searchParams.get('id') ?? '0') },");
+        }
+        lines.push("      data: {");
+        lines.push("        ...data,");
+        lines.push("      },");
+        lines.push("    });");
+        lines.push("");
+        lines.push("    return NextResponse.json(result);");
       } else {
-        // Fallback: parse id from query or body
-        lines.push("      where: { id: parseInt(request.nextUrl.searchParams.get('id') ?? '0') },");
+        lines.push(`    await prisma.${modelName}.delete({`);
+        if (hasPathParams) {
+          lines.push(`      where: { id: ${pathParams[0]} },`);
+        } else {
+          lines.push("      where: { id: parseInt(request.nextUrl.searchParams.get('id') ?? '0') },");
+        }
+        lines.push("    });");
+        lines.push("");
+        lines.push('    return NextResponse.json({ success: true });');
       }
-      lines.push("    });");
-      lines.push("");
-      lines.push(
-        '    return NextResponse.json({ success: true });',
-      );
       break;
 
     case "SELECT":

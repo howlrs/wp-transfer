@@ -401,3 +401,50 @@ describe("Improvement 3: File Upload Detection", () => {
     expect(code).toContain("title: z.string()");
   });
 });
+
+describe("Improvement 4: Zod Schema for PUT/DELETE", () => {
+  it("generates Zod schema for PUT route handlers", () => {
+    const analysis = makeAnalysis({
+      fileName: "update.php",
+      inputParams: [
+        makeParam({ name: "title" }),
+        makeParam({ name: "date", source: "$_POST" }),
+      ],
+      dbOperations: [makeDbOp({ type: "UPDATE", table: "event", columns: ["title", "date"] })],
+    });
+    const stubs = generateApiStubs([analysis]);
+    const code = stubs.get("app/api/events/[id]/route.ts")!;
+    expect(code).toBeDefined();
+    expect(code).toContain("z.object");
+    expect(code).toContain("title:");
+  });
+
+  it("generates update body for DELETE with body params (soft-delete)", () => {
+    const analysis = makeAnalysis({
+      fileName: "user-blacklist-out.php",
+      inputParams: [
+        makeParam({ name: "blacklist" }),
+      ],
+      dbOperations: [makeDbOp({ type: "UPDATE", table: "user", columns: ["blacklist"] })],
+    });
+    const stubs = generateApiStubs([analysis]);
+    const code = stubs.get("app/api/users/[id]/blacklist/route.ts")!;
+    expect(code).toBeDefined();
+    expect(code).toContain("z.object");
+    expect(code).toContain("...data");
+    expect(code).not.toMatch(/data:\s*\{\s*\}/);
+  });
+
+  it("generates hard delete for DELETE without body params", () => {
+    const analysis = makeAnalysis({
+      fileName: "delete.php",
+      dbOperations: [makeDbOp({ type: "DELETE", table: "event", columns: [] })],
+      inputParams: [],
+    });
+    const stubs = generateApiStubs([analysis]);
+    const code = stubs.get("app/api/events/[id]/route.ts")!;
+    expect(code).toBeDefined();
+    expect(code).toContain(".delete(");
+    expect(code).not.toContain("z.object");
+  });
+});
