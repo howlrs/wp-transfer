@@ -80,3 +80,23 @@ export type {
   WooProductVariation,
   WooProduct,
 } from "./types/woocommerce.js";
+
+// Multisite types
+export {
+  MultisiteModeSchema,
+  WpSiteSchema,
+  MergedUserSchema,
+  UserConflictSchema,
+  CrossSiteLinkSchema,
+  MultisiteNetworkSchema,
+  MultisiteConfigSchema,
+} from "./types/multisite.js";
+export type {
+  MultisiteMode,
+  WpSite,
+  MergedUser,
+  UserConflict,
+  CrossSiteLink,
+  MultisiteNetwork,
+  MultisiteConfig,
+} from "./types/multisite.js";
