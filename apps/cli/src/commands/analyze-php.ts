@@ -52,7 +52,7 @@ function detectPluginsFromPhp(analyses: PhpFileAnalysis[]): string[] {
 }
 
 /** Generate project package.json */
-function generatePackageJson(projectName: string): string {
+export function generatePackageJson(projectName: string): string {
   return JSON.stringify(
     {
       name: projectName,
@@ -63,9 +63,15 @@ function generatePackageJson(projectName: string): string {
         build: "next build",
         start: "next start",
         lint: "next lint",
+        test: "playwright test",
+        "test:report": "playwright show-report",
+        "db:migrate": "prisma migrate dev",
+        "db:migrate:deploy": "prisma migrate deploy",
         "db:push": "prisma db push",
-        "db:seed": "tsx prisma/seed.ts",
+        "db:seed": "prisma db seed",
         "db:studio": "prisma studio",
+        setup: "prisma migrate dev && prisma db seed",
+        verify: "bash scripts/verify.sh",
       },
       dependencies: {
         next: "^15.0.0",
@@ -83,7 +89,11 @@ function generatePackageJson(projectName: string): string {
         "@types/bcryptjs": "^2.4.6",
         typescript: "^5.7.0",
         prisma: "^6.0.0",
+        "@playwright/test": "^1.48.0",
         tsx: "^4.21.0",
+      },
+      prisma: {
+        seed: "tsx prisma/seed.ts",
       },
     },
     null,
