@@ -139,3 +139,8 @@ export {
   generateWooScaffold,
   type WooScaffoldInput,
 } from "./woo-scaffold-generator.js";
+
+export {
+  detectI18n,
+  type I18nDetectionResult,
+} from "./i18n-detector.js";
