@@ -2,7 +2,7 @@
 
 **バージョン:** v0.4.0-alpha
 **日付:** 2026-04-10
-**テスト:** 831 / 831 全パス (65ファイル)
+**テスト:** 901 / 901 全パス (66ファイル)
 **カバレッジ:** 92.1% lines, 81.3% branches
 **リポジトリ:** https://github.com/howlrs/wp-transfer
 **リリース:** https://github.com/howlrs/wp-transfer/releases/tag/v0.3.1-alpha
@@ -170,7 +170,8 @@ wp-transfer run output/jra-tokyo --open           # テスト後にレポート�
 - DOMPurify sanitization for htmlBlocks
 
 ### テスト・品質基盤
-- **831テスト, 65ファイル, 92.1%カバレッジ**
+- **901テスト, 66ファイル, 89.7%カバレッジ (analyzerパッケージ)**
+- JRA Tokyo 規模の全パイプライン統合テスト (69ケース: preflight→解析→Prisma→API→CRUD→verify→dashboard→Docker→整合性)
 - CLI smokeテスト (--help, analyze実行, エラーケース)
 - 500投稿WXR fixture (544KB) + パフォーマンステスト (150ms)
 - E2E統合テスト (WXR parse → analyze → block convert → scaffold)
