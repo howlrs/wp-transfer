@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<rss version="2.0"
+  xmlns:excerpt="http://wordpress.org/export/1.2/excerpt/"
+  xmlns:content="http://purl.org/rss/1.0/modules/content/"
+  xmlns:wfw="http://wellformedweb.org/CommentAPI/"
+  xmlns:dc="http://purl.org/dc/elements/1.1/"
+  xmlns:wp="http://wordpress.org/export/1.2/">
+
+  <channel>
+    <title>Sub Site</title>
+    <link>https://example.com/site2</link>
+    <description>Sub site of the multisite network</description>
+    <language>en-US</language>
+    <wp:wxr_version>1.2</wp:wxr_version>
+    <wp:base_site_url>https://example.com</wp:base_site_url>
+    <wp:base_blog_url>https://example.com/site2</wp:base_blog_url>
+    <generator>https://wordpress.org/?v=6.5</generator>
+
+    <wp:author>
+      <wp:author_id>1</wp:author_id>
+      <wp:author_login>admin</wp:author_login>
+      <wp:author_email>admin@example.com</wp:author_email>
+      <wp:author_display_name><![CDATA[Administrator]]></wp:author_display_name>
+    </wp:author>
+    <wp:author>
+      <wp:author_id>3</wp:author_id>
+      <wp:author_login>writer</wp:author_login>
+      <wp:author_email>writer@example.com</wp:author_email>
+      <wp:author_display_name><![CDATA[Writer]]></wp:author_display_name>
+    </wp:author>
+
+    <wp:category>
+      <wp:term_id>2</wp:term_id>
+      <wp:category_nicename>updates</wp:category_nicename>
+      <wp:category_parent></wp:category_parent>
+      <wp:cat_name><![CDATA[Updates]]></wp:cat_name>
+    </wp:category>
+
+    <item>
+      <title>Hello from Sub</title>
+      <link>https://example.com/site2/hello-from-sub/</link>
+      <dc:creator>admin</dc:creator>
+      <content:encoded><![CDATA[<p>Hello from sub site! Read the <a href="https://example.com/welcome-to-main/">main site welcome post</a>.</p>]]></content:encoded>
+      <excerpt:encoded><![CDATA[Hello from sub]]></excerpt:encoded>
+      <wp:post_id>20</wp:post_id>
+      <wp:post_date>2024-01-20 14:00:00</wp:post_date>
+      <wp:post_date_gmt>2024-01-20 14:00:00</wp:post_date_gmt>
+      <wp:post_modified>2024-01-20 14:00:00</wp:post_modified>
+      <wp:post_modified_gmt>2024-01-20 14:00:00</wp:post_modified_gmt>
+      <wp:comment_status>open</wp:comment_status>
+      <wp:ping_status>open</wp:ping_status>
+      <wp:post_name>hello-from-sub</wp:post_name>
+      <wp:status>publish</wp:status>
+      <wp:post_parent>0</wp:post_parent>
+      <wp:menu_order>0</wp:menu_order>
+      <wp:post_type>post</wp:post_type>
+      <category domain="category" nicename="updates">Updates</category>
+    </item>
+
+    <item>
+      <title>Sub Site News</title>
+      <link>https://example.com/site2/sub-site-news/</link>
+      <dc:creator>writer</dc:creator>
+      <content:encoded><![CDATA[<p>News from the sub site.</p>]]></content:encoded>
+      <excerpt:encoded><![CDATA[Sub site news]]></excerpt:encoded>
+      <wp:post_id>21</wp:post_id>
+      <wp:post_date>2024-02-10 09:00:00</wp:post_date>
+      <wp:post_date_gmt>2024-02-10 09:00:00</wp:post_date_gmt>
+      <wp:post_modified>2024-02-10 09:00:00</wp:post_modified>
+      <wp:post_modified_gmt>2024-02-10 09:00:00</wp:post_modified_gmt>
+      <wp:comment_status>open</wp:comment_status>
+      <wp:ping_status>open</wp:ping_status>
+      <wp:post_name>sub-site-news</wp:post_name>
+      <wp:status>publish</wp:status>
+      <wp:post_parent>0</wp:post_parent>
+      <wp:menu_order>0</wp:menu_order>
+      <wp:post_type>post</wp:post_type>
+      <category domain="category" nicename="updates">Updates</category>
+    </item>
+
+    <item>
+      <title>Sub Image</title>
+      <link>https://example.com/site2/sub-image/</link>
+      <dc:creator>admin</dc:creator>
+      <content:encoded><![CDATA[]]></content:encoded>
+      <excerpt:encoded><![CDATA[]]></excerpt:encoded>
+      <wp:post_id>22</wp:post_id>
+      <wp:post_date>2024-01-18 07:00:00</wp:post_date>
+      <wp:post_date_gmt>2024-01-18 07:00:00</wp:post_date_gmt>
+      <wp:post_modified>2024-01-18 07:00:00</wp:post_modified>
+      <wp:post_modified_gmt>2024-01-18 07:00:00</wp:post_modified_gmt>
+      <wp:comment_status>open</wp:comment_status>
+      <wp:ping_status>closed</wp:ping_status>
+      <wp:post_name>sub-image</wp:post_name>
+      <wp:status>inherit</wp:status>
+      <wp:post_parent>20</wp:post_parent>
+      <wp:menu_order>0</wp:menu_order>
+      <wp:post_type>attachment</wp:post_type>
+      <wp:attachment_url>https://example.com/wp-content/blogs.dir/2/files/2024/01/sub-image.jpg</wp:attachment_url>
+      <wp:postmeta>
+        <wp:meta_key>_wp_attached_file</wp:meta_key>
+        <wp:meta_value>2024/01/sub-image.jpg</wp:meta_value>
+      </wp:postmeta>
+    </item>
+
+  </channel>
+</rss>
