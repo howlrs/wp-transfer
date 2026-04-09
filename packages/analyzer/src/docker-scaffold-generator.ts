@@ -78,7 +78,7 @@ ${dbService}
       interval: 30s
       timeout: 10s
       retries: 3
-    command: ["sh", "-c", "npx prisma migrate deploy && node server.js"]
+    command: ["node", "server.js"]
 
 volumes:
   db_data:
