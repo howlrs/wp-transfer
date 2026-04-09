@@ -165,7 +165,7 @@ describe("analyze-php E2E pipeline", () => {
     });
 
     it("Docker scaffold generates all required files", () => {
-      expect(dockerFiles).toHaveLength(6);
+      expect(dockerFiles).toHaveLength(7);
       const paths = dockerFiles.map((f) => f.path);
       expect(paths).toContain("docker-compose.yml");
       expect(paths).toContain("Dockerfile");
@@ -173,6 +173,7 @@ describe("analyze-php E2E pipeline", () => {
       expect(paths).toContain(".gitignore");
       expect(paths).toContain(".dockerignore");
       expect(paths).toContain("app/api/health/route.ts");
+      expect(paths).toContain("scripts/verify.sh");
     });
 
     it("Docker scaffold DB matches schema provider", () => {

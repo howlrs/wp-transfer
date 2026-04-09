@@ -2,6 +2,7 @@
 import { defineCommand, runMain } from "citty";
 import { analyzeCommand } from "./commands/analyze.js";
 import { analyzePhpCommand } from "./commands/analyze-php.js";
+import { runCommand } from "./commands/run.js";
 
 const main = defineCommand({
   meta: {
@@ -12,6 +13,7 @@ const main = defineCommand({
   subCommands: {
     analyze: analyzeCommand,
     "analyze-php": analyzePhpCommand,
+    run: runCommand,
   },
 });
 
