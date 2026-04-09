@@ -78,3 +78,4 @@ export { TaxonomyCollector } from "./taxonomy-collector.js";
 export { UserCollector } from "./user-collector.js";
 export { MediaCollector } from "./media-collector.js";
 export { SiteCollector } from "./site-collector.js";
+export { BatchCollector, type BatchCollectorOptions } from "./batch-collector.js";

@@ -249,3 +249,33 @@ export {
   type AiRouteInput,
   type AiRouteOutput,
 } from "./ai-route-generator.js";
+
+export {
+  parseElementorData,
+  convertElementorWidgets,
+  extractElementorFromMeta,
+  type ElementorWidget,
+  type ElementorConversionResult,
+} from "./elementor-converter.js";
+
+export {
+  parseAcfOptions,
+  generateAcfOptionsModule,
+  type AcfOptionsField,
+  type AcfOptionsResult,
+} from "./acf-options-extractor.js";
+
+export {
+  runPreflightChecks,
+  formatPreflightReport,
+  type PreflightCheck,
+  type PreflightReport,
+  type PreflightOptions,
+} from "./preflight.js";
+
+export {
+  MigrationConfigSchema,
+  loadMigrationConfig,
+  mergeConfigWithArgs,
+  type MigrationConfig,
+} from "./migration-config.js";
