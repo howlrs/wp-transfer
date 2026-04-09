@@ -15,6 +15,14 @@ export interface VerifyScaffoldFile {
 export interface VerifyInput {
   postSlugs: string[];
   categorySlugs: string[];
+  /** API route paths from stub generation */
+  apiRoutes?: Array<{ path: string; method: string }>;
+  /** Whether auth scaffold was generated */
+  hasAuth?: boolean;
+  /** Admin page paths */
+  adminPages?: string[];
+  /** DB table names for CRUD testing */
+  tableNames?: string[];
 }
 
 // ── File generators ──
@@ -25,6 +33,12 @@ function generatePlaywrightConfig(): string {
 export default defineConfig({
   testDir: "./e2e",
   timeout: 30_000,
+  retries: 1,
+  reporter: [
+    ["html", { outputFolder: "test-results" }],
+    ["junit", { outputFile: "test-results/junit.xml" }],
+    ["list"],
+  ],
   use: {
     baseURL: "http://localhost:3000",
   },
@@ -93,21 +107,115 @@ fi
 `;
 }
 
+function generateApiSpec(input: VerifyInput): string | null {
+  if (!input.tableNames || input.tableNames.length === 0) return null;
+
+  const lines: string[] = [];
+  lines.push('import { test, expect } from "@playwright/test";');
+  lines.push("");
+
+  for (const table of input.tableNames) {
+    lines.push(`test.describe("${table} API", () => {`);
+    lines.push(
+      `  test("GET /api/${table} returns list", async ({ request }) => {`,
+    );
+    lines.push(`    const res = await request.get("/api/${table}");`);
+    lines.push(`    expect(res.status()).toBe(200);`);
+    lines.push(`    const body = await res.json();`);
+    lines.push(`    expect(body).toHaveProperty("items");`);
+    lines.push(`    expect(body).toHaveProperty("total");`);
+    lines.push(`  });`);
+    lines.push("");
+    lines.push(
+      `  test("GET /api/${table}/1 returns detail or 404", async ({ request }) => {`,
+    );
+    lines.push(`    const res = await request.get("/api/${table}/1");`);
+    lines.push(`    expect([200, 404]).toContain(res.status());`);
+    lines.push(`  });`);
+    lines.push(`});`);
+    lines.push("");
+  }
+
+  return lines.join("\n");
+}
+
+function generateAuthSpec(): string | null {
+  const lines: string[] = [];
+  lines.push('import { test, expect } from "@playwright/test";');
+  lines.push("");
+  lines.push('test.describe("Authentication", () => {');
+  lines.push('  test("login page loads", async ({ page }) => {');
+  lines.push('    const res = await page.goto("/api/auth/signin");');
+  lines.push("    expect(res?.status()).toBe(200);");
+  lines.push("  });");
+  lines.push("");
+  lines.push(
+    '  test("unauthenticated access to admin redirects", async ({ page }) => {',
+  );
+  lines.push('    const res = await page.goto("/admin");');
+  lines.push("    // Should redirect to login or return 401");
+  lines.push('    expect(page.url()).toContain("signin");');
+  lines.push("  });");
+  lines.push("");
+  lines.push(
+    '  test("auth session endpoint responds", async ({ request }) => {',
+  );
+  lines.push('    const res = await request.get("/api/auth/session");');
+  lines.push("    expect(res.status()).toBe(200);");
+  lines.push("  });");
+  lines.push("});");
+
+  return lines.join("\n");
+}
+
+function generateAdminSpec(adminPages: string[]): string | null {
+  if (adminPages.length === 0) return null;
+
+  const lines: string[] = [];
+  lines.push('import { test, expect } from "@playwright/test";');
+  lines.push("");
+  lines.push('test.describe("Admin Pages", () => {');
+
+  for (const p of adminPages) {
+    const cleanPath = p.replace(/^app\//, "/").replace(/\/page\.tsx$/, "");
+    lines.push(`  test("${cleanPath} loads", async ({ page }) => {`);
+    lines.push(`    const res = await page.goto("${cleanPath}");`);
+    lines.push(`    expect(res?.status()).toBeLessThan(500);`);
+    lines.push("  });");
+    lines.push("");
+  }
+
+  lines.push("});");
+  return lines.join("\n");
+}
+
 // ── Public API ──
 
 export function generateVerifyScaffold(input: VerifyInput): VerifyScaffoldFile[] {
-  return [
-    {
-      path: "playwright.config.ts",
-      content: generatePlaywrightConfig(),
-    },
-    {
-      path: "e2e/smoke.spec.ts",
-      content: generateSmokeSpec(input),
-    },
-    {
-      path: "e2e/verify-build.sh",
-      content: generateVerifyBuildScript(),
-    },
+  const files: VerifyScaffoldFile[] = [
+    { path: "playwright.config.ts", content: generatePlaywrightConfig() },
+    { path: "e2e/smoke.spec.ts", content: generateSmokeSpec(input) },
+    { path: "e2e/verify-build.sh", content: generateVerifyBuildScript() },
   ];
+
+  const apiSpec = generateApiSpec(input);
+  if (apiSpec) {
+    files.push({ path: "e2e/api.spec.ts", content: apiSpec });
+  }
+
+  if (input.hasAuth) {
+    const authSpec = generateAuthSpec();
+    if (authSpec) {
+      files.push({ path: "e2e/auth.spec.ts", content: authSpec });
+    }
+  }
+
+  if (input.adminPages && input.adminPages.length > 0) {
+    const adminSpec = generateAdminSpec(input.adminPages);
+    if (adminSpec) {
+      files.push({ path: "e2e/admin.spec.ts", content: adminSpec });
+    }
+  }
+
+  return files;
 }
