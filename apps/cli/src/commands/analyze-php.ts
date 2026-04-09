@@ -141,6 +141,7 @@ function generateNextConfig(): string {
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  outputFileTracingRoot: __dirname,
 };
 
 export default nextConfig;
@@ -640,6 +641,31 @@ export const analyzePhpCommand = defineCommand({
       join(outputDir, "next.config.ts"),
       generateNextConfig(),
       "utf-8",
+    );
+    totalFiles++;
+
+    // Root layout (required by Next.js App Router)
+    await writeFileWithDir(
+      join(outputDir, "app/layout.tsx"),
+      `import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "${projectName}",
+};
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <html lang="ja">
+      <body>{children}</body>
+    </html>
+  );
+}
+`,
+      outputDir,
     );
     totalFiles++;
 
