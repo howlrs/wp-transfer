@@ -27,6 +27,8 @@ export interface DbOperation {
   table: string;
   columns: string[];
   inLoop: boolean;
+  /** The $_POST array variable name from the foreach header, if in a loop */
+  foreachArrayVar?: string;
 }
 
 export interface InputParam {
@@ -96,6 +98,8 @@ function extractInputParams(content: string): InputParam[] {
 interface LoopRange {
   start: number;
   end: number;
+  /** The $_POST/array variable name used in foreach, if detectable */
+  foreachArrayVar?: string;
 }
 
 function detectLoopRanges(content: string): LoopRange[] {
@@ -119,8 +123,17 @@ function detectLoopRanges(content: string): LoopRange[] {
         }
       }
     }
+
+    // Extract foreach array variable name: foreach ($_POST["xxx"] as ...)
+    let foreachArrayVar: string | undefined;
+    const loopHeader = content.slice(loopStart, braceStart);
+    const foreachVarMatch = loopHeader.match(/foreach\s*\(\s*\$_POST\s*\[\s*["']([^"']+)["']\s*\]/);
+    if (foreachVarMatch) {
+      foreachArrayVar = foreachVarMatch[1];
+    }
+
     if (end > braceStart) {
-      ranges.push({ start: braceStart, end });
+      ranges.push({ start: braceStart, end, foreachArrayVar });
     }
   }
   return ranges;
@@ -128,6 +141,10 @@ function detectLoopRanges(content: string): LoopRange[] {
 
 function isInLoop(index: number, ranges: LoopRange[]): boolean {
   return ranges.some((r) => index >= r.start && index <= r.end);
+}
+
+function findLoopRange(index: number, ranges: LoopRange[]): LoopRange | undefined {
+  return ranges.find((r) => index >= r.start && index <= r.end);
 }
 
 function extractDbOperations(content: string): DbOperation[] {
@@ -142,7 +159,9 @@ function extractDbOperations(content: string): DbOperation[] {
       .split(",")
       .map((c) => c.trim())
       .filter(Boolean);
-    ops.push({ type: "INSERT", table, columns, inLoop: isInLoop(match.index!, loopRanges) });
+    const insertInLoop = isInLoop(match.index!, loopRanges);
+    const insertLoopRange = insertInLoop ? findLoopRange(match.index!, loopRanges) : undefined;
+    ops.push({ type: "INSERT", table, columns, inLoop: insertInLoop, foreachArrayVar: insertLoopRange?.foreachArrayVar });
   }
 
   // UPDATE table SET col1=val, col2=val WHERE ...
