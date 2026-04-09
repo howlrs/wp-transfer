@@ -1,11 +1,11 @@
 # wp-transfer 引き継ぎ資料
 
-**バージョン:** v0.2.0-alpha
+**バージョン:** v0.3.0-alpha
 **日付:** 2026-04-09
-**テスト:** 516 / 516 全パス (46ファイル)
+**テスト:** 631 / 631 全パス (55ファイル)
 **カバレッジ:** 92.1% lines, 81.3% branches
 **リポジトリ:** https://github.com/howlrs/wp-transfer
-**リリース:** https://github.com/howlrs/wp-transfer/releases/tag/v0.2.0-alpha
+**リリース:** https://github.com/howlrs/wp-transfer/releases/tag/v0.3.0-alpha
 **ライセンス:** MIT
 
 ## プロジェクト概要
@@ -125,6 +125,28 @@ wp-transfer analyze-php <dir> [--schema db-schema.md] [--output path]
 - Next.js App Router [locale] i18n routing scaffold (middleware + config)
 - CLI analyze コマンド統合 (i18n 自動検出)
 
+### E-Phase: カスタムフィールド拡充
+- ACF Pro: WXR からフィールド定義抽出 (Flexible Content, Group, Clone, Nested Repeater)
+- ACF Pro: 定義ベース Zod スキーマ生成 (discriminatedUnion, ネスト object)
+- Meta Box: post_meta カスタムフィールド検出 + 型推論
+- Pods: _pods_* メタキー検出 + Table Storage 警告
+
+### E-Phase: ページビルダー・WooCommerce拡張・クロス機能
+- Elementor/Divi/WPBakery 検出 + Widget使用頻度分析 + 移行ガイドMarkdown生成
+- WooCommerce REST API クライアント (注文/顧客データ取得, HTTPS必須, ページネーション)
+- Order/Customer/OrderItem Prisma スキーマ生成
+- クロス機能: WooCommerce×Multisite (siteId), WooCommerce×i18n ([locale]), i18n×Multisite
+
+### G-Phase: DX改善
+- --interactive フラグ (対話式ウィザード)
+- --templates フラグ (テンプレートオーバーライド, パストラバーサル防止)
+
+### AI Assist (--ai-assist)
+- Claude API によるAPIルート高品質生成
+- 機密情報マスキング + マークダウン除去 + 出力検証
+- 指数バックオフリトライ + 並列制御 + 巨大ファイルガード
+- フォールバック: LLM失敗時は静的解析結果を使用
+
 ### セキュリティ
 - Phase 1: 18件修正 (SSRF, クレデンシャル, SAX, 型安全性)
 - Issue #9: sanitize.ts (7関数), RCE/XSS/PathTraversal防止
@@ -133,7 +155,7 @@ wp-transfer analyze-php <dir> [--schema db-schema.md] [--output path]
 - DOMPurify sanitization for htmlBlocks
 
 ### テスト・品質基盤
-- **516テスト, 46ファイル, 92.1%カバレッジ**
+- **631テスト, 55ファイル, 92.1%カバレッジ**
 - CLI smokeテスト (--help, analyze実行, エラーケース)
 - 500投稿WXR fixture (544KB) + パフォーマンステスト (150ms)
 - E2E統合テスト (WXR parse → analyze → block convert → scaffold)
@@ -143,7 +165,7 @@ wp-transfer analyze-php <dir> [--schema db-schema.md] [--output path]
 - CI: typecheck + test + coverage + security audit + build
 
 ### OSS公開
-- v0.1.0-alpha GitHub Release
+- v0.1.0-alpha, v0.2.0-alpha, v0.3.0-alpha GitHub Release
 - README (英語, Quick Start, コマンドリファレンス)
 - MIT LICENSE + 全package.json整備
 - GitHub Actions CI
@@ -167,6 +189,9 @@ wp-transfer analyze-php <dir> [--schema db-schema.md] [--output path]
 | 13 | Bug: analyze-php コード生成ブロッカー | Closed |
 | 14 | C-1: WooCommerce 商品カタログ移行 | Closed |
 | 15 | C-3: i18n / WPML・Polylang 対応 | Closed |
+| 16 | E-Phase: カスタムフィールド拡充 (ACF Pro/Meta Box/Pods) | Closed |
+| 17 | E-Phase: ページビルダー/WooCommerce注文/クロス機能/DX | Closed |
+| 18 | Fix: analyze-php品質改善 + AI Assist | Closed |
 
 ## 次フェーズ: D. 機能拡充 (次世代)
 
@@ -205,7 +230,7 @@ WooCommerce×Multisite(サイト別商品), i18n×Multisite(サイト別ロケ�
 
 ```bash
 pnpm install
-pnpm test               # 516テスト (全パッケージ + CLI)
+pnpm test               # 631テスト (全パッケージ + CLI)
 pnpm -r typecheck       # 全パッケージ型チェック
 pnpm -r build           # dist/ 生成
 pnpm vitest run --config vitest.config.ts --coverage  # カバレッジ
