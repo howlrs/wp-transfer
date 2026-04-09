@@ -412,6 +412,7 @@ export function generatePrismaSchema(
   lines.push("");
   lines.push("generator client {");
   lines.push('  provider = "prisma-client-js"');
+  lines.push('  binaryTargets = ["native", "debian-openssl-3.0.x"]');
   lines.push("}");
   lines.push("");
   lines.push("datasource db {");
