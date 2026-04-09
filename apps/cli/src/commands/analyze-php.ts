@@ -273,7 +273,13 @@ function generateSeedScript(
 
       switch (col.type) {
         case "String":
-          sampleData[col.name] = `"サンプル${col.comment ?? col.name}"`;
+          if (col.name === "email" || col.name.endsWith("_email")) {
+            sampleData[col.name] = `"user@example.com"`;
+          } else if (col.name === "url" || col.name.endsWith("_url") || col.name.includes("link")) {
+            sampleData[col.name] = `"https://example.com"`;
+          } else {
+            sampleData[col.name] = `"サンプル${col.comment ?? col.name}"`;
+          }
           break;
         case "Int":
           sampleData[col.name] = "1";
