@@ -83,7 +83,7 @@ export function generatePackageJson(projectName: string): string {
         react: "^19.0.0",
         "react-dom": "^19.0.0",
         "@prisma/client": "^6.0.0",
-        "next-auth": "^5.0.0",
+        "next-auth": "5.0.0-beta.30",
         bcryptjs: "^2.4.3",
         zod: "^3.23.0",
       },
@@ -167,6 +167,40 @@ if (process.env.NODE_ENV !== "production") {
 `;
 }
 
+/** Sort tables so FK parents come before children (topological sort) */
+export function sortTablesByFkDependency(tables: TableDefinition[]): TableDefinition[] {
+  const tableNames = new Set(tables.map(t => t.name));
+  const deps = new Map<string, string[]>();
+
+  for (const table of tables) {
+    const fkTables = table.columns
+      .filter(c => c.name.endsWith("_id"))
+      .map(c => c.name.replace(/_id$/, ""))
+      .filter(name => tableNames.has(name));
+    deps.set(table.name, fkTables);
+  }
+
+  // Topological sort
+  const sorted: TableDefinition[] = [];
+  const visited = new Set<string>();
+
+  function visit(name: string) {
+    if (visited.has(name)) return;
+    visited.add(name);
+    for (const dep of deps.get(name) ?? []) {
+      visit(dep);
+    }
+    const table = tables.find(t => t.name === name);
+    if (table) sorted.push(table);
+  }
+
+  for (const table of tables) {
+    visit(table.name);
+  }
+
+  return sorted;
+}
+
 /** Generate prisma/seed.ts */
 function generateSeedScript(
   tables: TableDefinition[],
@@ -216,8 +250,8 @@ function generateSeedScript(
     lines.push("");
   }
 
-  // Sample data for detected tables
-  for (const table of tables) {
+  // Sample data for detected tables (FK parents first)
+  for (const table of sortTablesByFkDependency(tables)) {
     const modelName = table.name
       .split("_")
       .map((p, i) =>
