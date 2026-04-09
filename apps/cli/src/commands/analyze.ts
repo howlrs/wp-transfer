@@ -16,6 +16,8 @@ import {
   transformProducts,
   generateWooPrismaSchema,
   generateWooScaffold,
+  detectI18n,
+  generateI18nScaffold,
 } from "@wp-transfer/analyzer";
 import type { PluginEntry } from "@wp-transfer/core";
 
@@ -140,6 +142,25 @@ async function analyzeFromWxr(
       await writeFile(filePath, file.content, "utf-8");
     }
     consola.success(`Written: ${scaffoldFiles.length} EC scaffold files`);
+  }
+
+  // i18n: detect WPML/Polylang and generate i18n scaffold
+  const i18nResult = detectI18n(wxr.posts);
+  if (i18nResult.plugin) {
+    consola.success(`i18n detected: ${i18nResult.plugin} (${i18nResult.locales.join(", ")}), default: ${i18nResult.defaultLocale}`);
+
+    const i18nFiles = generateI18nScaffold({
+      locales: i18nResult.locales,
+      defaultLocale: i18nResult.defaultLocale,
+    });
+
+    const outputDir = resolve(output);
+    for (const file of i18nFiles) {
+      const filePath = resolve(outputDir, file.path);
+      await mkdir(dirname(filePath), { recursive: true });
+      await writeFile(filePath, file.content, "utf-8");
+    }
+    consola.success(`Written: ${i18nFiles.length} i18n scaffold files`);
   }
 
   // Estimate cost (no plugin data from WXR)

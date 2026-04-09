@@ -144,3 +144,8 @@ export {
   detectI18n,
   type I18nDetectionResult,
 } from "./i18n-detector.js";
+
+export {
+  generateI18nScaffold,
+  type I18nScaffoldInput,
+} from "./i18n-scaffold-generator.js";
