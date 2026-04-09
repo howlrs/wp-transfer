@@ -100,6 +100,13 @@ export {
 } from "./acf-template-generator.js";
 
 export {
+  extractAcfFieldGroups,
+  type AcfFieldDefinition,
+  type AcfLayoutDefinition,
+  type AcfFieldGroup,
+} from "./acf-field-extractor.js";
+
+export {
   generateBlogScaffold,
   type BlogScaffoldInput,
   type BlogPostInfo,

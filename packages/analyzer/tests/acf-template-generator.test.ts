@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { generateAcfTemplate } from "../src/acf-template-generator.js";
 import type { AcfFieldInfo } from "../src/schema-analyzer.js";
+import type { AcfFieldGroup } from "../src/acf-field-extractor.js";
 
 // ── Helpers ──
 
@@ -184,5 +185,226 @@ describe("generateAcfTemplate", () => {
     ];
     const { schemaCode } = generateAcfTemplate(fields);
     expect(schemaCode).toContain("config: z.unknown()");
+  });
+});
+
+// ── Definition-based generation (ACF Pro) ──
+
+describe("generateAcfTemplate — field definitions", () => {
+  it("generates schema from field definitions when provided", () => {
+    const groups: AcfFieldGroup[] = [{
+      title: "Hero",
+      key: "group_hero",
+      fields: [
+        { key: "field_heading", name: "heading", type: "text", label: "Heading" },
+        { key: "field_count", name: "count", type: "number", label: "Count" },
+        { key: "field_active", name: "is_active", type: "true_false", label: "Active" },
+      ],
+    }];
+
+    const { schemaCode } = generateAcfTemplate([], groups);
+
+    expect(schemaCode).toContain('import { z } from "zod"');
+    expect(schemaCode).toContain("heading: z.string()");
+    expect(schemaCode).toContain("count: z.coerce.number()");
+    expect(schemaCode).toContain("is_active: z.coerce.boolean()");
+  });
+
+  it("generates flexible content as discriminated union", () => {
+    const groups: AcfFieldGroup[] = [{
+      title: "Page Builder",
+      key: "group_builder",
+      fields: [{
+        key: "field_sections",
+        name: "sections",
+        type: "flexible_content",
+        label: "Sections",
+        layouts: [
+          {
+            key: "layout_hero",
+            name: "hero",
+            label: "Hero Section",
+            subFields: [
+              { key: "field_h", name: "heading", type: "text", label: "Heading" },
+              { key: "field_i", name: "image", type: "image", label: "Image" },
+            ],
+          },
+          {
+            key: "layout_cta",
+            name: "cta",
+            label: "Call to Action",
+            subFields: [
+              { key: "field_t", name: "text", type: "textarea", label: "Text" },
+              { key: "field_u", name: "button_url", type: "url", label: "Button URL" },
+            ],
+          },
+        ],
+      }],
+    }];
+
+    const { schemaCode } = generateAcfTemplate([], groups);
+
+    expect(schemaCode).toContain('z.discriminatedUnion("acf_fc_layout"');
+    expect(schemaCode).toContain('acf_fc_layout: z.literal("hero")');
+    expect(schemaCode).toContain('acf_fc_layout: z.literal("cta")');
+    expect(schemaCode).toContain("heading: z.string()");
+    expect(schemaCode).toContain("image: z.number()");
+    expect(schemaCode).toContain("text: z.string()");
+    expect(schemaCode).toContain("button_url: z.string()");
+  });
+
+  it("generates group as nested object", () => {
+    const groups: AcfFieldGroup[] = [{
+      title: "Contact",
+      key: "group_contact",
+      fields: [{
+        key: "field_address",
+        name: "address",
+        type: "group",
+        label: "Address",
+        subFields: [
+          { key: "field_street", name: "street", type: "text", label: "Street" },
+          { key: "field_city", name: "city", type: "text", label: "City" },
+          { key: "field_zip", name: "zip", type: "text", label: "ZIP" },
+        ],
+      }],
+    }];
+
+    const { schemaCode } = generateAcfTemplate([], groups);
+
+    expect(schemaCode).toContain("address: z.object({ street: z.string(), city: z.string(), zip: z.string() })");
+  });
+
+  it("generates repeater as z.array of z.object", () => {
+    const groups: AcfFieldGroup[] = [{
+      title: "Team",
+      key: "group_team",
+      fields: [{
+        key: "field_members",
+        name: "members",
+        type: "repeater",
+        label: "Members",
+        subFields: [
+          { key: "field_name", name: "name", type: "text", label: "Name" },
+          { key: "field_role", name: "role", type: "text", label: "Role" },
+        ],
+      }],
+    }];
+
+    const { schemaCode } = generateAcfTemplate([], groups);
+
+    expect(schemaCode).toContain("members: z.array(z.object({ name: z.string(), role: z.string() }))");
+  });
+
+  it("generates post_object as z.number()", () => {
+    const groups: AcfFieldGroup[] = [{
+      title: "Related",
+      key: "group_rel",
+      fields: [
+        { key: "field_ref", name: "related_post", type: "post_object", label: "Related Post" },
+      ],
+    }];
+
+    const { schemaCode } = generateAcfTemplate([], groups);
+
+    expect(schemaCode).toContain("related_post: z.number()");
+  });
+
+  it("generates relationship as z.array(z.number())", () => {
+    const groups: AcfFieldGroup[] = [{
+      title: "Related",
+      key: "group_rel",
+      fields: [
+        { key: "field_rels", name: "related_posts", type: "relationship", label: "Related Posts" },
+      ],
+    }];
+
+    const { schemaCode } = generateAcfTemplate([], groups);
+
+    expect(schemaCode).toContain("related_posts: z.array(z.number())");
+  });
+
+  it("generates clone as z.any() with comment", () => {
+    const groups: AcfFieldGroup[] = [{
+      title: "Shared",
+      key: "group_shared",
+      fields: [
+        { key: "field_clone", name: "shared_section", type: "clone", label: "Shared Section" },
+      ],
+    }];
+
+    const { schemaCode } = generateAcfTemplate([], groups);
+
+    expect(schemaCode).toContain("shared_section: z.any()");
+    expect(schemaCode).toContain("clone");
+  });
+
+  it("falls back to data inference when no field definitions provided", () => {
+    const fields: AcfFieldInfo[] = [
+      makeField({ name: "title", fieldKey: "field_001", inferredType: "string" }),
+    ];
+
+    // No fieldGroups argument → data inference
+    const { schemaCode } = generateAcfTemplate(fields);
+
+    expect(schemaCode).toContain("title: z.string()");
+    expect(schemaCode).toContain("field_001");
+  });
+
+  it("prefers field definitions over data inference when both provided", () => {
+    const fields: AcfFieldInfo[] = [
+      makeField({ name: "title", fieldKey: "field_001", inferredType: "string" }),
+    ];
+    const groups: AcfFieldGroup[] = [{
+      title: "Hero",
+      key: "group_hero",
+      fields: [
+        { key: "field_def_title", name: "def_title", type: "text", label: "Title" },
+      ],
+    }];
+
+    const { schemaCode } = generateAcfTemplate(fields, groups);
+
+    // Should use definition-based field, not inference-based
+    expect(schemaCode).toContain("def_title: z.string()");
+    expect(schemaCode).toContain("field_def_title");
+    // The inference field should NOT appear
+    expect(schemaCode).not.toContain("field_001");
+  });
+
+  it("generates accessor code from field definitions", () => {
+    const groups: AcfFieldGroup[] = [{
+      title: "Hero",
+      key: "group_hero",
+      fields: [
+        { key: "field_heading", name: "heading", type: "text", label: "Heading" },
+      ],
+    }];
+
+    const { accessorCode } = generateAcfTemplate([], groups);
+
+    expect(accessorCode).toContain("export function getAcfFields");
+    expect(accessorCode).toContain('raw.heading = meta["heading"]');
+    expect(accessorCode).toContain("heading → field_heading");
+  });
+
+  it("merges fields from multiple groups", () => {
+    const groups: AcfFieldGroup[] = [
+      {
+        title: "Group A",
+        key: "group_a",
+        fields: [{ key: "field_a1", name: "a1", type: "text", label: "A1" }],
+      },
+      {
+        title: "Group B",
+        key: "group_b",
+        fields: [{ key: "field_b1", name: "b1", type: "number", label: "B1" }],
+      },
+    ];
+
+    const { schemaCode } = generateAcfTemplate([], groups);
+
+    expect(schemaCode).toContain("a1: z.string()");
+    expect(schemaCode).toContain("b1: z.coerce.number()");
   });
 });
