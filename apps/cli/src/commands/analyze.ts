@@ -1,9 +1,10 @@
 import { defineCommand } from "citty";
 import { consola } from "consola";
-import { createReadStream, existsSync } from "node:fs";
+import { createReadStream, existsSync, statSync, readdirSync } from "node:fs";
 import { writeFile, mkdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { parseWxr } from "@wp-transfer/wxr-parser";
+import type { WxrParseResult } from "@wp-transfer/wxr-parser";
 import {
   analyzeSchema,
   estimateCost,
@@ -18,6 +19,12 @@ import {
   generateWooScaffold,
   detectI18n,
   generateI18nScaffold,
+  detectMultisite,
+  mergeUsers,
+  normalizeMedia,
+  rewriteCrossSiteUrls,
+  generateMultisitePrismaSchema,
+  generateMultisiteScaffold,
 } from "@wp-transfer/analyzer";
 import type { PluginEntry } from "@wp-transfer/core";
 
@@ -30,7 +37,7 @@ export const analyzeCommand = defineCommand({
     source: {
       type: "positional",
       required: true,
-      description: "WP site URL or WXR file path",
+      description: "WP site URL, WXR file path, or directory (with --multisite)",
     },
     output: {
       type: "string",
@@ -50,6 +57,16 @@ export const analyzeCommand = defineCommand({
       type: "string",
       description: "WP application password for REST API",
     },
+    multisite: {
+      type: "boolean",
+      default: false,
+      description: "Enable multisite analysis (source must be a directory)",
+    },
+    "multisite-mode": {
+      type: "string",
+      default: "",
+      description: "Scaffold mode: subpath or subdomain (auto-detected if omitted)",
+    },
   },
   async run({ args }) {
     const source = args.source as string;
@@ -64,6 +81,30 @@ export const analyzeCommand = defineCommand({
 
     const resolvedSource = resolve(process.cwd(), source);
 
+    const multisite = args.multisite as boolean;
+    const multisiteMode = args["multisite-mode"] as string;
+
+    // Multisite: directory input
+    if (multisite) {
+      if (!existsSync(resolvedSource) || !statSync(resolvedSource).isDirectory()) {
+        consola.error("--multisite requires a directory path containing WXR files.");
+        return;
+      }
+      const resolvedDir = resolve(resolvedSource);
+      const xmlFiles = readdirSync(resolvedDir)
+        .filter((f) => f.endsWith(".xml"))
+        .map((f) => resolve(resolvedDir, f))
+        .filter((f) => f.startsWith(resolvedDir));
+
+      if (xmlFiles.length === 0) {
+        consola.error("No XML files found in the directory.");
+        return;
+      }
+
+      await analyzeMultisite(xmlFiles, output, format, multisiteMode);
+      return;
+    }
+
     if (source.endsWith(".xml") && existsSync(resolvedSource)) {
       await analyzeFromWxr(resolvedSource, output, format);
     } else {
@@ -77,6 +118,102 @@ export const analyzeCommand = defineCommand({
     }
   },
 });
+
+async function analyzeMultisite(
+  xmlFiles: string[],
+  output: string,
+  format: string,
+  multisiteMode: string,
+): Promise<void> {
+  consola.start(`Parsing ${xmlFiles.length} WXR files...`);
+
+  const wxrResults: WxrParseResult[] = [];
+  for (const file of xmlFiles) {
+    const stream = createReadStream(file);
+    const wxr = await parseWxr(stream);
+    wxrResults.push(wxr);
+    consola.success(`  ${file}: ${wxr.posts.length} posts, ${wxr.users.length} users`);
+  }
+
+  // Detect multisite structure
+  const network = detectMultisite(wxrResults);
+  consola.success(`Network: ${network.mode} mode, ${network.sites.length} sites`);
+
+  // Determine scaffold mode
+  const scaffoldMode = multisiteMode === "subdomain" ? "subdomain" as const
+    : multisiteMode === "subpath" ? "subpath" as const
+    : network.mode === "subdomain" ? "subdomain" as const
+    : "subpath" as const;
+
+  // Merge users
+  const siteUserData = network.sites.map((site, i) => ({
+    siteId: site.siteId,
+    users: wxrResults[i]!.users,
+    posts: wxrResults[i]!.posts,
+  }));
+  const { sharedUsers, userConflicts } = mergeUsers(siteUserData);
+  network.sharedUsers = sharedUsers;
+  network.userConflicts = userConflicts;
+  consola.success(`Users: ${sharedUsers.length} unique (${userConflicts.length} conflicts)`);
+
+  // Normalize media + collect remotePatterns
+  const allRemotePatterns: { protocol: string; hostname: string }[] = [];
+  for (const site of network.sites) {
+    const siteWxr = wxrResults.find((w) => (w.blogUrl || w.siteUrl) === site.baseUrl);
+    if (!siteWxr) continue;
+    const { remotePatterns } = normalizeMedia(siteWxr.media, site.siteId);
+    allRemotePatterns.push(...remotePatterns);
+  }
+
+  // Rewrite cross-site URLs
+  const allLinks = [];
+  for (const site of network.sites) {
+    const siteWxr = wxrResults.find((w) => (w.blogUrl || w.siteUrl) === site.baseUrl);
+    if (!siteWxr) continue;
+    for (const post of siteWxr.posts) {
+      const { links } = rewriteCrossSiteUrls(post.content, site.siteId, post.id, network.sites, scaffoldMode);
+      allLinks.push(...links);
+    }
+  }
+  network.crossSiteLinks = allLinks;
+  consola.success(`Cross-site links: ${allLinks.length} rewritten`);
+
+  // Generate output
+  const outputDir = resolve(output);
+
+  // Prisma schema
+  const prismaSchema = generateMultisitePrismaSchema(network.sites);
+  const prismaPath = resolve(outputDir, "prisma/schema.prisma");
+  await mkdir(dirname(prismaPath), { recursive: true });
+  await writeFile(prismaPath, prismaSchema, "utf-8");
+  consola.success(`Written: ${prismaPath}`);
+
+  // Scaffold files
+  const deduped = [...new Map(allRemotePatterns.map((p) => [`${p.protocol}://${p.hostname}`, p])).values()];
+  const scaffoldFiles = generateMultisiteScaffold({ sites: network.sites, mode: scaffoldMode, remotePatterns: deduped });
+  for (const file of scaffoldFiles) {
+    const filePath = resolve(outputDir, file.path);
+    await mkdir(dirname(filePath), { recursive: true });
+    await writeFile(filePath, file.content, "utf-8");
+  }
+  consola.success(`Written: ${scaffoldFiles.length} scaffold files`);
+
+  // Summary
+  const sitesTable = network.sites
+    .map((s) => `  ${s.siteId}. ${s.title} (${s.path})`)
+    .join("\n");
+
+  consola.box(
+    [
+      `Multisite Network: ${network.mode}`,
+      `Network URL: ${network.networkUrl}`,
+      `Scaffold Mode: ${scaffoldMode}`,
+      `Sites:\n${sitesTable}`,
+      `Users: ${sharedUsers.length} unique, ${userConflicts.length} conflicts`,
+      `Cross-site links: ${allLinks.length} rewritten`,
+    ].join("\n"),
+  );
+}
 
 async function analyzeFromWxr(
   filePath: string,
