@@ -178,3 +178,8 @@ export {
   generateMultisiteScaffold,
   type MultisiteScaffoldInput,
 } from "./multisite-scaffold-generator.js";
+
+export {
+  resolveTemplate,
+  type ScaffoldFileInput,
+} from "./template-resolver.js";
