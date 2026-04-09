@@ -476,18 +476,11 @@ function generateRouteHandler(
       : "unknown";
   const modelName = toPrismaModelName(primaryTable);
 
-  // Detect loop array parameters: if a DB operation has inLoop=true,
-  // the input param with a plural-like name matching the loop is an array
+  // Detect loop array parameters from foreach analysis
   const loopArrayParams = new Set<string>();
-  const hasLoopOps = analysis.dbOperations.some(op => op.inLoop);
-  if (hasLoopOps) {
-    // Heuristic: params whose name suggests a collection (plural, ends in 's')
-    // and are not simple scalar types (id, status, etc.)
-    for (const p of params) {
-      const lower = p.name.toLowerCase();
-      if (lower.endsWith("s") && !lower.endsWith("_status") && !lower.endsWith("ss") && lower !== "status") {
-        loopArrayParams.add(lower);
-      }
+  for (const op of analysis.dbOperations) {
+    if (op.inLoop && op.foreachArrayVar) {
+      loopArrayParams.add(op.foreachArrayVar.toLowerCase());
     }
   }
 
