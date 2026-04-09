@@ -25,6 +25,7 @@ import {
   rewriteCrossSiteUrls,
   generateMultisitePrismaSchema,
   generateMultisiteScaffold,
+  resolveTemplate,
 } from "@wp-transfer/analyzer";
 import type { PluginEntry } from "@wp-transfer/core";
 
@@ -67,11 +68,70 @@ export const analyzeCommand = defineCommand({
       default: "",
       description: "Scaffold mode: subpath or subdomain (auto-detected if omitted)",
     },
+    interactive: {
+      type: "boolean",
+      default: false,
+      description: "Enable interactive prompts to configure analysis options",
+    },
+    templates: {
+      type: "string",
+      description: "Directory with template overrides for scaffold files",
+    },
   },
   async run({ args }) {
-    const source = args.source as string;
-    const output = args.output as string;
-    const format = args.format as string;
+    let source = args.source as string;
+    let output = args.output as string;
+    let format = args.format as string;
+    let multisite = args.multisite as boolean;
+    let multisiteMode = args["multisite-mode"] as string;
+    const templateDir = args.templates as string | undefined;
+
+    // Interactive mode: prompt for options when TTY is available
+    if (args.interactive && process.stdout.isTTY) {
+      const sourceType = await consola.prompt("Source type:", {
+        type: "select",
+        options: ["WXR file", "URL", "Directory (multisite)"],
+      });
+      if (typeof sourceType === "symbol") return;
+
+      if (sourceType === "WXR file") {
+        const wxrPath = await consola.prompt("WXR file path:", { type: "text" });
+        if (typeof wxrPath === "symbol") return;
+        source = wxrPath;
+      } else if (sourceType === "URL") {
+        const url = await consola.prompt("WordPress site URL:", { type: "text" });
+        if (typeof url === "symbol") return;
+        source = url;
+      } else {
+        const dir = await consola.prompt("Directory containing WXR files:", { type: "text" });
+        if (typeof dir === "symbol") return;
+        source = dir;
+        multisite = true;
+      }
+
+      const outDir = await consola.prompt("Output directory:", {
+        type: "text",
+        default: output,
+      });
+      if (typeof outDir === "symbol") return;
+      output = outDir;
+
+      const fmt = await consola.prompt("Output format:", {
+        type: "select",
+        options: ["json", "markdown", "both"],
+      });
+      if (typeof fmt === "symbol") return;
+      format = fmt;
+
+      if (multisite) {
+        const mode = await consola.prompt("Scaffold mode:", {
+          type: "select",
+          options: ["auto", "subpath", "subdomain"],
+        });
+        if (typeof mode === "symbol") return;
+        multisiteMode = mode === "auto" ? "" : mode;
+      }
+    }
 
     const validFormats = ["json", "markdown", "both"];
     if (!validFormats.includes(format)) {
@@ -79,10 +139,13 @@ export const analyzeCommand = defineCommand({
       return;
     }
 
-    const resolvedSource = resolve(process.cwd(), source);
+    // Validate template directory if specified
+    if (templateDir && (!existsSync(templateDir) || !statSync(templateDir).isDirectory())) {
+      consola.error(`Template directory not found: ${templateDir}`);
+      return;
+    }
 
-    const multisite = args.multisite as boolean;
-    const multisiteMode = args["multisite-mode"] as string;
+    const resolvedSource = resolve(process.cwd(), source);
 
     // Multisite: directory input
     if (multisite) {
@@ -101,12 +164,12 @@ export const analyzeCommand = defineCommand({
         return;
       }
 
-      await analyzeMultisite(xmlFiles, output, format, multisiteMode);
+      await analyzeMultisite(xmlFiles, output, format, multisiteMode, templateDir);
       return;
     }
 
     if (source.endsWith(".xml") && existsSync(resolvedSource)) {
-      await analyzeFromWxr(resolvedSource, output, format);
+      await analyzeFromWxr(resolvedSource, output, format, templateDir);
     } else {
       await analyzeFromUrl(
         source,
@@ -124,6 +187,7 @@ async function analyzeMultisite(
   output: string,
   format: string,
   multisiteMode: string,
+  templateDir?: string,
 ): Promise<void> {
   consola.start(`Parsing ${xmlFiles.length} WXR files...`);
 
@@ -192,9 +256,10 @@ async function analyzeMultisite(
   const deduped = [...new Map(allRemotePatterns.map((p) => [`${p.protocol}://${p.hostname}`, p])).values()];
   const scaffoldFiles = generateMultisiteScaffold({ sites: network.sites, mode: scaffoldMode, remotePatterns: deduped });
   for (const file of scaffoldFiles) {
+    const content = await resolveTemplate(templateDir, file);
     const filePath = resolve(outputDir, file.path);
     await mkdir(dirname(filePath), { recursive: true });
-    await writeFile(filePath, file.content, "utf-8");
+    await writeFile(filePath, content, "utf-8");
   }
   consola.success(`Written: ${scaffoldFiles.length} scaffold files`);
 
@@ -219,6 +284,7 @@ async function analyzeFromWxr(
   filePath: string,
   output: string,
   format: string,
+  templateDir?: string,
 ): Promise<void> {
   consola.start(`Parsing WXR file: ${filePath}`);
 
@@ -274,9 +340,10 @@ async function analyzeFromWxr(
     });
 
     for (const file of scaffoldFiles) {
+      const content = await resolveTemplate(templateDir, file);
       const filePath = resolve(outputDir, file.path);
       await mkdir(dirname(filePath), { recursive: true });
-      await writeFile(filePath, file.content, "utf-8");
+      await writeFile(filePath, content, "utf-8");
     }
     consola.success(`Written: ${scaffoldFiles.length} EC scaffold files`);
   }
@@ -293,9 +360,10 @@ async function analyzeFromWxr(
 
     const outputDir = resolve(output);
     for (const file of i18nFiles) {
+      const content = await resolveTemplate(templateDir, file);
       const filePath = resolve(outputDir, file.path);
       await mkdir(dirname(filePath), { recursive: true });
-      await writeFile(filePath, file.content, "utf-8");
+      await writeFile(filePath, content, "utf-8");
     }
     consola.success(`Written: ${i18nFiles.length} i18n scaffold files`);
   }

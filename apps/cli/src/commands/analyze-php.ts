@@ -1,6 +1,6 @@
 import { defineCommand } from "citty";
 import { consola } from "consola";
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { readFile, writeFile, mkdir, readdir } from "node:fs/promises";
 import { resolve, join, dirname, basename, relative, isAbsolute } from "node:path";
 import {
@@ -12,6 +12,7 @@ import {
   isAuthPluginDetected,
   ADMIN_USER_PRISMA_MODEL,
   generateDockerScaffold,
+  resolveTemplate,
 } from "@wp-transfer/analyzer";
 import type { PhpFileAnalysis, TableDefinition } from "@wp-transfer/analyzer";
 
@@ -302,6 +303,10 @@ export const analyzePhpCommand = defineCommand({
       default: "./output/php-analysis",
       description: "Output directory for generated Next.js project",
     },
+    templates: {
+      type: "string",
+      description: "Directory with template overrides for scaffold files",
+    },
   },
   async run({ args }) {
     const dirPath = resolve(args.dir as string);
@@ -309,10 +314,17 @@ export const analyzePhpCommand = defineCommand({
     const schemaPath = args.schema
       ? resolve(args.schema as string)
       : undefined;
+    const templateDir = args.templates as string | undefined;
 
     // Validate input directory
     if (!existsSync(dirPath)) {
       consola.error(`Directory not found: ${dirPath}`);
+      return;
+    }
+
+    // Validate template directory if specified
+    if (templateDir && (!existsSync(templateDir) || !statSync(templateDir).isDirectory())) {
+      consola.error(`Template directory not found: ${templateDir}`);
       return;
     }
 
@@ -400,29 +412,33 @@ export const analyzePhpCommand = defineCommand({
 
     // API route stubs
     for (const [routePath, content] of stubs) {
+      const resolved = await resolveTemplate(templateDir, { path: routePath, content });
       const fullPath = join(outputDir, routePath);
-      await writeFileWithDir(fullPath, content, outputDir);
+      await writeFileWithDir(fullPath, resolved, outputDir);
       totalFiles++;
     }
 
     // Admin pages
     for (const page of adminPages) {
+      const content = await resolveTemplate(templateDir, page);
       const fullPath = join(outputDir, page.path);
-      await writeFileWithDir(fullPath, page.content, outputDir);
+      await writeFileWithDir(fullPath, content, outputDir);
       totalFiles++;
     }
 
     // Auth files
     for (const file of authFiles) {
+      const content = await resolveTemplate(templateDir, file);
       const fullPath = join(outputDir, file.path);
-      await writeFileWithDir(fullPath, file.content, outputDir);
+      await writeFileWithDir(fullPath, content, outputDir);
       totalFiles++;
     }
 
     // Docker files
     for (const file of dockerFiles) {
+      const content = await resolveTemplate(templateDir, file);
       const fullPath = join(outputDir, file.path);
-      await writeFileWithDir(fullPath, file.content, outputDir);
+      await writeFileWithDir(fullPath, content, outputDir);
       totalFiles++;
     }
 
