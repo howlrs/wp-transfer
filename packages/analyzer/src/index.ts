@@ -149,3 +149,32 @@ export {
   generateI18nScaffold,
   type I18nScaffoldInput,
 } from "./i18n-scaffold-generator.js";
+
+export {
+  detectMultisite,
+} from "./multisite-detector.js";
+
+export {
+  mergeUsers,
+  type UserMergeResult,
+} from "./user-merger.js";
+
+export {
+  normalizeMedia,
+  type MediaNormalizeResult,
+  type RemotePattern,
+} from "./media-normalizer.js";
+
+export {
+  rewriteCrossSiteUrls,
+  type RewriteResult,
+} from "./cross-site-url-rewriter.js";
+
+export {
+  generateMultisitePrismaSchema,
+} from "./multisite-prisma-generator.js";
+
+export {
+  generateMultisiteScaffold,
+  type MultisiteScaffoldInput,
+} from "./multisite-scaffold-generator.js";
