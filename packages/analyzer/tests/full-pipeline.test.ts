@@ -370,12 +370,11 @@ describe("D. API stubs completeness", () => {
     expect(route).toContain("POST");
   });
 
-  it("generates schema-driven GET endpoints for all tables", () => {
+  it("generates schema-driven GET endpoints (co-located or standalone)", () => {
+    // GET endpoints may be co-located with PHP-mapped routes or standalone
+    const allStubCode = [...stubs.values()].join("\n");
     for (const t of tables) {
-      const listRoute = stubs.get(`app/api/${t.name}/route.ts`);
-      expect(listRoute).toBeDefined();
-      expect(listRoute).toContain("GET");
-      expect(listRoute).toContain("findMany");
+      expect(allStubCode).toContain(`prisma.${t.name.split("_").map((p, i) => i === 0 ? p : p.charAt(0).toUpperCase() + p.slice(1)).join("")}.findMany`);
     }
   });
 

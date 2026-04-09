@@ -135,12 +135,12 @@ describe("analyze-php E2E pipeline", () => {
       expect(postRoute).toContain("createMany");
     });
 
-    it("generates schema-driven GET endpoints for tables", () => {
-      // Schema-driven GET endpoints are generated for tables not covered by PHP routes
-      const eventListRoute = stubs.get("app/api/event/route.ts");
-      expect(eventListRoute).toBeDefined();
-      expect(eventListRoute).toContain("GET");
-      expect(eventListRoute).toContain("findMany");
+    it("generates schema-driven GET endpoints co-located with existing routes", () => {
+      // GET endpoints co-locate with existing PHP-mapped routes (e.g., /api/events/)
+      const eventsRoute = stubs.get("app/api/events/route.ts");
+      expect(eventsRoute).toBeDefined();
+      expect(eventsRoute).toContain("GET");
+      expect(eventsRoute).toContain("findMany");
     });
   });
 

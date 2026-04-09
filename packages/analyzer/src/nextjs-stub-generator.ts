@@ -867,14 +867,25 @@ export async function GET(
  */
 function generateGetEndpoints(
   tables: TableDefinition[],
+  existingPaths: Set<string>,
 ): Map<string, string> {
   const getStubs = new Map<string, string>();
 
   for (const table of tables) {
     const resource = table.name;
     const modelName = toPrismaModelName(resource);
-    const listPath = `app/api/${resource}/route.ts`;
-    const detailPath = `app/api/${resource}/[id]/route.ts`;
+
+    // Check if PHP mapping already created a route for this resource
+    // PHP routes use plural forms (e.g., /api/events/) — match by resource prefix
+    const existingListPath = [...existingPaths].find(
+      p => p.startsWith(`app/api/${resource}`) && p.endsWith("/route.ts") && !p.includes("["),
+    );
+    const existingDetailPath = [...existingPaths].find(
+      p => p.startsWith(`app/api/${resource}`) && p.includes("[id]") && p.endsWith("/route.ts"),
+    );
+
+    const listPath = existingListPath ?? `app/api/${resource}/route.ts`;
+    const detailPath = existingDetailPath ?? `app/api/${resource}/[id]/route.ts`;
 
     getStubs.set(listPath, generateListHandler(modelName));
     getStubs.set(detailPath, generateDetailHandler(modelName));
@@ -915,7 +926,8 @@ export function generateApiStubs(
 
   // Add schema-driven GET endpoints
   if (tables && tables.length > 0) {
-    const getStubs = generateGetEndpoints(tables);
+    const existingPaths = new Set(stubs.keys());
+    const getStubs = generateGetEndpoints(tables, existingPaths);
 
     for (const [path, code] of getStubs) {
       const existing = stubs.get(path);

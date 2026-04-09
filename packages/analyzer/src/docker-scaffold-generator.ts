@@ -69,7 +69,7 @@ ${dbService}
       - "3000:3000"
     environment:
       - DATABASE_URL=${dbUrl}
-      - AUTH_SECRET=\${AUTH_SECRET}
+      - AUTH_SECRET=change-me-generate-with-openssl-rand-base64-32
     depends_on:
       db:
         condition: service_healthy
