@@ -1,8 +1,8 @@
 # wp-transfer 引き継ぎ資料
 
-**バージョン:** v0.3.1-alpha
-**日付:** 2026-04-09
-**テスト:** 631 / 631 全パス (55ファイル)
+**バージョン:** v0.4.0-alpha
+**日付:** 2026-04-10
+**テスト:** 831 / 831 全パス (65ファイル)
 **カバレッジ:** 92.1% lines, 81.3% branches
 **リポジトリ:** https://github.com/howlrs/wp-transfer
 **リリース:** https://github.com/howlrs/wp-transfer/releases/tag/v0.3.1-alpha
@@ -53,6 +53,11 @@ wp-transfer analyze --interactive
 
 # テンプレートカスタマイズ
 wp-transfer analyze <file.xml> --templates ./my-templates/
+
+# ワンコマンド移行検証 (生成済みプロジェクト)
+wp-transfer run output/jra-tokyo                  # 全自動: install → Docker → migrate → seed → test
+wp-transfer run output/jra-tokyo --no-docker      # Docker スキップ
+wp-transfer run output/jra-tokyo --open           # テスト後にレポートを開く
 ```
 
 ## 技術スタック
@@ -165,7 +170,7 @@ wp-transfer analyze <file.xml> --templates ./my-templates/
 - DOMPurify sanitization for htmlBlocks
 
 ### テスト・品質基盤
-- **631テスト, 55ファイル, 92.1%カバレッジ**
+- **831テスト, 65ファイル, 92.1%カバレッジ**
 - CLI smokeテスト (--help, analyze実行, エラーケース)
 - 500投稿WXR fixture (544KB) + パフォーマンステスト (150ms)
 - E2E統合テスト (WXR parse → analyze → block convert → scaffold)
@@ -203,17 +208,44 @@ wp-transfer analyze <file.xml> --templates ./my-templates/
 | 17 | E-Phase: ページビルダー/WooCommerce注文/クロス機能/DX | Closed |
 | 18 | Fix: analyze-php品質改善 + AI Assist | Closed |
 | 19 | Fix: AI Assist CLI auth + CRITICAL #6 解消 | Closed |
+| 20 | APIルート CRUD完全性 — GET自動生成 | Closed |
+| 21 | Zodスキーマ自動生成改善 — UPDATE .partial() | Closed |
+| 22 | DELETE soft-delete/hard-delete検出 | Closed |
+| 23 | ループ/バッチ処理検出 — foreach→createMany | Closed |
+| 24 | 生成物セキュリティ強化 — .env廃止, .gitignore | Closed |
+| 25 | Docker/DX改善 — .dockerignore, /api/health | Closed |
+| 26 | pluralize修正 + Yoastプレースホルダー | Closed |
+| 27 | Elementor JSON → React部分変換 | Closed |
+| 28 | analyze-php E2E統合テスト | Closed |
+| 29 | Pre-flight Check + Migration Config | Closed |
+| 30 | ジェネレーター共通基盤リファクタ | Closed |
+| 31 | ACF Options + 大規模サイトストリーミング | Closed |
+| 32 | Playwright テストスイート強化 (API/Auth/Admin) | Closed |
+| 33 | ワンコマンド移行体験 — `run` コマンド | Closed |
+| 34 | package.json 強化 — Playwright/tsx/scripts | Closed |
+| 35 | 移行品質 HTML ダッシュボード | Closed |
+
+### PDCA改善サイクル (v0.3.1 → v0.4.0)
+
+5サイクルのPDCAで Issues #20-#35 を実装:
+- **Cycle 1**: セキュリティ, pluralize修正, 共通基盤 (#24,#26,#30)
+- **Cycle 2**: DELETE検出, ループ検出, Docker/DX (#22,#23,#25)
+- **Cycle 3**: GET生成, Zod .optional(), E2Eテスト (#20,#21,#28)
+- **Cycle 4**: Elementor, Pre-flight, ACF Options (#27,#29,#31)
+- **Cycle 5**: Playwright強化, ワンコマンドrun, ダッシュボード (#32,#33,#34,#35)
 
 ## 次フェーズ: 候補
 
+### CLI統合 (未統合の生成済みモジュール)
+- migration-dashboard HTML を analyze-php/analyze コマンドに統合
+- pre-flight checks を analyze-php/analyze 起動時に自動実行
+- migration-config ファイル読み込み (--config フラグ)
+- verify scaffold に API/Auth/Admin テストスペック統合
+- ACF Options extractor を analyze コマンドに統合
+
 ### 実運用強化
-- ページビルダーコンテンツの部分変換 (Elementor JSON → React コンポーネント)
-- ACF Options Page 対応 (WXR外のサイトレベルメタ)
 - Pods Table Storage 対応 (独自テーブルからのデータ抽出)
 - WooCommerce REST API OAuth 1.0a 認証 (HTTP環境対応)
-
-### スケーラビリティ
-- 大規模サイト対応の強化 (10万投稿以上のストリーミング処理)
 - 差分移行 (初回移行後の増分更新)
 
 ### エコシステム

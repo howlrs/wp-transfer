@@ -25,7 +25,14 @@ A CLI tool that gives agencies and development teams a head start on WordPress-t
 - **Interactive mode** -- `--interactive` flag for guided analysis setup
 - **Template customization** -- `--templates` flag for scaffold template overrides
 - **Blog scaffold from WXR** -- Post pages, archive, category, 404, Portable Text renderer
-- **Playwright verify scaffold** -- Smoke tests for generated pages
+- **Elementor conversion** -- Elementor JSON to React JSX (8 widget types) + migration guidance for complex widgets
+- **Playwright verify scaffold** -- Smoke, API, Auth, Admin test generation with HTML + JUnit reporters
+- **Migration dashboard** -- Standalone HTML report with metrics, CRUD coverage, security issues
+- **Pre-flight checks** -- Node.js version, source/output validation, Docker availability
+- **Migration config** -- JSON config file support with `${ENV_VAR}` expansion
+- **ACF Options extractor** -- REST API extraction of site-level ACF Options Page data
+- **Large-site streaming** -- BatchCollector for memory-safe processing of 100K+ posts
+- **One-command verification** -- `run` command: npm ci → Docker → migrate → seed → Playwright test
 - **Secret scanner** -- Detects AWS keys, GitHub tokens, Stripe keys, WP salts
 - **Security hardened** -- SSRF defense, credential protection, input sanitization, path traversal protection
 
@@ -94,6 +101,33 @@ Options:
 |------|-------------|
 | `--schema` | Path to database schema doc (Markdown) for enriched Prisma output |
 | `--output` | Output directory (default: `./wp-transfer-output`) |
+| `--ai-assist` | Use Claude API for high-quality route generation |
+| `--ai-model` | Claude model to use (default: `claude-sonnet-4`) |
+| `--interactive` | Guided setup wizard |
+| `--templates` | Custom template directory for scaffold overrides |
+
+### `run <project-dir>`
+
+Run a generated Next.js project end-to-end: install dependencies, start Docker, run migrations, seed data, and execute Playwright tests.
+
+```bash
+# Full pipeline
+wp-transfer run output/jra-tokyo
+
+# Without Docker (use existing database)
+wp-transfer run output/jra-tokyo --no-docker
+
+# Open HTML report after tests
+wp-transfer run output/jra-tokyo --open
+```
+
+Options:
+
+| Flag | Description |
+|------|-------------|
+| `--no-docker` | Skip Docker Compose (use existing database) |
+| `--no-test` | Skip Playwright tests |
+| `--open` | Open test report in browser after completion |
 
 ## Architecture
 
@@ -126,7 +160,7 @@ git clone https://github.com/howlrs/wp-transfer.git
 cd wp-transfer
 pnpm install
 
-npx vitest run          # 631 tests
+npx vitest run          # 831 tests
 pnpm -r typecheck       # typecheck all packages
 ```
 
@@ -136,4 +170,4 @@ MIT
 
 ## Status
 
-**v0.3.1-alpha** -- All phases complete: Phase 1 (core), C-phase (WooCommerce, Multisite, i18n), E/G-phase (ACF Pro, Meta Box, Pods, page builder, WooCommerce orders, cross-features, DX), AI Assist (Claude Code CLI auth, zero additional cost). 631 tests, 19 issues closed. See [Releases](https://github.com/howlrs/wp-transfer/releases) and `HANDOFF.md` for details.
+**v0.4.0-alpha** -- All phases complete plus 5 PDCA improvement cycles. 831 tests (65 files), 35 issues closed. New in v0.4: Elementor conversion, one-command `run`, migration dashboard, pre-flight checks, enhanced Playwright test generation (API/Auth/Admin), soft-delete detection, loop/batch processing, schema-driven GET endpoints. See `HANDOFF.md` for details.
