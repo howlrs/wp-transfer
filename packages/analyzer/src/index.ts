@@ -201,3 +201,8 @@ export {
   type MetaBoxDetectionResult,
   type MetaBoxField,
 } from "./metabox-detector.js";
+
+export {
+  detectPods,
+  type PodsDetectionResult,
+} from "./pods-detector.js";

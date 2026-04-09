@@ -28,6 +28,7 @@ import {
   resolveTemplate,
   detectPageBuilder,
   detectMetaBox,
+  detectPods,
 } from "@wp-transfer/analyzer";
 import type { PluginEntry } from "@wp-transfer/core";
 
@@ -385,6 +386,13 @@ async function analyzeFromWxr(
   const metaBoxResult = detectMetaBox(wxr.posts);
   if (metaBoxResult.detected) {
     consola.success(`Custom fields detected: ${metaBoxResult.fieldCount} fields (possible Meta Box)`);
+  }
+
+  // Pods: detect Pods framework fields
+  const podsResult = detectPods(wxr.posts);
+  if (podsResult.detected) {
+    consola.success(`Pods detected: ${podsResult.fieldCount} fields (${podsResult.storageMode} storage)`);
+    if (podsResult.warning) consola.warn(podsResult.warning);
   }
 
   // Estimate cost (no plugin data from WXR)

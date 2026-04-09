@@ -128,4 +128,10 @@ export const pluginRegistry: Record<string, PluginRegistryEntry> = {
     difficulty: 2,
     estimatedHours: 8,
   },
+  pods: {
+    category: "custom-fields",
+    migrationStrategy: "manual",
+    difficulty: 4,
+    estimatedHours: 24,
+  },
 };
