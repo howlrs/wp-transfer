@@ -227,3 +227,15 @@ export {
   augmentI18nForMultisite,
   type CrossFeatureFlags,
 } from "./cross-feature-utils.js";
+
+export {
+  generateRouteWithAi,
+  generateRoutesWithAi,
+  maskCredentials,
+  stripMarkdown,
+  validateRouteOutput,
+  buildPrompt,
+  type AiRouteGeneratorOptions,
+  type AiRouteInput,
+  type AiRouteOutput,
+} from "./ai-route-generator.js";
