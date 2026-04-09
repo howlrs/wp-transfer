@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { generateAdminScaffold } from "../src/admin-scaffold-generator.js";
+import { generateAdminScaffold, pluralize } from "../src/admin-scaffold-generator.js";
 import type { AdminPage } from "../src/admin-scaffold-generator.js";
 import type { PhpFileAnalysis } from "../src/php-analyzer.js";
 import type { TableDefinition, ColumnDefinition } from "../src/schema-to-prisma.js";
@@ -210,7 +210,7 @@ describe("Admin Scaffold Generator", () => {
       const tables = [makeTable("information")];
 
       const pages = generateAdminScaffold(analyses, tables);
-      const newPage = findPage(pages, "informations/new/page.tsx");
+      const newPage = findPage(pages, "information/new/page.tsx");
 
       expect(newPage).toBeDefined();
       expect(newPage!.type).toBe("form");
@@ -323,5 +323,77 @@ describe("Admin Scaffold Generator", () => {
       const dashboard = findPage(pages, "(admin)/page.tsx");
       expect(dashboard).toBeDefined();
     });
+  });
+});
+
+describe("pluralize", () => {
+  it("pluralizes regular words", () => {
+    expect(pluralize("event")).toBe("events");
+    expect(pluralize("user")).toBe("users");
+    expect(pluralize("post")).toBe("posts");
+  });
+
+  it("pluralizes words ending in -y (consonant + y)", () => {
+    expect(pluralize("category")).toBe("categories");
+    expect(pluralize("lottery")).toBe("lotteries");
+    expect(pluralize("entry")).toBe("entries");
+  });
+
+  it("pluralizes words ending in -s, -sh, -ch, -x, -z", () => {
+    expect(pluralize("status")).toBe("statuses");
+    expect(pluralize("brush")).toBe("brushes");
+    expect(pluralize("match")).toBe("matches");
+    expect(pluralize("box")).toBe("boxes");
+    expect(pluralize("quiz")).toBe("quizes");
+  });
+
+  it("handles irregular words", () => {
+    expect(pluralize("person")).toBe("people");
+    expect(pluralize("child")).toBe("children");
+    expect(pluralize("information")).toBe("information");
+    expect(pluralize("analysis")).toBe("analyses");
+  });
+
+  it("does not double-pluralize words ending in -y with a vowel before it", () => {
+    expect(pluralize("day")).toBe("days");
+    expect(pluralize("key")).toBe("keys");
+  });
+});
+
+describe("generated URLs use correct plurals (no double-s)", () => {
+  it("list page URLs do not have double-s", () => {
+    const analyses = [makeAnalysis({ fileName: "page-event-list.php" })];
+    const tables = [makeTable("event")];
+    const pages = generateAdminScaffold(analyses, tables);
+    const listPage = findPage(pages, "events/page.tsx");
+
+    expect(listPage).toBeDefined();
+    expect(listPage!.path).toBe("app/(admin)/events/page.tsx");
+    expect(listPage!.path).not.toContain("eventss");
+  });
+
+  it("form page URLs use correct plurals for -y words", () => {
+    const analyses = [
+      makeAnalysis({
+        fileName: "page-lottery-list.php",
+      }),
+    ];
+    const tables = [makeTable("lottery")];
+    const pages = generateAdminScaffold(analyses, tables);
+    const listPage = findPage(pages, "lotteries/page.tsx");
+
+    expect(listPage).toBeDefined();
+    expect(listPage!.path).toBe("app/(admin)/lotteries/page.tsx");
+    expect(listPage!.path).not.toContain("lotterys");
+  });
+
+  it("generated content URLs do not contain double-s patterns", () => {
+    const analyses = [makeAnalysis({ fileName: "page-event-list.php" })];
+    const tables = [makeTable("event")];
+    const pages = generateAdminScaffold(analyses, tables);
+    const listPage = findPage(pages, "events/page.tsx");
+
+    expect(listPage!.content).not.toMatch(/\/events+s\//);
+    expect(listPage!.content).not.toMatch(/\/events+s"/);
   });
 });
