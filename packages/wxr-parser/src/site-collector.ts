@@ -11,6 +11,7 @@ import type { WxrCollector } from "./stream-parser.js";
 export class SiteCollector implements WxrCollector {
   siteTitle = "";
   siteUrl = "";
+  blogUrl = "";
   wpVersion = "";
 
   private textBuffer = "";
@@ -70,6 +71,9 @@ export class SiteCollector implements WxrCollector {
         break;
       case "wp:base_site_url":
         this.siteUrl = text;
+        break;
+      case "wp:base_blog_url":
+        this.blogUrl = text;
         break;
       case "generator": {
         const match = text.match(/\?v=([\d.]+)/);

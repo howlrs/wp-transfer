@@ -16,6 +16,7 @@ export interface WxrParseError {
 export interface WxrParseResult {
   siteTitle: string;
   siteUrl: string;
+  blogUrl: string;
   wpVersion: string;
   posts: WpPost[];
   users: WpUser[];
@@ -59,6 +60,7 @@ export async function parseWxr(
   return {
     siteTitle: siteCollector.siteTitle,
     siteUrl: siteCollector.siteUrl,
+    blogUrl: siteCollector.blogUrl,
     wpVersion: siteCollector.wpVersion,
     posts: postCollector.posts,
     users: userCollector.users,
