@@ -220,6 +220,62 @@ describe("generatePrismaSchema", () => {
   });
 });
 
+describe("generatePrismaSchema PK fallback", () => {
+  it("adds @id fallback to 'id' column when no PRIMARY KEY defined", () => {
+    const tables: { name: string; columns: { name: string; type: string; nullable: boolean; isPrimary: boolean; isAutoIncrement: boolean; comment: string }[]; note: string }[] = [{
+      name: "sessions",
+      columns: [
+        { name: "id", type: "String", nullable: true, isPrimary: false, isAutoIncrement: false, comment: "" },
+        { name: "data", type: "String", nullable: true, isPrimary: false, isAutoIncrement: false, comment: "" },
+      ],
+      note: "",
+    }];
+    const schema = generatePrismaSchema(tables);
+    expect(schema).toContain("id  String  @id");
+    expect(schema).not.toContain("id  String?  @id");
+  });
+
+  it("adds @id fallback to table_name_id column when no PK and no 'id'", () => {
+    const tables: { name: string; columns: { name: string; type: string; nullable: boolean; isPrimary: boolean; isAutoIncrement: boolean; comment: string }[]; note: string }[] = [{
+      name: "gps_area",
+      columns: [
+        { name: "area_id", type: "Int", nullable: false, isPrimary: false, isAutoIncrement: false, comment: "" },
+        { name: "name", type: "String", nullable: true, isPrimary: false, isAutoIncrement: false, comment: "" },
+      ],
+      note: "",
+    }];
+    const schema = generatePrismaSchema(tables);
+    expect(schema).toContain("area_id  Int  @id");
+  });
+
+  it("adds @@id for junction tables with multiple _id columns and no PK", () => {
+    const tables: { name: string; columns: { name: string; type: string; nullable: boolean; isPrimary: boolean; isAutoIncrement: boolean; comment: string }[]; note: string }[] = [{
+      name: "m_coupon_target_stores",
+      columns: [
+        { name: "coupon_id", type: "Int", nullable: false, isPrimary: false, isAutoIncrement: false, comment: "" },
+        { name: "store_id", type: "Int", nullable: false, isPrimary: false, isAutoIncrement: false, comment: "" },
+      ],
+      note: "",
+    }];
+    const schema = generatePrismaSchema(tables);
+    expect(schema).toContain("@@id([coupon_id, store_id])");
+  });
+
+  it("promotes nullable id to non-nullable when used as PK fallback", () => {
+    const tables: { name: string; columns: { name: string; type: string; nullable: boolean; isPrimary: boolean; isAutoIncrement: boolean; comment: string }[]; note: string }[] = [{
+      name: "test",
+      columns: [
+        { name: "id", type: "Int", nullable: true, isPrimary: false, isAutoIncrement: false, comment: "" },
+        { name: "value", type: "String", nullable: true, isPrimary: false, isAutoIncrement: false, comment: "" },
+      ],
+      note: "",
+    }];
+    const schema = generatePrismaSchema(tables);
+    expect(schema).toContain("id  Int  @id");
+    expect(schema).not.toContain("id  Int?");
+  });
+});
+
 describe("detectRelations", () => {
   it("detects event_id in event_slot generates Event relation", () => {
     const tables = parseDbSchemaMarkdown(FIXTURE);

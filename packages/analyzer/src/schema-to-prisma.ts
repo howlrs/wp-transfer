@@ -275,6 +275,58 @@ export function detectRelations(tables: TableDefinition[]): RelationDefinition[]
   return relations;
 }
 
+// ── Primary key fallback ──
+
+function ensurePrimaryKey(table: TableDefinition): { columns: ColumnDefinition[]; compositeId: string[] | null } {
+  if (table.columns.some((c) => c.isPrimary)) {
+    return { columns: table.columns, compositeId: null };
+  }
+
+  const columns = table.columns.map((c) => ({ ...c }));
+
+  // Try 1: column named "id"
+  const idCol = columns.find((c) => c.name === "id");
+  if (idCol) {
+    idCol.isPrimary = true;
+    idCol.nullable = false;
+    return { columns, compositeId: null };
+  }
+
+  // Try 2: multiple _id columns → composite key (junction table)
+  const idCols = columns.filter((c) => c.name.endsWith("_id"));
+  if (idCols.length >= 2) {
+    return { columns, compositeId: idCols.map((c) => c.name) };
+  }
+
+  // Try 3: column named like "xxx_id" matching part of table name
+  const tableWords = table.name.split("_");
+  for (const col of columns) {
+    if (col.name.endsWith("_id")) {
+      const prefix = col.name.slice(0, -3);
+      if (tableWords.includes(prefix) || table.name.includes(prefix)) {
+        col.isPrimary = true;
+        col.nullable = false;
+        return { columns, compositeId: null };
+      }
+    }
+  }
+
+  // Try 4: single _id column
+  if (idCols.length === 1) {
+    idCols[0]!.isPrimary = true;
+    idCols[0]!.nullable = false;
+    return { columns, compositeId: null };
+  }
+
+  // Last resort: first column
+  if (columns.length > 0) {
+    columns[0]!.isPrimary = true;
+    columns[0]!.nullable = false;
+  }
+
+  return { columns, compositeId: null };
+}
+
 // ── Prisma schema generator ──
 
 function toPrismaModelName(tableName: string): string {
@@ -375,9 +427,10 @@ export function generatePrismaSchema(
     }
 
     const modelName = toPrismaModelName(table.name);
+    const { columns: resolvedColumns, compositeId } = ensurePrimaryKey(table);
     lines.push(`model ${modelName} {`);
 
-    for (const col of table.columns) {
+    for (const col of resolvedColumns) {
       lines.push(prismaFieldLine(col));
     }
 
@@ -390,7 +443,7 @@ export function generatePrismaSchema(
         const parentModel = toPrismaModelName(rel.parentTable);
         // Determine relation field name from the FK column (strip _id)
         const relationField = rel.childColumn.slice(0, -3); // e.g. "event_id" -> "event"
-        const col = table.columns.find((c) => c.name === rel.childColumn);
+        const col = resolvedColumns.find((c) => c.name === rel.childColumn);
         const nullable = col?.nullable ?? false;
         const typeStr = nullable ? `${parentModel}?` : parentModel;
         lines.push(
@@ -417,6 +470,10 @@ export function generatePrismaSchema(
     // Add @@index for FK columns that have relations
     for (const rel of myChildRels) {
       lines.push(`  @@index([${rel.childColumn}])`);
+    }
+
+    if (compositeId) {
+      lines.push(`  @@id([${compositeId.join(", ")}])`);
     }
 
     // Add @@map to preserve original table name
