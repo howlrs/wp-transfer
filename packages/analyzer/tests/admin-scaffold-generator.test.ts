@@ -99,6 +99,25 @@ describe("Admin Scaffold Generator", () => {
       expect(formPage!.content).toContain("新規作成");
     });
 
+    it("generates form fields from table columns when analysis has no input params", () => {
+      const analyses = [
+        makeAnalysis({
+          fileName: "page-event-copy.php",
+          inputParams: [],
+        }),
+      ];
+      const tables = [makeTable("event")];
+
+      const pages = generateAdminScaffold(analyses, tables);
+      const copyPage = findPage(pages, "events/[id]/copy/page.tsx");
+
+      expect(copyPage).toBeDefined();
+      expect(copyPage!.type).toBe("form");
+      // Should have fields from table columns (title, status) but not auto-increment PK
+      expect(copyPage!.content).toContain("title");
+      expect(copyPage!.content).toContain("status");
+    });
+
     it("generates an edit form page from page-*-update.php", () => {
       const analyses = [
         makeAnalysis({

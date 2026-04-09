@@ -315,7 +315,10 @@ function generateFormPage(
         label: col?.comment ?? fieldLabel(param.name),
       });
     }
-  } else if (table) {
+  }
+
+  // Fallback: if no fields from analysis params, use table columns
+  if (formFields.length === 0 && table) {
     for (const col of table.columns) {
       if (col.isPrimary && col.isAutoIncrement) continue;
       formFields.push({
