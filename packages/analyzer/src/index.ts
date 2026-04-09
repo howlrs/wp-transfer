@@ -220,3 +220,10 @@ export {
 export {
   generateWooOrderPrismaSchema,
 } from "./woo-order-prisma-generator.js";
+
+export {
+  augmentWooPrismaForMultisite,
+  augmentWooScaffoldForI18n,
+  augmentI18nForMultisite,
+  type CrossFeatureFlags,
+} from "./cross-feature-utils.js";
