@@ -241,7 +241,7 @@ describe("extractSeoMeta (Rank Math support)", () => {
   });
 });
 
-describe("resolveYoastPlaceholders — page and focuskw", () => {
+describe("resolveYoastPlaceholders - page and focuskw", () => {
   it("resolves %%page%% to empty string (runtime placeholder)", () => {
     const context = {
       postTitle: "My Post",
@@ -262,14 +262,17 @@ describe("resolveYoastPlaceholders — page and focuskw", () => {
     expect(result).toBe("My Post -");
   });
 
-  it("resolves %%excerpt%% from context", () => {
+  it("resolves %%page%% and %%focuskw%% alongside other placeholders", () => {
     const context = {
       postTitle: "My Post",
       siteName: "My Site",
       separator: "|",
-      excerpt: "A short summary",
+      primaryCategory: "Tech",
     };
-    const result = resolveYoastPlaceholders("%%excerpt%% %%sep%% %%sitename%%", context);
-    expect(result).toBe("A short summary | My Site");
+    const result = resolveYoastPlaceholders(
+      "%%title%% %%sep%% %%primary_category%% %%page%% %%focuskw%% %%sitename%%",
+      context,
+    );
+    expect(result).toBe("My Post | Tech My Site");
   });
 });

@@ -395,6 +395,40 @@ function detectFileUploads(params: InputParam[]): FileUploadInfo {
   };
 }
 
+// ── Delete pattern detection ──
+
+interface DeletePattern {
+  type: "hard-delete" | "soft-delete";
+  /** For soft-delete: the column being updated */
+  column?: string;
+  /** For soft-delete: the value being set */
+  value?: string;
+}
+
+function detectDeletePattern(analysis: PhpFileAnalysis): DeletePattern {
+  // Check if the PHP file uses DELETE FROM (hard-delete)
+  const hasDeleteFrom = analysis.dbOperations.some(op => op.type === "DELETE");
+  if (hasDeleteFrom) {
+    return { type: "hard-delete" };
+  }
+
+  // Check for soft-delete patterns: UPDATE with status/flag columns
+  const softDeleteColumns = ["status", "is_active", "is_deleted", "deleted_at", "blacklist", "invalid"];
+  for (const op of analysis.dbOperations) {
+    if (op.type === "UPDATE") {
+      for (const col of op.columns) {
+        const lower = col.toLowerCase();
+        if (softDeleteColumns.includes(lower)) {
+          return { type: "soft-delete", column: col, value: lower === "deleted_at" ? "new Date()" : "0" };
+        }
+      }
+    }
+  }
+
+  // Default: if HTTP method is DELETE but no DELETE FROM found, assume soft-delete
+  return { type: "hard-delete" };
+}
+
 // ── Route handler generation ──
 
 function generateRouteHandler(
@@ -536,10 +570,17 @@ function generateRouteHandler(
   );
 
   // Generate transaction-wrapped or direct Prisma calls
+  // When HTTP method is DELETE but SQL operation is not DELETE, treat as DELETE
+  // so detectDeletePattern can identify soft-delete vs hard-delete.
+  const effectiveOp =
+    mapping.method === "DELETE" && op && op.type !== "DELETE"
+      ? { ...op, type: "DELETE" as const }
+      : op;
+
   if (txInfo.needed) {
     generateTransactionBody(lines, analysis, txInfo, modelName, hasBody, hasPathParams, pathParams);
-  } else if (op) {
-    generateDirectBody(lines, op, modelName, hasBody, hasPathParams, pathParams);
+  } else if (effectiveOp) {
+    generateDirectBody(lines, effectiveOp, analysis, modelName, hasBody, hasPathParams, pathParams);
   } else {
     lines.push("");
     lines.push(
@@ -589,11 +630,21 @@ function generateTransactionBody(
     lines.push("        },");
     lines.push("      });");
     lines.push("");
-    lines.push(`      await tx.${childModel}.create({`);
-    lines.push("        data: {");
-    lines.push(`          ${txInfo.childFkColumn ?? txInfo.parentTable + "_id"}: parent.id,`);
-    lines.push("        },");
-    lines.push("      });");
+    // If child INSERT was inside a loop, use createMany for batch processing
+    const childOpsInLoop = analysis.dbOperations.some(
+      (op) => op.type === "INSERT" && op.table === txInfo.childTable && op.inLoop,
+    );
+    if (childOpsInLoop) {
+      lines.push(`      await tx.${childModel}.createMany({`);
+      lines.push("        data: data.items, // TODO: Extract array field from request body");
+      lines.push("      });");
+    } else {
+      lines.push(`      await tx.${childModel}.create({`);
+      lines.push("        data: {");
+      lines.push(`          ${txInfo.childFkColumn ?? txInfo.parentTable + "_id"}: parent.id,`);
+      lines.push("        },");
+      lines.push("      });");
+    }
     lines.push("");
     lines.push("      return parent;");
     lines.push("    });");
@@ -661,6 +712,7 @@ function generateTransactionBody(
 function generateDirectBody(
   lines: string[],
   op: { type: string; table: string; columns: string[] },
+  analysis: PhpFileAnalysis,
   modelName: string,
   hasBody: boolean,
   hasPathParams: boolean,
@@ -698,17 +750,36 @@ function generateDirectBody(
       lines.push("    return NextResponse.json(result);");
       break;
 
-    case "DELETE":
-      lines.push(`    await prisma.${modelName}.delete({`);
-      if (hasPathParams) {
-        lines.push(`      where: { id: ${pathParams[0]} },`);
+    case "DELETE": {
+      const deletePattern = detectDeletePattern(analysis);
+      if (deletePattern.type === "soft-delete" && deletePattern.column) {
+        lines.push(`    // Soft-delete: updating ${deletePattern.column} instead of removing record`);
+        lines.push(`    const result = await prisma.${modelName}.update({`);
+        if (hasPathParams) {
+          lines.push(`      where: { id: ${pathParams[0]} },`);
+        } else {
+          lines.push("      where: { id: parseInt(request.nextUrl.searchParams.get('id') ?? '0') },");
+        }
+        lines.push("      data: {");
+        lines.push(`        ${deletePattern.column}: ${deletePattern.value},`);
+        lines.push("      },");
+        lines.push("    });");
+        lines.push("");
+        lines.push("    return NextResponse.json(result);");
       } else {
-        lines.push("      where: { id: parseInt(request.nextUrl.searchParams.get('id') ?? '0') },");
+        // Hard-delete (existing behavior)
+        lines.push(`    await prisma.${modelName}.delete({`);
+        if (hasPathParams) {
+          lines.push(`      where: { id: ${pathParams[0]} },`);
+        } else {
+          lines.push("      where: { id: parseInt(request.nextUrl.searchParams.get('id') ?? '0') },");
+        }
+        lines.push("    });");
+        lines.push("");
+        lines.push('    return NextResponse.json({ success: true });');
       }
-      lines.push("    });");
-      lines.push("");
-      lines.push('    return NextResponse.json({ success: true });');
       break;
+    }
 
     case "SELECT":
       lines.push(`    const result = await prisma.${modelName}.findUnique({`);

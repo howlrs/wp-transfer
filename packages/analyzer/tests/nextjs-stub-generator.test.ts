@@ -13,6 +13,7 @@ function makeAnalysis(overrides: Partial<PhpFileAnalysis>): PhpFileAnalysis {
     inputParams: [],
     outputType: "redirect",
     securityIssues: [],
+    phpVersionHints: [],
     ...overrides,
   };
 }
@@ -31,6 +32,7 @@ function makeDbOp(overrides: Partial<DbOperation>): DbOperation {
     type: "INSERT",
     table: "event",
     columns: ["title"],
+    inLoop: false,
     ...overrides,
   };
 }
@@ -476,5 +478,68 @@ describe("Improvement 4: Zod Schema for PUT/DELETE", () => {
 
     // DELETE handler must use .delete(), not .update()
     expect(code).toContain(".delete(");
+  });
+});
+
+describe("DELETE pattern detection", () => {
+  it("generates .delete() for hard-delete (DELETE FROM)", () => {
+    const analysis = makeAnalysis({
+      fileName: "event-slot-delete.php",
+      dbOperations: [makeDbOp({ type: "DELETE", table: "event_slot", columns: [] })],
+    });
+    const stubs = generateApiStubs([analysis]);
+    const code = stubs.values().next().value;
+    expect(code).toContain(".delete(");
+    expect(code).not.toContain(".update(");
+  });
+
+  it("generates .update() for soft-delete (UPDATE blacklist column on DELETE route)", () => {
+    const analysis = makeAnalysis({
+      fileName: "user-blacklist-out.php",
+      dbOperations: [makeDbOp({ type: "UPDATE", table: "user", columns: ["blacklist", "updated_at"] })],
+      inputParams: [],
+    });
+    const stubs = generateApiStubs([analysis]);
+    const code = stubs.values().next().value;
+    expect(code).toContain("Soft-delete");
+    expect(code).toContain(".update(");
+  });
+});
+
+describe("Improvement 5: Loop/Batch Processing Detection", () => {
+  it("generates createMany when child INSERT is inLoop", () => {
+    const analysis = makeAnalysis({
+      fileName: "insert.php",
+      inputParams: [makeParam({ name: "title" })],
+      dbOperations: [
+        makeDbOp({ type: "INSERT", table: "event", columns: ["title"], inLoop: false }),
+        makeDbOp({ type: "INSERT", table: "event_slot", columns: ["event_id", "time_stamp"], inLoop: true }),
+      ],
+    });
+
+    const stubs = generateApiStubs([analysis]);
+    const code = stubs.get("app/api/events/route.ts")!;
+
+    expect(code).toContain("prisma.$transaction");
+    expect(code).toContain("tx.eventSlot.createMany");
+    expect(code).toContain("data.items");
+    expect(code).not.toContain("tx.eventSlot.create({");
+  });
+
+  it("generates single create when child INSERT is not inLoop", () => {
+    const analysis = makeAnalysis({
+      fileName: "insert.php",
+      inputParams: [makeParam({ name: "title" })],
+      dbOperations: [
+        makeDbOp({ type: "INSERT", table: "event", columns: ["title"], inLoop: false }),
+        makeDbOp({ type: "INSERT", table: "event_slot", columns: ["event_id", "time_stamp"], inLoop: false }),
+      ],
+    });
+
+    const stubs = generateApiStubs([analysis]);
+    const code = stubs.get("app/api/events/route.ts")!;
+
+    expect(code).toContain("tx.eventSlot.create({");
+    expect(code).not.toContain("createMany");
   });
 });
