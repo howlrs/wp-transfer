@@ -1,7 +1,8 @@
 /**
  * Docker Scaffold Generator
  *
- * Generates Docker Compose, Dockerfile, and .env files for the Next.js project.
+ * Generates Docker Compose, Dockerfile, .env.example, and .gitignore
+ * for the Next.js project.
  */
 
 // ── Types ──
@@ -120,20 +121,6 @@ CMD ["node", "server.js"]
 `;
 }
 
-function generateEnv(
-  projectName: string,
-  dbProvider: "mysql" | "postgresql",
-): string {
-  const dbUrl =
-    dbProvider === "mysql"
-      ? `mysql://appuser:apppassword@db:3306/${projectName}`
-      : `postgresql://appuser:apppassword@db:5432/${projectName}`;
-
-  return `DATABASE_URL="${dbUrl}"
-AUTH_SECRET="${generateRandomSecret()}"
-`;
-}
-
 function generateEnvExample(
   projectName: string,
   dbProvider: "mysql" | "postgresql",
@@ -143,19 +130,34 @@ function generateEnvExample(
       ? `mysql://USER:PASSWORD@HOST:3306/${projectName}`
       : `postgresql://USER:PASSWORD@HOST:5432/${projectName}`;
 
-  return `DATABASE_URL="${dbUrl}"
+  return `# Database connection
+DATABASE_URL="${dbUrl}"
+
+# Auth secret — generate with: openssl rand -base64 32
 AUTH_SECRET="your-secret-here"
 `;
 }
 
-function generateRandomSecret(): string {
-  // Generate a deterministic-looking placeholder that is unique per generation
-  const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-  let result = "";
-  for (let i = 0; i < 32; i++) {
-    result += chars[Math.floor(Math.random() * chars.length)];
-  }
-  return result;
+function generateGitignore(): string {
+  return `# dependencies
+node_modules/
+
+# next.js
+.next/
+out/
+
+# env files
+.env
+.env.local
+.env.*.local
+
+# misc
+*.pem
+.DS_Store
+
+# debug
+npm-debug.log*
+`;
 }
 
 // ── Public API ──
@@ -174,12 +176,12 @@ export function generateDockerScaffold(
       content: generateDockerfile(),
     },
     {
-      path: ".env",
-      content: generateEnv(projectName, dbProvider),
-    },
-    {
       path: ".env.example",
       content: generateEnvExample(projectName, dbProvider),
+    },
+    {
+      path: ".gitignore",
+      content: generateGitignore(),
     },
   ];
 }

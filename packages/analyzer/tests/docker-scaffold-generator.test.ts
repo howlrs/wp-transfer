@@ -12,7 +12,7 @@ function findFile(files: DockerScaffoldFile[], pathPattern: string): DockerScaff
 
 describe("Docker Scaffold Generator", () => {
   describe("file generation", () => {
-    it("generates 4 files (docker-compose, Dockerfile, .env, .env.example)", () => {
+    it("generates 4 files (docker-compose, Dockerfile, .env.example, .gitignore)", () => {
       const files = generateDockerScaffold("my-project", "mysql");
       expect(files).toHaveLength(4);
     });
@@ -29,16 +29,22 @@ describe("Docker Scaffold Generator", () => {
       expect(dockerfile).toBeDefined();
     });
 
-    it("generates .env", () => {
+    it("does NOT generate .env (security: no hardcoded secrets)", () => {
       const files = generateDockerScaffold("my-project", "mysql");
       const envFile = findFile(files, ".env");
-      expect(envFile).toBeDefined();
+      expect(envFile).toBeUndefined();
     });
 
     it("generates .env.example", () => {
       const files = generateDockerScaffold("my-project", "mysql");
       const envExample = findFile(files, ".env.example");
       expect(envExample).toBeDefined();
+    });
+
+    it("generates .gitignore", () => {
+      const files = generateDockerScaffold("my-project", "mysql");
+      const gitignore = findFile(files, ".gitignore");
+      expect(gitignore).toBeDefined();
     });
   });
 
@@ -55,11 +61,11 @@ describe("Docker Scaffold Generator", () => {
       expect(compose.content).toContain("3306:3306");
     });
 
-    it("uses mysql connection string in .env", () => {
+    it("uses mysql connection string in .env.example", () => {
       const files = generateDockerScaffold("my-project", "mysql");
-      const envFile = findFile(files, ".env")!;
-      expect(envFile.content).toContain("mysql://");
-      expect(envFile.content).toContain("my-project");
+      const envExample = findFile(files, ".env.example")!;
+      expect(envExample.content).toContain("mysql://");
+      expect(envExample.content).toContain("my-project");
     });
 
     it("uses mysql healthcheck", () => {
@@ -82,11 +88,11 @@ describe("Docker Scaffold Generator", () => {
       expect(compose.content).toContain("5432:5432");
     });
 
-    it("uses postgresql connection string in .env", () => {
+    it("uses postgresql connection string in .env.example", () => {
       const files = generateDockerScaffold("my-project", "postgresql");
-      const envFile = findFile(files, ".env")!;
-      expect(envFile.content).toContain("postgresql://");
-      expect(envFile.content).toContain("my-project");
+      const envExample = findFile(files, ".env.example")!;
+      expect(envExample.content).toContain("postgresql://");
+      expect(envExample.content).toContain("my-project");
     });
 
     it("uses pg_isready healthcheck", () => {
@@ -141,23 +147,38 @@ describe("Docker Scaffold Generator", () => {
     });
   });
 
-  describe(".env files", () => {
-    it(".env contains AUTH_SECRET", () => {
+  describe(".env.example", () => {
+    it("contains setup comments including openssl rand", () => {
       const files = generateDockerScaffold("my-project", "mysql");
-      const envFile = findFile(files, ".env")!;
-      expect(envFile.content).toContain("AUTH_SECRET=");
+      const envExample = findFile(files, ".env.example")!;
+      expect(envExample.content).toContain("openssl rand -base64 32");
     });
 
-    it(".env.example contains placeholder AUTH_SECRET", () => {
+    it("contains placeholder AUTH_SECRET", () => {
       const files = generateDockerScaffold("my-project", "mysql");
       const envExample = findFile(files, ".env.example")!;
       expect(envExample.content).toContain('AUTH_SECRET="your-secret-here"');
     });
 
-    it(".env.example uses placeholder credentials", () => {
+    it("uses placeholder credentials", () => {
       const files = generateDockerScaffold("my-project", "mysql");
       const envExample = findFile(files, ".env.example")!;
       expect(envExample.content).toContain("USER:PASSWORD");
+    });
+  });
+
+  describe(".gitignore", () => {
+    it("includes .env", () => {
+      const files = generateDockerScaffold("my-project", "mysql");
+      const gitignore = findFile(files, ".gitignore")!;
+      expect(gitignore.content).toContain(".env");
+    });
+
+    it("includes node_modules/ and .next/", () => {
+      const files = generateDockerScaffold("my-project", "mysql");
+      const gitignore = findFile(files, ".gitignore")!;
+      expect(gitignore.content).toContain("node_modules/");
+      expect(gitignore.content).toContain(".next/");
     });
   });
 });
