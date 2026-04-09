@@ -47,13 +47,19 @@ export function detectMultisite(wxrResults: WxrParseResult[]): MultisiteNetwork 
     ? [...mainSites, ...subSites]
     : detected;
 
+  const usedSlugs = new Set<string>();
   const sites: WpSite[] = ordered.map((d, i) => {
     const siteId = i + 1;
     const isMainSite = i === 0 && (d.isMain || mainSites.length === 0);
     const rawSlug = isMainSite
       ? "main"
       : d.subdomain || d.path.replace(/^\/|\/$/g, "") || `site-${siteId}`;
-    const slug = sanitizeSlug(rawSlug) || `site-${siteId}`;
+    let slug = sanitizeSlug(rawSlug) || `site-${siteId}`;
+    // Deduplicate slugs
+    while (usedSlugs.has(slug)) {
+      slug = `${slug}-${siteId}`;
+    }
+    usedSlugs.add(slug);
 
     return {
       siteId,

@@ -18,7 +18,7 @@ export function mergeUsers(sites: SiteUserData[]): UserMergeResult {
   const groups = new Map<string, { siteId: number; user: WpUser }[]>();
   for (const site of sites) {
     for (const user of site.users) {
-      const key = user.email || user.login;
+      const key = (user.email || user.login).toLowerCase();
       if (!key) continue;
       const group = groups.get(key) || [];
       group.push({ siteId: site.siteId, user });
