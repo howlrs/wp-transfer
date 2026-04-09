@@ -142,10 +142,11 @@ wp-transfer analyze-php <dir> [--schema db-schema.md] [--output path]
 - --templates フラグ (テンプレートオーバーライド, パストラバーサル防止)
 
 ### AI Assist (--ai-assist)
-- Claude API によるAPIルート高品質生成
+- **Primary**: Claude Code CLI subprocess (plan auth, 追加コストなし)
+- **Fallback**: Claude API direct call (ANTHROPIC_API_KEY)
 - 機密情報マスキング + マークダウン除去 + 出力検証
 - 指数バックオフリトライ + 並列制御 + 巨大ファイルガード
-- フォールバック: LLM失敗時は静的解析結果を使用
+- JRA tokyo: 24/25ルート AI生成, CRITICAL 6件全解消, $0追加コスト
 
 ### セキュリティ
 - Phase 1: 18件修正 (SSRF, クレデンシャル, SAX, 型安全性)
@@ -192,6 +193,7 @@ wp-transfer analyze-php <dir> [--schema db-schema.md] [--output path]
 | 16 | E-Phase: カスタムフィールド拡充 (ACF Pro/Meta Box/Pods) | Closed |
 | 17 | E-Phase: ページビルダー/WooCommerce注文/クロス機能/DX | Closed |
 | 18 | Fix: analyze-php品質改善 + AI Assist | Closed |
+| 19 | Fix: AI Assist CLI auth + CRITICAL #6 解消 | Closed |
 
 ## 次フェーズ: D. 機能拡充 (次世代)
 
