@@ -8,7 +8,7 @@
     "url": "https://github.com/howlrs/wp-transfer.git"
   },
   "private": true,
-  "exports": { ".": { "import": "./dist/index.js", "types": "./dist/index.d.ts" } },
+  "exports": { ".": { "import": "./src/index.ts", "types": "./dist/index.d.ts" } },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {

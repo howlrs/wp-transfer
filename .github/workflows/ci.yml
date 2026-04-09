@@ -27,10 +27,10 @@ jobs:
         run: pnpm -r typecheck
 
       - name: Test
-        run: npx vitest run
+        run: pnpm test
 
       - name: Coverage
-        run: npx vitest run --coverage
+        run: pnpm vitest run --config vitest.config.ts --coverage
         continue-on-error: true
 
       - name: Security audit

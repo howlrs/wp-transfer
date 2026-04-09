@@ -14,12 +14,11 @@
   "packageManager": "pnpm@10.33.0",
   "scripts": {
     "build": "pnpm -r build",
-    "test": "vitest run",
-    "test:watch": "vitest",
+    "test": "vitest run --config vitest.config.ts",
+    "test:watch": "vitest --config vitest.config.ts",
     "typecheck": "pnpm -r typecheck"
   },
   "devDependencies": {
-    "@vitest/coverage-v8": "^4.1.3",
     "vitest": "^4.1.3"
   }
 }
