@@ -28,3 +28,7 @@ jobs:
 
       - name: Test
         run: npx vitest run
+
+      - name: Coverage
+        run: npx vitest run --coverage
+        continue-on-error: true
