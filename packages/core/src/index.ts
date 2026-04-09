@@ -64,3 +64,19 @@ export type {
 // Security
 export { scanForSecrets } from "./security/secret-scanner.js";
 export type { SecretMatch } from "./security/secret-scanner.js";
+
+// WooCommerce types
+export {
+  WooProductTypeSchema,
+  WooStockStatusSchema,
+  WooProductAttributeSchema,
+  WooProductVariationSchema,
+  WooProductSchema,
+} from "./types/woocommerce.js";
+export type {
+  WooProductType,
+  WooStockStatus,
+  WooProductAttribute,
+  WooProductVariation,
+  WooProduct,
+} from "./types/woocommerce.js";
