@@ -110,4 +110,22 @@ export const pluginRegistry: Record<string, PluginRegistryEntry> = {
     difficulty: 1,
     estimatedHours: 0,
   },
+  "meta-box": {
+    category: "custom-fields",
+    migrationStrategy: "template",
+    difficulty: 3,
+    estimatedHours: 16,
+  },
+  "mb-custom-post-type": {
+    category: "custom-fields",
+    migrationStrategy: "template",
+    difficulty: 3,
+    estimatedHours: 12,
+  },
+  "mb-settings-page": {
+    category: "custom-fields",
+    migrationStrategy: "template",
+    difficulty: 2,
+    estimatedHours: 8,
+  },
 };
