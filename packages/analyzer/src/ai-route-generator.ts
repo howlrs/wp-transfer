@@ -1,15 +1,20 @@
 /**
- * AI-assisted Next.js API route generator using Claude API.
+ * AI-assisted Next.js API route generator.
+ *
+ * Primary: Claude Code CLI subprocess (uses existing plan auth, no extra cost).
+ * Fallback: Claude API direct call (requires ANTHROPIC_API_KEY).
  *
  * Sends PHP source + static analysis context to Claude to produce
  * higher-quality App Router API routes with proper Zod schemas,
  * Prisma operations, and error handling.
  */
 
+import { execFile } from "node:child_process";
+
 // ── Types ──
 
 export interface AiRouteGeneratorOptions {
-  apiKey: string;
+  apiKey?: string;  // optional — CLI auth is primary
   model?: string;
   concurrency?: number;
 }
@@ -173,12 +178,68 @@ class Semaphore {
   }
 }
 
-// ── API call with retry ──
+// ── Claude Code CLI call (primary — uses existing plan auth, no extra cost) ──
+
+async function callClaudeCli(
+  prompt: string,
+): Promise<{ content: string; tokensUsed: number }> {
+  const { spawn } = await import("node:child_process");
+
+  return new Promise((resolve, reject) => {
+    const proc = spawn("claude", ["-p", "--output-format", "text"], {
+      timeout: 120_000,
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+
+    let stdout = "";
+    let stderr = "";
+
+    proc.stdout.on("data", (data: Buffer) => { stdout += data.toString(); });
+    proc.stderr.on("data", (data: Buffer) => { stderr += data.toString(); });
+
+    proc.on("close", (code) => {
+      if (code !== 0) {
+        reject(new Error(`Claude CLI exited with code ${code}: ${stderr}`));
+        return;
+      }
+      resolve({ content: stdout, tokensUsed: 0 });
+    });
+
+    proc.on("error", (error) => {
+      reject(new Error(`Claude CLI failed: ${error.message}`));
+    });
+
+    // Write prompt via stdin and close
+    proc.stdin.write(prompt);
+    proc.stdin.end();
+  });
+}
+
+// ── Check if Claude CLI is available ──
+
+let _cliAvailable: boolean | null = null;
+
+export async function isClaudeCliAvailable(): Promise<boolean> {
+  if (_cliAvailable !== null) return _cliAvailable;
+
+  return new Promise((resolve) => {
+    execFile("claude", ["--version"], { timeout: 5000 }, (error) => {
+      _cliAvailable = !error;
+      resolve(!error);
+    });
+  });
+}
+
+// ── Claude API call (fallback — requires ANTHROPIC_API_KEY) ──
 
 async function callClaudeApi(
   prompt: string,
   options: AiRouteGeneratorOptions,
 ): Promise<{ content: string; tokensUsed: number }> {
+  if (!options.apiKey) {
+    throw new Error("Claude API requires ANTHROPIC_API_KEY");
+  }
+
   const model = options.model ?? DEFAULT_MODEL;
 
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
@@ -227,6 +288,36 @@ async function callClaudeApi(
   throw new Error("Claude API: max retries exceeded");
 }
 
+// ── Unified caller: CLI first, API fallback ──
+
+async function callClaude(
+  prompt: string,
+  options: AiRouteGeneratorOptions,
+): Promise<{ content: string; tokensUsed: number; source: "cli" | "api" }> {
+  // Try Claude Code CLI first (uses plan auth, no extra cost)
+  const cliAvailable = await isClaudeCliAvailable();
+  if (cliAvailable) {
+    try {
+      const result = await callClaudeCli(prompt);
+      return { ...result, source: "cli" };
+    } catch (error) {
+      console.warn(
+        `[ai-route-generator] Claude CLI failed, trying API fallback: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  // Fallback to API
+  if (options.apiKey) {
+    const result = await callClaudeApi(prompt, options);
+    return { ...result, source: "api" };
+  }
+
+  throw new Error(
+    "AI generation unavailable: Claude CLI not found and no ANTHROPIC_API_KEY set",
+  );
+}
+
 // ── Public API ──
 
 export async function generateRouteWithAi(
@@ -254,8 +345,11 @@ export async function generateRouteWithAi(
   const prompt = buildPrompt(input);
 
   try {
-    const { content: raw, tokensUsed } = await callClaudeApi(prompt, options);
+    const { content: raw, tokensUsed, source } = await callClaude(prompt, options);
     const content = stripMarkdown(raw);
+    if (source === "cli") {
+      console.info(`[ai-route-generator] ${input.phpFilePath}: generated via Claude CLI (plan auth)`);
+    }
 
     if (!validateRouteOutput(content)) {
       console.warn(
@@ -294,9 +388,12 @@ export async function generateRoutesWithAi(
     await semaphore.acquire();
     try {
       const result = await generateRouteWithAi(input, options);
-      if (result.tokensUsed) {
+      if (result.tokensUsed != null) {
         totalTokens += result.tokensUsed;
-      } else {
+      }
+      // Detect fallback: content starts with "// Fallback" or "// Static fallback"
+      const isFallback = result.content.startsWith("// Fallback") || result.content.startsWith("// Static fallback");
+      if (isFallback) {
         failures.push(input.phpFilePath);
       }
       return result;

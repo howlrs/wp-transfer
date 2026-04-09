@@ -231,6 +231,7 @@ export {
 export {
   generateRouteWithAi,
   generateRoutesWithAi,
+  isClaudeCliAvailable,
   maskCredentials,
   stripMarkdown,
   validateRouteOutput,

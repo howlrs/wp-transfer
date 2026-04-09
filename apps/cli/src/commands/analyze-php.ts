@@ -396,10 +396,7 @@ export const analyzePhpCommand = defineCommand({
 
     if (aiAssist) {
       const apiKey = process.env["ANTHROPIC_API_KEY"];
-      if (!apiKey) {
-        consola.error("--ai-assist requires ANTHROPIC_API_KEY environment variable");
-        return;
-      }
+      // API key is optional — Claude Code CLI auth is primary
 
       const filesWithOps = custom.filter((a) => a.dbOperations.length > 0);
       if (filesWithOps.length > 0) {
