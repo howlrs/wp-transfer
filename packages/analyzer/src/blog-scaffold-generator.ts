@@ -287,6 +287,7 @@ export function getPostBySlug(slug: string): Post | undefined {
 }
 
 export function getPostsByCategory(categorySlug: string): Post[] {
+  // filter() returns a new array, so sort() here is safe (no mutation of source)
   return posts
     .filter((p) => p.categories.includes(categorySlug))
     .sort((a, b) => (a.date > b.date ? -1 : 1));

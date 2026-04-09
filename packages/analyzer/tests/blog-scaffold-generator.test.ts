@@ -205,6 +205,14 @@ describe("Blog Scaffold Generator", () => {
     expect(config!.content).toContain("WARNING");
   });
 
+  it("generates HTTP remotePatterns without redirects path", () => {
+    const files = generateBlogScaffold(makeInput({ siteUrl: "http://intranet.local", wpPermalinkStructure: null }));
+    const config = findFile(files, "next.config.ts");
+    expect(config!.content).toContain('protocol: "http"');
+    expect(config!.content).toContain("WARNING");
+    expect(config!.content).not.toContain("redirects");
+  });
+
   it("generates PT renderer with DOMPurify sanitization for htmlBlocks", () => {
     const files = generateBlogScaffold(makeInput());
     const pt = findFile(files, "lib/portable-text.tsx");
