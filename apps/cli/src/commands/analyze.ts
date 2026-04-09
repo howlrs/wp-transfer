@@ -26,6 +26,7 @@ import {
   generateMultisitePrismaSchema,
   generateMultisiteScaffold,
   resolveTemplate,
+  detectPageBuilder,
 } from "@wp-transfer/analyzer";
 import type { PluginEntry } from "@wp-transfer/core";
 
@@ -366,6 +367,17 @@ async function analyzeFromWxr(
       await writeFile(filePath, content, "utf-8");
     }
     consola.success(`Written: ${i18nFiles.length} i18n scaffold files`);
+  }
+
+  // Page builder detection
+  const builderAnalysis = detectPageBuilder(wxr.posts);
+  if (builderAnalysis.builder) {
+    consola.success(`Page builder: ${builderAnalysis.builder} (${builderAnalysis.pageCount} pages)`);
+    const outputDir = resolve(output);
+    const guidePath = resolve(outputDir, "page-builder-guide.md");
+    await mkdir(dirname(guidePath), { recursive: true });
+    await writeFile(guidePath, builderAnalysis.migrationGuide, "utf-8");
+    consola.success(`Written: ${guidePath}`);
   }
 
   // Estimate cost (no plugin data from WXR)

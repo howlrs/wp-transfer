@@ -183,3 +183,8 @@ export {
   resolveTemplate,
   type ScaffoldFileInput,
 } from "./template-resolver.js";
+
+export {
+  detectPageBuilder,
+  type PageBuilderAnalysis,
+} from "./page-builder-detector.js";
