@@ -87,6 +87,7 @@ export {
 
 export {
   extractYoastMeta,
+  extractSeoMeta,
   resolveYoastPlaceholders,
   generateYoastMetadataCode,
   type YoastMeta,

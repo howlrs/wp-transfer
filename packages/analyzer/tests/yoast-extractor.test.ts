@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   extractYoastMeta,
+  extractSeoMeta,
   resolveYoastPlaceholders,
   generateYoastMetadataCode,
 } from "../src/yoast-extractor.js";
@@ -116,6 +117,41 @@ describe("resolveYoastPlaceholders", () => {
 
     expect(result).toBe("Plain title text");
   });
+
+  it("resolves %%author%% and %%date%% placeholders", () => {
+    const context = {
+      postTitle: "My Post",
+      siteName: "My Site",
+      separator: "|",
+      author: "John Doe",
+      date: "2024-01-15",
+    };
+    const result = resolveYoastPlaceholders("%%title%% by %%author%% on %%date%%", context);
+    expect(result).toBe("My Post by John Doe on 2024-01-15");
+  });
+
+  it("resolves %%modified%%, %%excerpt%%, and %%category_title%%", () => {
+    const context = {
+      postTitle: "My Post",
+      siteName: "My Site",
+      separator: "|",
+      modified: "2024-03-01",
+      excerpt: "A brief summary",
+      categoryTitle: "Technology",
+    };
+    const result = resolveYoastPlaceholders("%%excerpt%% | Updated %%modified%% in %%category_title%%", context);
+    expect(result).toBe("A brief summary | Updated 2024-03-01 in Technology");
+  });
+
+  it("treats missing optional context fields as empty string", () => {
+    const context = {
+      postTitle: "My Post",
+      siteName: "My Site",
+      separator: "|",
+    };
+    const result = resolveYoastPlaceholders("%%title%% by %%author%%", context);
+    expect(result).toBe("My Post by");
+  });
 });
 
 describe("generateYoastMetadataCode", () => {
@@ -173,5 +209,34 @@ describe("generateYoastMetadataCode", () => {
     expect(code).toContain("alternates");
     expect(code).toContain("canonical");
     expect(code).toContain("https://example.com/my-page/");
+  });
+});
+
+describe("extractSeoMeta (Rank Math support)", () => {
+  it("extracts Rank Math meta keys", () => {
+    const meta: Record<string, unknown> = {
+      rank_math_title: "RM Title",
+      rank_math_description: "RM Description",
+      rank_math_canonical_url: "https://example.com/rm-post/",
+      rank_math_focus_keyword: "rm keyword",
+    };
+    const result = extractSeoMeta(meta);
+    expect(result.title).toBe("RM Title");
+    expect(result.description).toBe("RM Description");
+    expect(result.canonical).toBe("https://example.com/rm-post/");
+    expect(result.focusKeyword).toBe("rm keyword");
+  });
+
+  it("prefers Yoast keys over Rank Math when both present", () => {
+    const meta: Record<string, unknown> = {
+      _yoast_wpseo_title: "Yoast Title",
+      rank_math_title: "RM Title",
+    };
+    const result = extractSeoMeta(meta);
+    expect(result.title).toBe("Yoast Title");
+  });
+
+  it("extractYoastMeta is an alias for extractSeoMeta", () => {
+    expect(extractYoastMeta).toBe(extractSeoMeta);
   });
 });

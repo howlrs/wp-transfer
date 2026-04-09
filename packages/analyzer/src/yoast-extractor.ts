@@ -20,6 +20,11 @@ export interface YoastPlaceholderContext {
   siteName: string;
   separator: string;
   primaryCategory?: string;
+  author?: string;
+  date?: string;
+  modified?: string;
+  excerpt?: string;
+  categoryTitle?: string;
 }
 
 // ── Key mapping ──
@@ -34,13 +39,24 @@ const META_KEY_MAP: Record<string, keyof YoastMeta> = {
   _yoast_wpseo_focuskw: "focusKeyword",
 };
 
+const RANK_MATH_KEY_MAP: Record<string, keyof YoastMeta> = {
+  rank_math_title: "title",
+  rank_math_description: "description",
+  rank_math_canonical_url: "canonical",
+  rank_math_facebook_title: "ogTitle",
+  rank_math_facebook_description: "ogDescription",
+  rank_math_facebook_image: "ogImage",
+  rank_math_focus_keyword: "focusKeyword",
+};
+
 // ── Public API ──
 
 /**
- * Extract Yoast meta keys from a post meta record.
+ * Extract SEO meta keys from a post meta record.
+ * Supports both Yoast and Rank Math keys; Yoast takes precedence.
  * Non-string values and missing keys are returned as null.
  */
-export function extractYoastMeta(meta: Record<string, unknown>): YoastMeta {
+export function extractSeoMeta(meta: Record<string, unknown>): YoastMeta {
   const result: YoastMeta = {
     title: null,
     description: null,
@@ -51,6 +67,15 @@ export function extractYoastMeta(meta: Record<string, unknown>): YoastMeta {
     focusKeyword: null,
   };
 
+  // Rank Math first (lower priority)
+  for (const [metaKey, field] of Object.entries(RANK_MATH_KEY_MAP)) {
+    const value = meta[metaKey];
+    if (typeof value === "string" && value.length > 0) {
+      (result[field] as string | null) = value;
+    }
+  }
+
+  // Yoast second (higher priority — overwrites Rank Math)
   for (const [metaKey, field] of Object.entries(META_KEY_MAP)) {
     const value = meta[metaKey];
     if (typeof value === "string" && value.length > 0) {
@@ -60,6 +85,9 @@ export function extractYoastMeta(meta: Record<string, unknown>): YoastMeta {
 
   return result;
 }
+
+/** Backward-compatible alias for extractSeoMeta. */
+export const extractYoastMeta = extractSeoMeta;
 
 /**
  * Resolve %%variable%% placeholders in a Yoast title/description template.
@@ -74,6 +102,11 @@ export function resolveYoastPlaceholders(
     sep: context.separator,
     sitename: context.siteName,
     primary_category: context.primaryCategory ?? "",
+    author: context.author ?? "",
+    date: context.date ?? "",
+    modified: context.modified ?? "",
+    excerpt: context.excerpt ?? "",
+    category_title: context.categoryTitle ?? "",
   };
 
   // Replace known placeholders with their values, unknown ones with empty string
