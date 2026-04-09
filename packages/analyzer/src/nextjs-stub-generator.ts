@@ -17,7 +17,7 @@ import { toPrismaModelName, toPascalModelName, toSchemaName } from "./generator-
 
 interface RouteMapping {
   path: string;
-  method: "GET" | "POST" | "PUT" | "DELETE";
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 }
 
 const PHP_TO_ROUTE: Record<string, RouteMapping> = {
@@ -269,6 +269,7 @@ function generateZodSchema(
   schemaName: string,
   params: InputParam[],
   ctx: ZodTypeContext,
+  options?: { partial?: boolean },
 ): string {
   // Exclude file params only; array params are now included with z.array()
   const bodyParams = params.filter((p) => p.source !== "$_FILES");
@@ -277,11 +278,12 @@ function generateZodSchema(
     return `const ${schemaName} = z.object({});`;
   }
 
+  const optionalSuffix = options?.partial ? ".optional()" : "";
   const fields = bodyParams
     .map((p) => {
       // Strip [] from field name for the schema key
       const fieldName = p.name.replace(/\[\]$/, "");
-      return `  ${fieldName}: ${inferZodType(p, ctx)},`;
+      return `  ${fieldName}: ${inferZodType(p, ctx)}${optionalSuffix},`;
     })
     .join("\n");
 
@@ -293,6 +295,17 @@ function generateZodSchema(
   }
 
   return schema;
+}
+
+/**
+ * Generate an UPDATE schema as a partial variant of the corresponding POST schema.
+ * For PUT/PATCH routes, makes all fields optional.
+ */
+function generateUpdateSchema(
+  postSchemaName: string,
+  updateSchemaName: string,
+): string {
+  return `const ${updateSchemaName} = ${postSchemaName}.partial();`;
 }
 
 // ── Transaction detection ──
@@ -486,7 +499,8 @@ function generateRouteHandler(
 
   // Zod schema
   if (hasBody) {
-    lines.push(generateZodSchema(schemaName, params, ctx));
+    const isUpdate = mapping.method === "PUT" || mapping.method === "PATCH";
+    lines.push(generateZodSchema(schemaName, params, ctx, { partial: isUpdate }));
     lines.push("");
   }
 
@@ -793,6 +807,82 @@ function generateDirectBody(
   }
 }
 
+// ── Schema-driven GET endpoint generation ──
+
+/**
+ * Generate a list (GET /api/{resource}) handler from a DB table definition.
+ */
+function generateListHandler(modelName: string): string {
+  return `import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/lib/db";
+
+// TODO: Auto-generated from DB schema — verify business logic
+export async function GET(request: NextRequest) {
+  const { searchParams } = request.nextUrl;
+  const skip = parseInt(searchParams.get("skip") ?? "0", 10);
+  const take = parseInt(searchParams.get("take") ?? "20", 10);
+
+  const [items, total] = await Promise.all([
+    prisma.${modelName}.findMany({ skip, take, orderBy: { id: "desc" } }),
+    prisma.${modelName}.count(),
+  ]);
+
+  return NextResponse.json({ items, total, skip, take });
+}
+`;
+}
+
+/**
+ * Generate a detail (GET /api/{resource}/[id]) handler from a DB table definition.
+ */
+function generateDetailHandler(modelName: string): string {
+  return `import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/lib/db";
+
+// TODO: Auto-generated from DB schema — verify business logic
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id } = await params;
+  const item = await prisma.${modelName}.findUnique({
+    where: { id: parseInt(id, 10) },
+  });
+
+  if (!item) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
+  return NextResponse.json(item);
+}
+`;
+}
+
+/**
+ * Generate GET endpoints (list + detail) from DB table definitions.
+ * These are schema-driven, not PHP-file-driven.
+ *
+ * Always generates stubs for each table. The caller handles co-location
+ * when a PHP-mapped route already exists at the same path.
+ */
+function generateGetEndpoints(
+  tables: TableDefinition[],
+): Map<string, string> {
+  const getStubs = new Map<string, string>();
+
+  for (const table of tables) {
+    const resource = table.name;
+    const modelName = toPrismaModelName(resource);
+    const listPath = `app/api/${resource}/route.ts`;
+    const detailPath = `app/api/${resource}/[id]/route.ts`;
+
+    getStubs.set(listPath, generateListHandler(modelName));
+    getStubs.set(detailPath, generateDetailHandler(modelName));
+  }
+
+  return getStubs;
+}
+
 // ── Public API ──
 
 export function generateApiStubs(
@@ -820,6 +910,24 @@ export function generateApiStubs(
       }
     } else {
       stubs.set(mapping.path, stub);
+    }
+  }
+
+  // Add schema-driven GET endpoints
+  if (tables && tables.length > 0) {
+    const getStubs = generateGetEndpoints(tables);
+
+    for (const [path, code] of getStubs) {
+      const existing = stubs.get(path);
+      if (existing) {
+        // Co-locate: append GET handler to existing route file
+        const funcMatch = code.match(/(export async function GET[\s\S]*$)/);
+        if (funcMatch) {
+          stubs.set(path, existing + "\n\n" + funcMatch[1]);
+        }
+      } else {
+        stubs.set(path, code);
+      }
     }
   }
 
