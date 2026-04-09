@@ -144,4 +144,45 @@ describe("generateAcfTemplate", () => {
 
     expect(result.schemaCode).toContain("_123field:");
   });
+
+  it("infers Repeater field from array sample value", () => {
+    const fields: AcfFieldInfo[] = [
+      makeField({
+        name: "team_members",
+        fieldKey: "field_rep1",
+        inferredType: "json",
+        sampleValues: ['[{"name":"Alice","role":"Dev"},{"name":"Bob","role":"PM"}]'],
+      }),
+    ];
+    const { schemaCode } = generateAcfTemplate(fields);
+    expect(schemaCode).toContain("z.array(");
+    expect(schemaCode).toContain("z.object(");
+    expect(schemaCode).toContain("TODO: Verify inferred schema");
+  });
+
+  it("infers Gallery field from string array sample value", () => {
+    const fields: AcfFieldInfo[] = [
+      makeField({
+        name: "photos",
+        fieldKey: "field_gal1",
+        inferredType: "json",
+        sampleValues: ['["https://example.com/a.jpg","https://example.com/b.jpg"]'],
+      }),
+    ];
+    const { schemaCode } = generateAcfTemplate(fields);
+    expect(schemaCode).toContain("z.array(z.string())");
+  });
+
+  it("falls back to z.unknown() for non-parseable json sample", () => {
+    const fields: AcfFieldInfo[] = [
+      makeField({
+        name: "config",
+        fieldKey: "field_cfg1",
+        inferredType: "json",
+        sampleValues: ["not valid json"],
+      }),
+    ];
+    const { schemaCode } = generateAcfTemplate(fields);
+    expect(schemaCode).toContain("config: z.unknown()");
+  });
 });
