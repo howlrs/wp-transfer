@@ -13,8 +13,9 @@ import {
   ADMIN_USER_PRISMA_MODEL,
   generateDockerScaffold,
   resolveTemplate,
+  generateRoutesWithAi,
 } from "@wp-transfer/analyzer";
-import type { PhpFileAnalysis, TableDefinition } from "@wp-transfer/analyzer";
+import type { PhpFileAnalysis, TableDefinition, AiRouteInput } from "@wp-transfer/analyzer";
 
 async function analyzePhpDirectory(dirPath: string): Promise<PhpFileAnalysis[]> {
   const entries = await readdir(dirPath);
@@ -307,6 +308,16 @@ export const analyzePhpCommand = defineCommand({
       type: "string",
       description: "Directory with template overrides for scaffold files",
     },
+    "ai-assist": {
+      type: "boolean",
+      default: false,
+      description: "Use AI (Claude API) to generate higher-quality API route stubs",
+    },
+    "ai-model": {
+      type: "string",
+      default: "",
+      description: "AI model to use (default: claude-sonnet-4-20250514)",
+    },
   },
   async run({ args }) {
     const dirPath = resolve(args.dir as string);
@@ -315,6 +326,8 @@ export const analyzePhpCommand = defineCommand({
       ? resolve(args.schema as string)
       : undefined;
     const templateDir = args.templates as string | undefined;
+    const aiAssist = args["ai-assist"] as boolean;
+    const aiModel = (args["ai-model"] as string) || undefined;
 
     // Validate input directory
     if (!existsSync(dirPath)) {
@@ -375,6 +388,68 @@ export const analyzePhpCommand = defineCommand({
     consola.start("Generating Next.js API route stubs...");
     const stubs = generateApiStubs(custom, tables);
     consola.success(`Generated ${stubs.size} API route stubs`);
+
+    // ── Step 5b: AI-assisted route generation ──
+    let aiGeneratedCount = 0;
+    let aiFallbackCount = 0;
+    let aiTotalTokens = 0;
+
+    if (aiAssist) {
+      const apiKey = process.env["ANTHROPIC_API_KEY"];
+      if (!apiKey) {
+        consola.error("--ai-assist requires ANTHROPIC_API_KEY environment variable");
+        return;
+      }
+
+      const filesWithOps = custom.filter((a) => a.dbOperations.length > 0);
+      if (filesWithOps.length > 0) {
+        consola.start(`AI-generating routes for ${filesWithOps.length} PHP files...`);
+
+        const aiInputs: AiRouteInput[] = await Promise.all(
+          filesWithOps.map(async (analysis) => {
+            const phpSource = await readFile(join(dirPath, analysis.fileName), "utf-8");
+            const matchingStubEntry = [...stubs.entries()].find(([path]) =>
+              path.includes(analysis.fileName.replace(/\.php$/, "")),
+            );
+            return {
+              phpSource,
+              phpFilePath: analysis.fileName,
+              prismaSchema: prismaSchema ?? "",
+              staticAnalysis: {
+                dbOperations: analysis.dbOperations.map((op) => ({
+                  type: op.type,
+                  table: op.table,
+                  columns: op.columns,
+                })),
+                inputParams: analysis.inputParams.map((p) => ({
+                  name: p.name,
+                  source: p.source,
+                })),
+              },
+              existingRoute: matchingStubEntry?.[1],
+            };
+          }),
+        );
+
+        const aiResult = await generateRoutesWithAi(aiInputs, {
+          apiKey,
+          ...(aiModel ? { model: aiModel } : {}),
+        });
+
+        aiTotalTokens = aiResult.totalTokens;
+        aiFallbackCount = aiResult.failures.length;
+        aiGeneratedCount = aiResult.results.length - aiFallbackCount;
+
+        // Replace static stubs with AI-generated routes
+        for (const result of aiResult.results) {
+          stubs.set(result.routePath, result.content);
+        }
+
+        consola.success(
+          `AI generation complete: ${aiGeneratedCount} AI-generated, ${aiFallbackCount} fallback, ${aiTotalTokens} tokens used`,
+        );
+      }
+    }
 
     // ── Step 6: Generate admin pages ──
     consola.start("Generating admin page scaffolds...");
@@ -490,22 +565,26 @@ export const analyzePhpCommand = defineCommand({
       (sum, a) => sum + a.securityIssues.length,
       0,
     );
-    consola.box(
-      [
-        `PHP Files Analyzed: ${analyses.length}`,
-        `Files with DB Operations: ${custom.length}`,
-        `API Routes Generated: ${stubs.size}`,
-        `Admin Pages Generated: ${adminPages.length}`,
-        `Auth Files Generated: ${authFiles.length}`,
-        `Docker Files Generated: ${dockerFiles.length}`,
-        `Security Issues Found: ${securityCount}`,
-        prismaSchema
-          ? `Prisma Schema: Generated (with${hasAuth ? "" : "out"} AdminUser)`
-          : `Prisma Schema: Skipped (no --schema)`,
-        `Total Files Written: ${totalFiles}`,
-        `Output: ${outputDir}`,
-      ].join("\n"),
-    );
+    const summaryLines = [
+      `PHP Files Analyzed: ${analyses.length}`,
+      `Files with DB Operations: ${custom.length}`,
+      `API Routes Generated: ${stubs.size}`,
+      `Admin Pages Generated: ${adminPages.length}`,
+      `Auth Files Generated: ${authFiles.length}`,
+      `Docker Files Generated: ${dockerFiles.length}`,
+      `Security Issues Found: ${securityCount}`,
+      prismaSchema
+        ? `Prisma Schema: Generated (with${hasAuth ? "" : "out"} AdminUser)`
+        : `Prisma Schema: Skipped (no --schema)`,
+    ];
+    if (aiAssist) {
+      summaryLines.push(`AI-Generated Routes: ${aiGeneratedCount}`);
+      summaryLines.push(`AI Fallback Routes: ${aiFallbackCount}`);
+      summaryLines.push(`AI Tokens Used: ${aiTotalTokens}`);
+    }
+    summaryLines.push(`Total Files Written: ${totalFiles}`);
+    summaryLines.push(`Output: ${outputDir}`);
+    consola.box(summaryLines.join("\n"));
   },
 });
 
