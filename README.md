@@ -136,4 +136,4 @@ MIT
 
 ## Status
 
-**v0.3.0-alpha** -- Phase 1, C-phase (WooCommerce, Multisite, i18n), and E/G-phase (ACF Pro, Meta Box, Pods, page builder guide, WooCommerce orders, cross-features, DX, AI assist) are complete. See [Issues](https://github.com/howlrs/wp-transfer/issues) and `HANDOFF.md` for details.
+**v0.3.1-alpha** -- All phases complete: Phase 1 (core), C-phase (WooCommerce, Multisite, i18n), E/G-phase (ACF Pro, Meta Box, Pods, page builder, WooCommerce orders, cross-features, DX), AI Assist (Claude Code CLI auth, zero additional cost). 631 tests, 19 issues closed. See [Releases](https://github.com/howlrs/wp-transfer/releases) and `HANDOFF.md` for details.
