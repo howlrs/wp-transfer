@@ -122,3 +122,20 @@ export {
   isValidHostname,
   isPathSafe,
 } from "./sanitize.js";
+
+export {
+  phpUnserialize,
+} from "./php-serialize.js";
+
+export {
+  transformProducts,
+} from "./product-transformer.js";
+
+export {
+  generateWooPrismaSchema,
+} from "./woo-prisma-generator.js";
+
+export {
+  generateWooScaffold,
+  type WooScaffoldInput,
+} from "./woo-scaffold-generator.js";
