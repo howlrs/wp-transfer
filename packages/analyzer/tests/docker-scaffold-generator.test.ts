@@ -12,9 +12,9 @@ function findFile(files: DockerScaffoldFile[], pathPattern: string): DockerScaff
 
 describe("Docker Scaffold Generator", () => {
   describe("file generation", () => {
-    it("generates 4 files (docker-compose, Dockerfile, .env.example, .gitignore)", () => {
+    it("generates 6 files (docker-compose, Dockerfile, .env.example, .gitignore, .dockerignore, health endpoint)", () => {
       const files = generateDockerScaffold("my-project", "mysql");
-      expect(files).toHaveLength(4);
+      expect(files).toHaveLength(6);
     });
 
     it("generates docker-compose.yml", () => {
@@ -45,6 +45,20 @@ describe("Docker Scaffold Generator", () => {
       const files = generateDockerScaffold("my-project", "mysql");
       const gitignore = findFile(files, ".gitignore");
       expect(gitignore).toBeDefined();
+    });
+
+    it("generates .dockerignore with node_modules", () => {
+      const files = generateDockerScaffold("my-project", "mysql");
+      const dockerignore = findFile(files, ".dockerignore");
+      expect(dockerignore).toBeDefined();
+      expect(dockerignore!.content).toContain("node_modules");
+    });
+
+    it("generates app/api/health/route.ts", () => {
+      const files = generateDockerScaffold("my-project", "mysql");
+      const health = findFile(files, "app/api/health/route.ts");
+      expect(health).toBeDefined();
+      expect(health!.content).toContain("NextResponse");
     });
   });
 
@@ -179,6 +193,21 @@ describe("Docker Scaffold Generator", () => {
       const gitignore = findFile(files, ".gitignore")!;
       expect(gitignore.content).toContain("node_modules/");
       expect(gitignore.content).toContain(".next/");
+    });
+  });
+
+  describe("docker-compose DX", () => {
+    it("healthcheck uses /api/health", () => {
+      const files = generateDockerScaffold("my-project", "mysql");
+      const compose = findFile(files, "docker-compose.yml")!;
+      expect(compose.content).toContain("/api/health");
+      expect(compose.content).not.toContain("/api/auth/session");
+    });
+
+    it("app command includes prisma migrate deploy", () => {
+      const files = generateDockerScaffold("my-project", "mysql");
+      const compose = findFile(files, "docker-compose.yml")!;
+      expect(compose.content).toContain("prisma migrate deploy");
     });
   });
 });
