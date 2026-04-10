@@ -145,13 +145,22 @@ export const runCommand = defineCommand({
         consola.info("Created .env from .env.example");
       }
       if (existsSync(envPath)) {
-        const envContent = readFileSync(envPath, "utf-8");
+        const { writeFileSync } = await import("node:fs");
+        let envContent = readFileSync(envPath, "utf-8");
+        // Replace Docker service hostname (e.g., @db:) with @localhost: in .env file
+        // so Prisma reads the correct URL from .env
+        const updated = envContent.replace(
+          /(DATABASE_URL="?[^"]*?)@([a-zA-Z_-]+):(\d+)/,
+          "$1@localhost:$3",
+        );
+        if (updated !== envContent) {
+          writeFileSync(envPath, updated);
+          envContent = updated;
+        }
         const dbUrlMatch = envContent.match(/DATABASE_URL="?([^"\n]+)"?/);
         if (dbUrlMatch) {
-          // Replace Docker service hostname (e.g., @db:) with @localhost:
-          const hostUrl = dbUrlMatch[1]!.replace(/@[a-zA-Z_-]+:(\d+)/, "@localhost:$1");
-          process.env["DATABASE_URL"] = hostUrl;
-          consola.info(`Database URL: ${hostUrl.replace(/:[^:@]+@/, ":***@")}`);
+          process.env["DATABASE_URL"] = dbUrlMatch[1]!;
+          consola.info(`Database URL: ${dbUrlMatch[1]!.replace(/:[^:@]+@/, ":***@")}`);
         }
       }
     }
