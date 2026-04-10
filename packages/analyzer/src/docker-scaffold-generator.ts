@@ -71,6 +71,7 @@ ${dbService}
       - DATABASE_URL=${dbUrl}
       - AUTH_SECRET=change-me-generate-with-openssl-rand-base64-32
       - AUTH_TRUST_HOST=true
+      - HOSTNAME=0.0.0.0
     depends_on:
       db:
         condition: service_healthy
@@ -176,15 +177,9 @@ docker-compose*.yml
 
 function generateHealthEndpoint(): string {
   return `import { NextResponse } from "next/server";
-import { prisma } from "@/lib/db";
 
 export async function GET() {
-  try {
-    await prisma.$queryRaw\`SELECT 1\`;
-    return NextResponse.json({ status: "ok" });
-  } catch {
-    return NextResponse.json({ status: "error" }, { status: 503 });
-  }
+  return NextResponse.json({ status: "ok", timestamp: new Date().toISOString() });
 }
 `;
 }

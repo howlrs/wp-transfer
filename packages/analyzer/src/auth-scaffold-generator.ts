@@ -183,49 +183,36 @@ export function Providers({ children }: { children: ReactNode }) {
 }
 
 function generateMiddleware(): string {
-  return `import { auth } from "@/lib/auth";
-import { NextResponse } from "next/server";
-import { canAccess } from "@/lib/rbac";
-import type { Role } from "@/lib/rbac";
+  return `import { getToken } from "next-auth/jwt";
+import { NextRequest, NextResponse } from "next/server";
 
-export default auth((req) => {
+export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // Public routes
-  if (pathname === "/login" || pathname === "/unauthorized" || pathname.startsWith("/api/auth") || pathname === "/api/health") {
+  // Public routes — no auth required
+  if (
+    pathname === "/login" ||
+    pathname === "/unauthorized" ||
+    pathname.startsWith("/api/auth") ||
+    pathname === "/api/health"
+  ) {
     return NextResponse.next();
   }
 
-  // Check authentication
-  if (!req.auth?.user) {
+  // Check JWT token (edge-compatible, no Prisma dependency)
+  const token = await getToken({ req, secret: process.env.AUTH_SECRET });
+
+  if (!token) {
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
     const loginUrl = new URL("/login", req.url);
     loginUrl.searchParams.set("callbackUrl", pathname);
     return NextResponse.redirect(loginUrl);
   }
 
-  // API routes also need RBAC
-  if (pathname.startsWith("/api/") && !pathname.startsWith("/api/auth")) {
-    const role = (req.auth.user as { role?: string }).role as Role | undefined;
-    if (!role) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    // Map API paths to their page equivalent for permission check
-    // e.g., /api/events/123 -> /events
-    const resourcePath = "/" + pathname.split("/").slice(2, 3).join("/");
-    if (!canAccess(role, resourcePath)) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
-    return NextResponse.next();
-  }
-
-  // RBAC enforcement for page routes
-  const role = (req.auth.user as { role?: string }).role as Role | undefined;
-  if (role && !canAccess(role, pathname)) {
-    return NextResponse.redirect(new URL("/unauthorized", req.url));
-  }
-
   return NextResponse.next();
-});
+}
 
 export const config = {
   matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],

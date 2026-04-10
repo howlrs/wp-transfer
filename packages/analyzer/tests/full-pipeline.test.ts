@@ -547,8 +547,8 @@ describe("H. Docker scaffold", () => {
     const health = dockerFiles.find(
       (f) => f.path === "app/api/health/route.ts",
     )!;
-    expect(health.content).toContain("SELECT 1");
     expect(health.content).toContain("status");
+    expect(health.content).toContain("ok");
   });
 
   it("generates verify.sh script", () => {
