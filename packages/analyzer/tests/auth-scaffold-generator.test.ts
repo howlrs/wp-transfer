@@ -85,12 +85,12 @@ describe("Auth Scaffold Generator", () => {
       expect(providers!.content).toContain("use client");
     });
 
-    it("generates middleware.ts with RBAC enforcement", () => {
+    it("generates middleware.ts with JWT auth check", () => {
       const files = generateAuthScaffold(["wpfront-user-role-editor"]);
       const middleware = findFile(files, "middleware.ts");
 
       expect(middleware).toBeDefined();
-      expect(middleware!.content).toContain("canAccess");
+      expect(middleware!.content).toContain("getToken");
       expect(middleware!.content).toContain("/login");
     });
 
@@ -139,12 +139,12 @@ describe("Auth Scaffold Generator", () => {
       expect(rbac!.content).toContain("PATH_PERMISSIONS");
     });
 
-    it("generates middleware with API route protection", () => {
+    it("generates middleware with API 401 for unauthenticated", () => {
       const files = generateAuthScaffold(["wpfront-user-role-editor"]);
       const mw = files.find(f => f.path === "middleware.ts");
       expect(mw!.content).toContain("/api/");
-      expect(mw!.content).toContain("403");
-      expect(mw!.content).toContain("Forbidden");
+      expect(mw!.content).toContain("401");
+      expect(mw!.content).toContain("Unauthorized");
     });
 
     it("generates unauthorized page", () => {
