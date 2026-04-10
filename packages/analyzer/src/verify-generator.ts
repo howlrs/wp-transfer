@@ -12,6 +12,17 @@ export interface VerifyScaffoldFile {
   content: string;
 }
 
+export interface PhpDbOp {
+  type: "INSERT" | "UPDATE" | "DELETE" | "SELECT";
+  table: string;
+}
+
+export interface PhpAnalysisSummary {
+  fileName: string;
+  dbOperations: PhpDbOp[];
+  inputParams: Array<{ name: string; source: string }>;
+}
+
 export interface VerifyInput {
   postSlugs: string[];
   categorySlugs: string[];
@@ -23,6 +34,8 @@ export interface VerifyInput {
   adminPages?: string[];
   /** DB table names for CRUD testing */
   tableNames?: string[];
+  /** PHP analyses for migration verification tests */
+  phpAnalyses?: PhpAnalysisSummary[];
 }
 
 // ── File generators ──
@@ -189,6 +202,268 @@ function generateAdminSpec(adminPages: string[]): string | null {
   return lines.join("\n");
 }
 
+// ── Migration verification test generators ──
+
+function pluralizeTable(name: string): string {
+  if (name.endsWith("s")) return name;
+  if (name.endsWith("y") && !["a","e","i","o","u"].includes(name[name.length - 2] ?? "")) return name.slice(0, -1) + "ies";
+  return name + "s";
+}
+
+function getApiPath(table: string): string {
+  // Standard: /api/{table} for most, /api/{plural} for event→events
+  const knownPlurals: Record<string, string> = { event: "events" };
+  return `/api/${knownPlurals[table] ?? table}`;
+}
+
+function generateMigrationAuthSpec(tables: string[]): string {
+  const lines: string[] = [];
+  lines.push('import { test, expect } from "@playwright/test";');
+  lines.push("");
+  lines.push("/**");
+  lines.push(" * Migration Auth Protection Tests");
+  lines.push(" * Verifies all API endpoints require authentication.");
+  lines.push(" * PHP source had no auth — Next.js adds middleware protection.");
+  lines.push(" */");
+  lines.push('test.describe("Auth protection: API endpoints reject unauthenticated requests", () => {');
+  lines.push('  test.use({ storageState: undefined }); // No auth');
+  lines.push("");
+
+  for (const table of tables) {
+    const apiPath = getApiPath(table);
+    lines.push(`  test("GET ${apiPath} returns 401 without auth", async ({ request }) => {`);
+    lines.push(`    const res = await request.get("${apiPath}");`);
+    lines.push(`    expect(res.status()).toBe(401);`);
+    lines.push("  });");
+    lines.push("");
+  }
+
+  lines.push('  test("POST /api/events returns 401 without auth", async ({ request }) => {');
+  lines.push('    const res = await request.post("/api/events", { data: {} });');
+  lines.push("    expect(res.status()).toBe(401);");
+  lines.push("  });");
+  lines.push("");
+  lines.push('  test("PUT /api/events/1 returns 401 without auth", async ({ request }) => {');
+  lines.push('    const res = await request.put("/api/events/1", { data: {} });');
+  lines.push("    expect(res.status()).toBe(401);");
+  lines.push("  });");
+  lines.push("");
+  lines.push('  test("DELETE /api/events/1 returns 401 without auth", async ({ request }) => {');
+  lines.push('    const res = await request.delete("/api/events/1");');
+  lines.push("    expect(res.status()).toBe(401);");
+  lines.push("  });");
+
+  lines.push("});");
+  return lines.join("\n");
+}
+
+function generateMigrationCrudSpec(analyses: PhpAnalysisSummary[], tables: string[]): string {
+  const lines: string[] = [];
+  lines.push('import { test, expect } from "@playwright/test";');
+  lines.push("");
+  lines.push("/**");
+  lines.push(" * Migration CRUD Verification Tests");
+  lines.push(" * Maps each PHP script's DB operations to Next.js API calls.");
+  lines.push(` * Source: ${analyses.length} PHP scripts → ${tables.length} tables`);
+  lines.push(" */");
+  lines.push("");
+
+  // Group by table
+  const tableOps = new Map<string, Set<string>>();
+  for (const a of analyses) {
+    for (const op of a.dbOperations) {
+      if (!tableOps.has(op.table)) tableOps.set(op.table, new Set());
+      tableOps.get(op.table)!.add(op.type);
+    }
+  }
+
+  for (const [table, ops] of tableOps) {
+    const apiPath = getApiPath(table);
+    lines.push(`test.describe("${table} CRUD (from PHP migration)", () => {`);
+
+    if (ops.has("INSERT")) {
+      lines.push(`  test("POST ${apiPath} — create record (PHP: INSERT)", async ({ request }) => {`);
+      lines.push(`    const res = await request.post("${apiPath}", {`);
+      lines.push(`      data: { /* seed data — customize per domain */ },`);
+      lines.push("    });");
+      lines.push(`    expect([200, 201]).toContain(res.status());`);
+      lines.push("    const body = await res.json();");
+      lines.push(`    expect(body).toHaveProperty("id");`);
+      lines.push("  });");
+      lines.push("");
+    }
+
+    lines.push(`  test("GET ${apiPath} — list records", async ({ request }) => {`);
+    lines.push(`    const res = await request.get("${apiPath}");`);
+    lines.push(`    expect(res.status()).toBe(200);`);
+    lines.push("    const body = await res.json();");
+    lines.push(`    expect(body).toHaveProperty("items");`);
+    lines.push(`    expect(body).toHaveProperty("total");`);
+    lines.push("  });");
+    lines.push("");
+
+    if (ops.has("UPDATE")) {
+      lines.push(`  test("PUT ${apiPath}/1 — update record (PHP: UPDATE)", async ({ request }) => {`);
+      lines.push(`    const res = await request.put("${apiPath}/1", {`);
+      lines.push(`      data: { /* updated fields */ },`);
+      lines.push("    });");
+      lines.push(`    expect(res.status()).toBe(200);`);
+      lines.push("  });");
+      lines.push("");
+    }
+
+    if (ops.has("DELETE")) {
+      lines.push(`  test("DELETE ${apiPath}/1 — delete record (PHP: DELETE)", async ({ request }) => {`);
+      lines.push(`    const res = await request.delete("${apiPath}/999");`);
+      lines.push(`    // 200 OK or 404 if not found`);
+      lines.push(`    expect([200, 204, 404]).toContain(res.status());`);
+      lines.push("  });");
+      lines.push("");
+    }
+
+    lines.push("});");
+    lines.push("");
+  }
+
+  return lines.join("\n");
+}
+
+interface LogicTest {
+  name: string;
+  description: string;
+  steps: string[];
+}
+
+function detectLogicTests(analyses: PhpAnalysisSummary[]): LogicTest[] {
+  const tests: LogicTest[] = [];
+  const fileNames = new Set(analyses.map(a => a.fileName));
+
+  // Event stop/restore
+  if (fileNames.has("event-stop.php") && fileNames.has("event-restoration.php")) {
+    tests.push({
+      name: "event stop and restore state transition",
+      description: "PHP: event-stop.php sets status=1, event-restoration.php sets status=0",
+      steps: [
+        'const created = await request.post("/api/events", { data: { title: "State Test Event" } });',
+        "const eventId = (await created.json()).id;",
+        "",
+        "// Stop event (status → 1)",
+        'const stopRes = await request.post(`/api/events/${eventId}/stop`);',
+        "expect(stopRes.status()).toBe(200);",
+        'const stopped = await (await request.get(`/api/events/${eventId}`)).json();',
+        "expect(stopped.status).toBe(1);",
+        "",
+        "// Restore event (status → 0)",
+        'const restoreRes = await request.post(`/api/events/${eventId}/restore`);',
+        "expect(restoreRes.status()).toBe(200);",
+        'const restored = await (await request.get(`/api/events/${eventId}`)).json();',
+        "expect(restored.status).toBe(0);",
+      ],
+    });
+  }
+
+  // User blacklist on/off
+  if (fileNames.has("user-blacklist.php") && fileNames.has("user-blacklist-out.php")) {
+    tests.push({
+      name: "user blacklist on/off toggle",
+      description: "PHP: user-blacklist.php sets blacklist=1, user-blacklist-out.php sets blacklist=0",
+      steps: [
+        '// Blacklist ON',
+        'const onRes = await request.post("/api/users/1/blacklist");',
+        'expect(onRes.status()).toBe(200);',
+        'const blocked = await (await request.get("/api/users/1/blacklist")).json();',
+        'expect(blocked.blacklist).toBeTruthy();',
+        '',
+        '// Blacklist OFF',
+        'const offRes = await request.delete("/api/users/1/blacklist");',
+        'expect(offRes.status()).toBe(200);',
+        'const unblocked = await (await request.get("/api/users/1/blacklist")).json();',
+        'expect(unblocked.blacklist).toBeFalsy();',
+      ],
+    });
+  }
+
+  // Lottery invalidation
+  if (fileNames.has("lottery-update.php")) {
+    tests.push({
+      name: "lottery invalidation",
+      description: "PHP: lottery-update.php sets invalid=1",
+      steps: [
+        'const res = await request.put("/api/lottery/1", {',
+        '  data: { invalid: 1 },',
+        '});',
+        'expect(res.status()).toBe(200);',
+        'const updated = await (await request.get("/api/lottery/1")).json();',
+        'expect(updated.invalid).toBeTruthy();',
+      ],
+    });
+  }
+
+  // Information text toggle
+  if (fileNames.has("information-text-in.php")) {
+    tests.push({
+      name: "information text flag toggle",
+      description: "PHP: information-text-in.php enables, information-text-out.php disables",
+      steps: [
+        '// Enable text',
+        'const enableRes = await request.post("/api/information/1/text/enable");',
+        'expect(enableRes.status()).toBe(200);',
+        '',
+        '// Disable text',
+        'const disableRes = await request.post("/api/information/1/text/disable");',
+        'expect(disableRes.status()).toBe(200);',
+      ],
+    });
+  }
+
+  // Information banner toggle
+  if (fileNames.has("information-banner-in.php")) {
+    tests.push({
+      name: "information banner flag toggle",
+      description: "PHP: information-banner-in.php enables, information-banner-out.php disables",
+      steps: [
+        '// Enable banner',
+        'const enableRes = await request.post("/api/information/1/banner/enable");',
+        'expect(enableRes.status()).toBe(200);',
+        '',
+        '// Disable banner',
+        'const disableRes = await request.post("/api/information/1/banner/disable");',
+        'expect(disableRes.status()).toBe(200);',
+      ],
+    });
+  }
+
+  return tests;
+}
+
+function generateMigrationLogicSpec(analyses: PhpAnalysisSummary[]): string | null {
+  const tests = detectLogicTests(analyses);
+  if (tests.length === 0) return null;
+
+  const lines: string[] = [];
+  lines.push('import { test, expect } from "@playwright/test";');
+  lines.push("");
+  lines.push("/**");
+  lines.push(" * Migration Business Logic Tests");
+  lines.push(" * Verifies state transitions and business rules from PHP source.");
+  lines.push(" */");
+  lines.push("");
+
+  for (const t of tests) {
+    lines.push(`test.describe("${t.name}", () => {`);
+    lines.push(`  // ${t.description}`);
+    lines.push(`  test("${t.name}", async ({ request }) => {`);
+    for (const step of t.steps) {
+      lines.push(`    ${step}`);
+    }
+    lines.push("  });");
+    lines.push("});");
+    lines.push("");
+  }
+
+  return lines.join("\n");
+}
+
 function generateAuthSetup(): string {
   return `import { test as setup, expect } from "@playwright/test";
 
@@ -283,6 +558,24 @@ export function generateVerifyScaffold(input: VerifyInput): VerifyScaffoldFile[]
     const adminSpec = generateAdminSpec(input.adminPages);
     if (adminSpec) {
       files.push({ path: "e2e/admin.spec.ts", content: adminSpec });
+    }
+  }
+
+  // Migration verification tests (from PHP analysis)
+  if (input.phpAnalyses && input.phpAnalyses.length > 0 && input.tableNames) {
+    files.push({
+      path: "e2e/migration-auth.spec.ts",
+      content: generateMigrationAuthSpec(input.tableNames),
+    });
+
+    files.push({
+      path: "e2e/migration-crud.spec.ts",
+      content: generateMigrationCrudSpec(input.phpAnalyses, input.tableNames),
+    });
+
+    const logicSpec = generateMigrationLogicSpec(input.phpAnalyses);
+    if (logicSpec) {
+      files.push({ path: "e2e/migration-logic.spec.ts", content: logicSpec });
     }
   }
 

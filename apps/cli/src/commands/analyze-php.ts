@@ -623,6 +623,11 @@ export const analyzePhpCommand = defineCommand({
       tableNames: tables.map(t => t.name),
       hasAuth,
       adminPages: adminPages.map(p => p.path),
+      phpAnalyses: custom.map(a => ({
+        fileName: a.fileName,
+        dbOperations: a.dbOperations.map(op => ({ type: op.type as "INSERT" | "UPDATE" | "DELETE" | "SELECT", table: op.table })),
+        inputParams: a.inputParams.map(p => ({ name: p.name, source: p.source })),
+      })),
     };
     const verifyFiles = generateVerifyScaffold(verifyInput);
     for (const file of verifyFiles) {
@@ -630,7 +635,7 @@ export const analyzePhpCommand = defineCommand({
       await writeFileWithDir(fullPath, file.content, outputDir);
       totalFiles++;
     }
-    consola.success(`Generated ${verifyFiles.length} test files (smoke + API + auth + admin)`);
+    consola.success(`Generated ${verifyFiles.length} test files (smoke + API + auth + admin + migration)`);
 
     // Project files
     await writeFile(

@@ -191,3 +191,147 @@ describe("Admin spec generation", () => {
     expect(findFile(files, "e2e/admin.spec.ts")).toBeUndefined();
   });
 });
+
+// ── Migration E2E test generation ──
+
+const migrationInput = {
+  postSlugs: [],
+  categorySlugs: [],
+  hasAuth: true,
+  tableNames: ["event", "event_slot", "information", "lottery", "user"],
+  adminPages: ["app/(admin)/event/page.tsx"],
+  phpAnalyses: [
+    { fileName: "insert.php", dbOperations: [{ type: "INSERT" as const, table: "event" }], inputParams: [{ name: "title", source: "$_POST" as const, usage: "" }] },
+    { fileName: "update.php", dbOperations: [{ type: "UPDATE" as const, table: "event" }], inputParams: [{ name: "title", source: "$_POST" as const, usage: "" }] },
+    { fileName: "delete.php", dbOperations: [{ type: "DELETE" as const, table: "event" }], inputParams: [{ name: "delete", source: "$_POST" as const, usage: "" }] },
+    { fileName: "event-stop.php", dbOperations: [{ type: "UPDATE" as const, table: "event" }], inputParams: [{ name: "update", source: "$_POST" as const, usage: "" }] },
+    { fileName: "event-restoration.php", dbOperations: [{ type: "UPDATE" as const, table: "event" }], inputParams: [{ name: "update", source: "$_POST" as const, usage: "" }] },
+    { fileName: "user-blacklist.php", dbOperations: [{ type: "UPDATE" as const, table: "user" }], inputParams: [{ name: "update", source: "$_POST" as const, usage: "" }] },
+    { fileName: "user-blacklist-out.php", dbOperations: [{ type: "UPDATE" as const, table: "user" }], inputParams: [{ name: "update", source: "$_POST" as const, usage: "" }] },
+    { fileName: "lottery-update.php", dbOperations: [{ type: "UPDATE" as const, table: "lottery" }], inputParams: [{ name: "update", source: "$_POST" as const, usage: "" }] },
+    { fileName: "insert_information.php", dbOperations: [{ type: "INSERT" as const, table: "information" }], inputParams: [{ name: "text", source: "$_POST" as const, usage: "" }] },
+    { fileName: "information-text-in.php", dbOperations: [{ type: "UPDATE" as const, table: "information" }], inputParams: [{ name: "update", source: "$_POST" as const, usage: "" }] },
+    { fileName: "information-banner-in.php", dbOperations: [{ type: "UPDATE" as const, table: "information" }], inputParams: [{ name: "update", source: "$_POST" as const, usage: "" }] },
+  ],
+};
+
+describe("Migration auth protection tests", () => {
+  it("generates migration-auth.spec.ts when phpAnalyses provided", () => {
+    const files = generateVerifyScaffold(migrationInput);
+    const spec = findFile(files, "e2e/migration-auth.spec.ts");
+    expect(spec).toBeDefined();
+  });
+
+  it("tests that API endpoints return 401 without auth", () => {
+    const files = generateVerifyScaffold(migrationInput);
+    const spec = findFile(files, "e2e/migration-auth.spec.ts");
+    expect(spec).toBeDefined();
+    expect(spec!.content).toContain("401");
+    expect(spec!.content).toContain("/api/event");
+  });
+
+  it("tests all table API endpoints for auth protection", () => {
+    const files = generateVerifyScaffold(migrationInput);
+    const spec = findFile(files, "e2e/migration-auth.spec.ts");
+    expect(spec).toBeDefined();
+    for (const table of migrationInput.tableNames) {
+      expect(spec!.content).toContain(`/api/${table}`);
+    }
+  });
+});
+
+describe("Migration CRUD verification tests", () => {
+  it("generates migration-crud.spec.ts when phpAnalyses provided", () => {
+    const files = generateVerifyScaffold(migrationInput);
+    const spec = findFile(files, "e2e/migration-crud.spec.ts");
+    expect(spec).toBeDefined();
+  });
+
+  it("generates POST create test for INSERT operations", () => {
+    const files = generateVerifyScaffold(migrationInput);
+    const spec = findFile(files, "e2e/migration-crud.spec.ts");
+    expect(spec).toBeDefined();
+    expect(spec!.content).toContain("POST");
+    expect(spec!.content).toContain("/api/events");
+    expect(spec!.content).toContain("201");
+  });
+
+  it("generates PUT update test for UPDATE operations", () => {
+    const files = generateVerifyScaffold(migrationInput);
+    const spec = findFile(files, "e2e/migration-crud.spec.ts");
+    expect(spec).toBeDefined();
+    expect(spec!.content).toContain("PUT");
+    expect(spec!.content).toContain("200");
+  });
+
+  it("generates DELETE test for DELETE operations", () => {
+    const files = generateVerifyScaffold(migrationInput);
+    const spec = findFile(files, "e2e/migration-crud.spec.ts");
+    expect(spec).toBeDefined();
+    expect(spec!.content).toContain("DELETE");
+    expect(spec!.content).toContain("delete");
+  });
+
+  it("covers all 5 domains with CRUD tests", () => {
+    const files = generateVerifyScaffold(migrationInput);
+    const spec = findFile(files, "e2e/migration-crud.spec.ts");
+    expect(spec).toBeDefined();
+    expect(spec!.content).toContain("event");
+    expect(spec!.content).toContain("information");
+    expect(spec!.content).toContain("lottery");
+    expect(spec!.content).toContain("user");
+  });
+});
+
+describe("Migration business logic tests", () => {
+  it("generates migration-logic.spec.ts when phpAnalyses provided", () => {
+    const files = generateVerifyScaffold(migrationInput);
+    const spec = findFile(files, "e2e/migration-logic.spec.ts");
+    expect(spec).toBeDefined();
+  });
+
+  it("generates event stop/restore state transition tests", () => {
+    const files = generateVerifyScaffold(migrationInput);
+    const spec = findFile(files, "e2e/migration-logic.spec.ts");
+    expect(spec).toBeDefined();
+    expect(spec!.content).toContain("stop");
+    expect(spec!.content).toContain("restore");
+    expect(spec!.content).toContain("status");
+  });
+
+  it("generates blacklist on/off tests", () => {
+    const files = generateVerifyScaffold(migrationInput);
+    const spec = findFile(files, "e2e/migration-logic.spec.ts");
+    expect(spec).toBeDefined();
+    expect(spec!.content).toContain("blacklist");
+  });
+
+  it("generates lottery invalidation test", () => {
+    const files = generateVerifyScaffold(migrationInput);
+    const spec = findFile(files, "e2e/migration-logic.spec.ts");
+    expect(spec).toBeDefined();
+    expect(spec!.content).toContain("invalid");
+  });
+
+  it("generates information flag toggle tests", () => {
+    const files = generateVerifyScaffold(migrationInput);
+    const spec = findFile(files, "e2e/migration-logic.spec.ts");
+    expect(spec).toBeDefined();
+    expect(spec!.content).toContain("information");
+    expect(spec!.content).toContain("banner");
+  });
+});
+
+describe("Migration tests are not generated without phpAnalyses", () => {
+  it("does not generate migration specs without phpAnalyses", () => {
+    const files = generateVerifyScaffold({
+      postSlugs: [],
+      categorySlugs: [],
+      hasAuth: true,
+      tableNames: ["event"],
+    });
+    expect(findFile(files, "e2e/migration-auth.spec.ts")).toBeUndefined();
+    expect(findFile(files, "e2e/migration-crud.spec.ts")).toBeUndefined();
+    expect(findFile(files, "e2e/migration-logic.spec.ts")).toBeUndefined();
+  });
+});

@@ -127,6 +127,8 @@ export {
   generateVerifyScaffold,
   type VerifyInput,
   type VerifyScaffoldFile,
+  type PhpAnalysisSummary,
+  type PhpDbOp,
 } from "./verify-generator.js";
 
 export {
