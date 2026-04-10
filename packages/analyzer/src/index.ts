@@ -129,6 +129,8 @@ export {
   type VerifyScaffoldFile,
   type PhpAnalysisSummary,
   type PhpDbOp,
+  type TableInfo,
+  type TableColumn,
 } from "./verify-generator.js";
 
 export {

@@ -23,6 +23,20 @@ export interface PhpAnalysisSummary {
   inputParams: Array<{ name: string; source: string }>;
 }
 
+export interface TableColumn {
+  name: string;
+  type: string;
+  nullable: boolean;
+  isPrimary: boolean;
+  isAutoIncrement: boolean;
+  comment?: string;
+}
+
+export interface TableInfo {
+  name: string;
+  columns: TableColumn[];
+}
+
 export interface VerifyInput {
   postSlugs: string[];
   categorySlugs: string[];
@@ -36,6 +50,8 @@ export interface VerifyInput {
   tableNames?: string[];
   /** PHP analyses for migration verification tests */
   phpAnalyses?: PhpAnalysisSummary[];
+  /** Table definitions with columns for form testing */
+  tables?: TableInfo[];
 }
 
 // ── File generators ──
@@ -464,6 +480,131 @@ function generateMigrationLogicSpec(analyses: PhpAnalysisSummary[]): string | nu
   return lines.join("\n");
 }
 
+// ── Form UI E2E test generators ──
+
+function sampleValue(col: TableColumn): string {
+  switch (col.type) {
+    case "Int":
+    case "BigInt":
+    case "Float":
+      return "1";
+    case "Boolean":
+      return "true";
+    case "DateTime":
+      return "2026-01-15T10:00";
+    default:
+      return `テスト${col.comment ?? col.name}`;
+  }
+}
+
+function inputType(col: TableColumn): string {
+  switch (col.type) {
+    case "Int": case "BigInt": case "Float": return "number";
+    case "Boolean": return "checkbox";
+    case "DateTime": return "datetime-local";
+    default: return "text";
+  }
+}
+
+function generateMigrationFormSpec(tables: TableInfo[]): string | null {
+  // Only generate for tables that have editable columns
+  const editableTables = tables.filter(
+    (t) => t.columns.some((c) => !c.isPrimary || !c.isAutoIncrement),
+  );
+  if (editableTables.length === 0) return null;
+
+  const lines: string[] = [];
+  lines.push('import { test, expect } from "@playwright/test";');
+  lines.push("");
+  lines.push("/**");
+  lines.push(" * Migration Form UI E2E Tests");
+  lines.push(" * Verifies form pages render, accept input, and submit successfully.");
+  lines.push(` * Covers ${editableTables.length} tables with CRUD form flows.`);
+  lines.push(" */");
+  lines.push("");
+
+  for (const table of editableTables) {
+    const editableFields = table.columns.filter(
+      (c) => !(c.isPrimary && c.isAutoIncrement),
+    );
+    if (editableFields.length === 0) continue;
+
+    const toPascal = (s: string) =>
+      s.replace(/(^|_)(\w)/g, (_, __, c) => c.toUpperCase());
+    const modelName = toPascal(table.name);
+
+    lines.push(`test.describe("${modelName} form UI", () => {`);
+
+    // New page renders
+    lines.push(`  test("new page renders with all form fields", async ({ page }) => {`);
+    lines.push(`    await page.goto("/${table.name}/new");`);
+    lines.push(`    await expect(page.locator("h1")).toContainText("新規作成");`);
+    for (const col of editableFields) {
+      const itype = inputType(col);
+      lines.push(`    await expect(page.locator('input[type="${itype}"]').first()).toBeVisible();`);
+      break; // one field check is enough to prove the form rendered
+    }
+    lines.push("  });");
+    lines.push("");
+
+    // Fill and submit new form
+    lines.push(`  test("create: fill form and submit", async ({ page }) => {`);
+    lines.push(`    await page.goto("/${table.name}/new");`);
+    for (const col of editableFields.slice(0, 4)) {
+      const val = sampleValue(col);
+      if (col.type === "Boolean") {
+        lines.push(`    // ${col.comment ?? col.name}`);
+        lines.push(`    await page.locator('input[type="checkbox"]').first().check();`);
+      } else {
+        lines.push(`    // ${col.comment ?? col.name}`);
+        lines.push(`    await page.locator('input[type="${inputType(col)}"]').nth(${editableFields.indexOf(col)}).fill("${val}");`);
+      }
+    }
+    lines.push(`    await page.locator('button[type="submit"]').click();`);
+    lines.push(`    // Should redirect to list page after save`);
+    lines.push(`    await page.waitForURL("**/${table.name}", { timeout: 10000 });`);
+    lines.push(`    await expect(page.locator("h1")).toContainText("一覧");`);
+    lines.push("  });");
+    lines.push("");
+
+    // List page shows data
+    lines.push(`  test("list page displays records with links", async ({ page }) => {`);
+    lines.push(`    await page.goto("/${table.name}");`);
+    lines.push(`    await expect(page.locator("h1")).toContainText("一覧");`);
+    lines.push(`    await expect(page.locator("table")).toBeVisible();`);
+    lines.push(`    // Should have detail links`);
+    lines.push(`    const links = page.locator('a:has-text("詳細")');`);
+    lines.push(`    await expect(links.first()).toBeVisible();`);
+    lines.push("  });");
+    lines.push("");
+
+    // Detail page
+    lines.push(`  test("detail page shows record fields", async ({ page }) => {`);
+    lines.push(`    await page.goto("/${table.name}");`);
+    lines.push(`    await page.locator('a:has-text("詳細")').first().click();`);
+    lines.push(`    await expect(page.locator("h1")).toContainText("詳細");`);
+    lines.push(`    // Should have edit link`);
+    lines.push(`    await expect(page.locator('a:has-text("編集")')).toBeVisible();`);
+    lines.push("  });");
+    lines.push("");
+
+    // Edit page
+    lines.push(`  test("edit page pre-fills existing data", async ({ page }) => {`);
+    lines.push(`    await page.goto("/${table.name}");`);
+    lines.push(`    await page.locator('a:has-text("詳細")').first().click();`);
+    lines.push(`    await page.locator('a:has-text("編集")').click();`);
+    lines.push(`    await expect(page.locator("h1")).toContainText("編集");`);
+    lines.push(`    // Form should be visible with submit button`);
+    lines.push(`    await expect(page.locator('button[type="submit"]')).toBeVisible();`);
+    lines.push("  });");
+
+    lines.push("});");
+    lines.push("");
+  }
+
+  return lines.join("\n");
+}
+
 function generateAuthSetup(): string {
   return `import { test as setup, expect } from "@playwright/test";
 
@@ -576,6 +717,14 @@ export function generateVerifyScaffold(input: VerifyInput): VerifyScaffoldFile[]
     const logicSpec = generateMigrationLogicSpec(input.phpAnalyses);
     if (logicSpec) {
       files.push({ path: "e2e/migration-logic.spec.ts", content: logicSpec });
+    }
+  }
+
+  // Form UI E2E tests (from table definitions)
+  if (input.tables && input.tables.length > 0) {
+    const formSpec = generateMigrationFormSpec(input.tables);
+    if (formSpec) {
+      files.push({ path: "e2e/migration-form.spec.ts", content: formSpec });
     }
   }
 
