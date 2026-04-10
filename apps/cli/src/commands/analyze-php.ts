@@ -23,14 +23,27 @@ import {
 import type { PhpFileAnalysis, TableDefinition, AiRouteInput } from "@wp-transfer/analyzer";
 
 async function analyzePhpDirectory(dirPath: string): Promise<PhpFileAnalysis[]> {
-  const entries = await readdir(dirPath);
-  const phpFiles = entries.filter((f: string) => f.endsWith(".php")).sort();
-
   const results: PhpFileAnalysis[] = [];
-  for (const file of phpFiles) {
-    const content = await readFile(join(dirPath, file), "utf-8");
-    results.push(analyzePhpFile(content, file));
+  const seen = new Set<string>();
+
+  async function scanDir(dir: string) {
+    const entries = await readdir(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        // Recurse into wp-content/themes but skip node_modules, .git, uploads
+        if (["node_modules", ".git", "uploads", "plugins", "cache"].includes(entry.name)) continue;
+        await scanDir(fullPath);
+      } else if (entry.name.endsWith(".php") && !seen.has(entry.name)) {
+        seen.add(entry.name);
+        const content = await readFile(fullPath, "utf-8");
+        results.push(analyzePhpFile(content, entry.name));
+      }
+    }
   }
+
+  await scanDir(dirPath);
+  results.sort((a, b) => a.fileName.localeCompare(b.fileName));
   return results;
 }
 
