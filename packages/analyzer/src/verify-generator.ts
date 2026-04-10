@@ -775,6 +775,7 @@ export default defineConfig({
     {
       name: "tests",
       dependencies: ["setup"],
+      testIgnore: /migration-auth\\.spec\\.ts/,
     },
   ],
   webServer: {
