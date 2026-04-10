@@ -168,7 +168,7 @@ function generateApiSpec(input: VerifyInput): string | null {
   return lines.join("\n");
 }
 
-function generateAuthSpec(): string | null {
+function generateAuthSpec(tableNames?: string[]): string | null {
   const lines: string[] = [];
   lines.push('import { test, expect } from "@playwright/test";');
   lines.push("");
@@ -186,12 +186,37 @@ function generateAuthSpec(): string | null {
   lines.push('    expect(page.url()).toContain("signin");');
   lines.push("  });");
   lines.push("");
+
+  // Task 8: unauthenticated API returns 401
+  if (tableNames && tableNames.length > 0) {
+    const firstTable = tableNames[0]!;
+    const apiPath = getApiPath(firstTable);
+    lines.push(`  test("unauthenticated GET ${apiPath} returns 401", async ({ request }) => {`);
+    lines.push(`    const res = await request.fetch("${apiPath}", {`);
+    lines.push("      headers: { cookie: \"\" },");
+    lines.push("    });");
+    lines.push(`    expect(res.status()).toBe(401);`);
+    lines.push("  });");
+    lines.push("");
+  }
+
   lines.push(
     '  test("auth session endpoint responds", async ({ request }) => {',
   );
   lines.push('    const res = await request.get("/api/auth/session");');
   lines.push("    expect(res.status()).toBe(200);");
   lines.push("  });");
+  lines.push("");
+
+  // Task 8: authenticated session returns user with role
+  lines.push('  test("authenticated session returns user data with role", async ({ request }) => {');
+  lines.push('    const res = await request.get("/api/auth/session");');
+  lines.push("    expect(res.status()).toBe(200);");
+  lines.push("    const body = await res.json();");
+  lines.push('    expect(body).toHaveProperty("user");');
+  lines.push('    expect(body.user).toHaveProperty("role");');
+  lines.push("  });");
+
   lines.push("});");
 
   return lines.join("\n");
@@ -295,7 +320,15 @@ function generateMigrationCrudSpec(analyses: PhpAnalysisSummary[], tables: strin
 
   for (const [table, ops] of tableOps) {
     const apiPath = getApiPath(table);
-    lines.push(`test.describe("${table} CRUD (from PHP migration)", () => {`);
+    const hasFullCrud = ops.has("INSERT") && ops.has("UPDATE") && ops.has("DELETE");
+
+    if (hasFullCrud) {
+      lines.push(`test.describe.serial("${table} CRUD (from PHP migration)", () => {`);
+      lines.push(`  let createdId: number;`);
+      lines.push("");
+    } else {
+      lines.push(`test.describe("${table} CRUD (from PHP migration)", () => {`);
+    }
 
     if (ops.has("INSERT")) {
       lines.push(`  test("POST ${apiPath} — create record (PHP: INSERT)", async ({ request }) => {`);
@@ -305,6 +338,10 @@ function generateMigrationCrudSpec(analyses: PhpAnalysisSummary[], tables: strin
       lines.push(`    expect([200, 201]).toContain(res.status());`);
       lines.push("    const body = await res.json();");
       lines.push(`    expect(body).toHaveProperty("id");`);
+      lines.push(`    expect(body.id).toBeTruthy();`);
+      if (hasFullCrud) {
+        lines.push(`    createdId = body.id;`);
+      }
       lines.push("  });");
       lines.push("");
     }
@@ -319,21 +356,47 @@ function generateMigrationCrudSpec(analyses: PhpAnalysisSummary[], tables: strin
     lines.push("");
 
     if (ops.has("UPDATE")) {
-      lines.push(`  test("PUT ${apiPath}/1 — update record (PHP: UPDATE)", async ({ request }) => {`);
-      lines.push(`    const res = await request.put("${apiPath}/1", {`);
-      lines.push(`      data: { /* updated fields */ },`);
-      lines.push("    });");
-      lines.push(`    expect(res.status()).toBe(200);`);
-      lines.push("  });");
+      if (hasFullCrud) {
+        lines.push(`  test("PUT ${apiPath}/{id} — update record (PHP: UPDATE)", async ({ request }) => {`);
+        lines.push("    const res = await request.put(`" + apiPath + "/${createdId}`, {");
+        lines.push(`      data: { /* updated fields */ },`);
+        lines.push("    });");
+        lines.push(`    expect(res.status()).toBe(200);`);
+        lines.push("");
+        lines.push("    // Verify update persisted");
+        lines.push("    const getRes = await request.get(`" + apiPath + "/${createdId}`);");
+        lines.push(`    expect(getRes.status()).toBe(200);`);
+        lines.push("    const body = await getRes.json();");
+        lines.push(`    expect(body).toHaveProperty("id", createdId);`);
+        lines.push("  });");
+      } else {
+        lines.push(`  test("PUT ${apiPath}/1 — update record (PHP: UPDATE)", async ({ request }) => {`);
+        lines.push(`    const res = await request.put("${apiPath}/1", {`);
+        lines.push(`      data: { /* updated fields */ },`);
+        lines.push("    });");
+        lines.push(`    expect(res.status()).toBe(200);`);
+        lines.push("  });");
+      }
       lines.push("");
     }
 
     if (ops.has("DELETE")) {
-      lines.push(`  test("DELETE ${apiPath}/1 — delete record (PHP: DELETE)", async ({ request }) => {`);
-      lines.push(`    const res = await request.delete("${apiPath}/999");`);
-      lines.push(`    // 200 OK or 404 if not found`);
-      lines.push(`    expect([200, 204, 404]).toContain(res.status());`);
-      lines.push("  });");
+      if (hasFullCrud) {
+        lines.push(`  test("DELETE ${apiPath}/{id} — delete record (PHP: DELETE)", async ({ request }) => {`);
+        lines.push("    const res = await request.delete(`" + apiPath + "/${createdId}`);");
+        lines.push(`    expect([200, 204]).toContain(res.status());`);
+        lines.push("");
+        lines.push("    // Verify deletion");
+        lines.push("    const getRes = await request.get(`" + apiPath + "/${createdId}`);");
+        lines.push(`    expect(getRes.status()).toBe(404);`);
+        lines.push("  });");
+      } else {
+        lines.push(`  test("DELETE ${apiPath}/1 — delete record (PHP: DELETE)", async ({ request }) => {`);
+        lines.push(`    const res = await request.delete("${apiPath}/999");`);
+        lines.push(`    // 200 OK or 404 if not found`);
+        lines.push(`    expect([200, 204, 404]).toContain(res.status());`);
+        lines.push("  });");
+      }
       lines.push("");
     }
 
@@ -363,6 +426,10 @@ function detectLogicTests(analyses: PhpAnalysisSummary[]): LogicTest[] {
         'const created = await request.post("/api/events", { data: { title: "State Test Event" } });',
         "const eventId = (await created.json()).id;",
         "",
+        "// Verify initial state (status === 0)",
+        'const initial = await (await request.get(`/api/events/${eventId}`)).json();',
+        "expect(initial.status).toBe(0);",
+        "",
         "// Stop event (status → 1)",
         'const stopRes = await request.post(`/api/events/${eventId}/stop`);',
         "expect(stopRes.status()).toBe(200);",
@@ -384,16 +451,20 @@ function detectLogicTests(analyses: PhpAnalysisSummary[]): LogicTest[] {
       name: "user blacklist on/off toggle",
       description: "PHP: user-blacklist.php sets blacklist=1, user-blacklist-out.php sets blacklist=0",
       steps: [
+        '// Verify initial state (blacklist off)',
+        'const initial = await (await request.get("/api/users/1")).json();',
+        'expect(initial.blacklist).toBeFalsy();',
+        '',
         '// Blacklist ON',
         'const onRes = await request.post("/api/users/1/blacklist");',
         'expect(onRes.status()).toBe(200);',
-        'const blocked = await (await request.get("/api/users/1/blacklist")).json();',
+        'const blocked = await (await request.get("/api/users/1")).json();',
         'expect(blocked.blacklist).toBeTruthy();',
         '',
         '// Blacklist OFF',
         'const offRes = await request.delete("/api/users/1/blacklist");',
         'expect(offRes.status()).toBe(200);',
-        'const unblocked = await (await request.get("/api/users/1/blacklist")).json();',
+        'const unblocked = await (await request.get("/api/users/1")).json();',
         'expect(unblocked.blacklist).toBeFalsy();',
       ],
     });
@@ -538,10 +609,12 @@ function generateMigrationFormSpec(tables: TableInfo[]): string | null {
     // New page renders
     lines.push(`  test("new page renders with all form fields", async ({ page }) => {`);
     lines.push(`    await page.goto("/${table.name}/new");`);
-    lines.push(`    await expect(page.locator("h1")).toContainText("新規作成");`);
+    lines.push(`    await expect(page.locator(".wp-admin-title")).toContainText("新規作成");`);
+    lines.push(`    // Verify WP CSS classes are present`);
+    lines.push(`    await expect(page.locator(".wp-form-field").first()).toBeVisible();`);
     for (const col of editableFields) {
       const itype = inputType(col);
-      lines.push(`    await expect(page.locator('input[type="${itype}"]').first()).toBeVisible();`);
+      lines.push(`    await expect(page.locator('.wp-form-field input[type="${itype}"]').first()).toBeVisible();`);
       break; // one field check is enough to prove the form rendered
     }
     lines.push("  });");
@@ -554,26 +627,26 @@ function generateMigrationFormSpec(tables: TableInfo[]): string | null {
       const val = sampleValue(col);
       if (col.type === "Boolean") {
         lines.push(`    // ${col.comment ?? col.name}`);
-        lines.push(`    await page.locator('input[type="checkbox"]').first().check();`);
+        lines.push(`    await page.locator('.wp-form-field input[type="checkbox"]').first().check();`);
       } else {
         lines.push(`    // ${col.comment ?? col.name}`);
-        lines.push(`    await page.locator('input[type="${inputType(col)}"]').nth(${editableFields.indexOf(col)}).fill("${val}");`);
+        lines.push(`    await page.locator('.wp-form-field input[type="${inputType(col)}"]').nth(${editableFields.indexOf(col)}).fill("${val}");`);
       }
     }
     lines.push(`    await page.locator('button[type="submit"]').click();`);
     lines.push(`    // Should redirect to list page after save`);
     lines.push(`    await page.waitForURL("**/${table.name}", { timeout: 10000 });`);
-    lines.push(`    await expect(page.locator("h1")).toContainText("一覧");`);
+    lines.push(`    await expect(page.locator(".wp-admin-title")).toContainText("一覧");`);
     lines.push("  });");
     lines.push("");
 
     // List page shows data
     lines.push(`  test("list page displays records with links", async ({ page }) => {`);
     lines.push(`    await page.goto("/${table.name}");`);
-    lines.push(`    await expect(page.locator("h1")).toContainText("一覧");`);
-    lines.push(`    await expect(page.locator("table")).toBeVisible();`);
+    lines.push(`    await expect(page.locator(".wp-admin-title")).toContainText("一覧");`);
+    lines.push(`    await expect(page.locator(".wp-list-table")).toBeVisible();`);
     lines.push(`    // Should have detail links`);
-    lines.push(`    const links = page.locator('a:has-text("詳細")');`);
+    lines.push(`    const links = page.locator('.wp-list-table a:has-text("詳細")');`);
     lines.push(`    await expect(links.first()).toBeVisible();`);
     lines.push("  });");
     lines.push("");
@@ -581,8 +654,8 @@ function generateMigrationFormSpec(tables: TableInfo[]): string | null {
     // Detail page
     lines.push(`  test("detail page shows record fields", async ({ page }) => {`);
     lines.push(`    await page.goto("/${table.name}");`);
-    lines.push(`    await page.locator('a:has-text("詳細")').first().click();`);
-    lines.push(`    await expect(page.locator("h1")).toContainText("詳細");`);
+    lines.push(`    await page.locator('.wp-list-table a:has-text("詳細")').first().click();`);
+    lines.push(`    await expect(page.locator(".wp-admin-title")).toContainText("詳細");`);
     lines.push(`    // Should have edit link`);
     lines.push(`    await expect(page.locator('a:has-text("編集")')).toBeVisible();`);
     lines.push("  });");
@@ -591,10 +664,11 @@ function generateMigrationFormSpec(tables: TableInfo[]): string | null {
     // Edit page
     lines.push(`  test("edit page pre-fills existing data", async ({ page }) => {`);
     lines.push(`    await page.goto("/${table.name}");`);
-    lines.push(`    await page.locator('a:has-text("詳細")').first().click();`);
+    lines.push(`    await page.locator('.wp-list-table a:has-text("詳細")').first().click();`);
     lines.push(`    await page.locator('a:has-text("編集")').click();`);
-    lines.push(`    await expect(page.locator("h1")).toContainText("編集");`);
-    lines.push(`    // Form should be visible with submit button`);
+    lines.push(`    await expect(page.locator(".wp-admin-title")).toContainText("編集");`);
+    lines.push(`    // Form should be visible with submit button and WP form fields`);
+    lines.push(`    await expect(page.locator(".wp-form-field").first()).toBeVisible();`);
     lines.push(`    await expect(page.locator('button[type="submit"]')).toBeVisible();`);
     lines.push("  });");
 
@@ -689,7 +763,7 @@ export function generateVerifyScaffold(input: VerifyInput): VerifyScaffoldFile[]
   }
 
   if (input.hasAuth) {
-    const authSpec = generateAuthSpec();
+    const authSpec = generateAuthSpec(input.tableNames);
     if (authSpec) {
       files.push({ path: "e2e/auth.spec.ts", content: authSpec });
     }
