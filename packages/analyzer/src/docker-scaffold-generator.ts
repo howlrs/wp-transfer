@@ -27,6 +27,7 @@ function generateDockerCompose(
     restart: unless-stopped
     ports:
       - "3306:3306"
+    command: --default-authentication-plugin=mysql_native_password
     environment:
       MYSQL_ROOT_PASSWORD: root
       MYSQL_DATABASE: ${dbName}
