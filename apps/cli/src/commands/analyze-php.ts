@@ -31,8 +31,30 @@ async function analyzePhpDirectory(dirPath: string): Promise<PhpFileAnalysis[]> 
     for (const entry of entries) {
       const fullPath = join(dir, entry.name);
       if (entry.isDirectory()) {
-        // Recurse into wp-content/themes but skip node_modules, .git, uploads
-        if (["node_modules", ".git", "uploads", "plugins", "cache"].includes(entry.name)) continue;
+        // Skip WP core, plugins, vendor, and build artifact directories
+        if ([
+          "node_modules", ".git", "uploads", "plugins", "cache", "vendor",
+          "wp-admin", "wp-includes",
+        ].includes(entry.name)) continue;
+        // Skip default WordPress themes (only analyze custom themes)
+        if (/^twenty(twenty|nineteen|seventeen|sixteen|fifteen|fourteen|thirteen|twelve|eleven|ten)/.test(entry.name)) {
+          // But DO analyze if the custom theme is within a twentytwenty* directory
+          // Check if there are custom PHP files (page-*, insert*, update*, delete*)
+          const themeEntries = await readdir(fullPath, { withFileTypes: true });
+          const hasCustomFiles = themeEntries.some(e =>
+            e.isFile() && e.name.endsWith(".php") && (
+              e.name.startsWith("page-") ||
+              e.name.startsWith("insert") ||
+              e.name.startsWith("update") ||
+              e.name.startsWith("delete") ||
+              e.name.includes("-stop") ||
+              e.name.includes("-restoration") ||
+              e.name.includes("blacklist") ||
+              e.name.includes("lottery")
+            )
+          );
+          if (!hasCustomFiles) continue;
+        }
         await scanDir(fullPath);
       } else if (entry.name.endsWith(".php") && !seen.has(entry.name)) {
         seen.add(entry.name);
@@ -484,6 +506,14 @@ export const analyzePhpCommand = defineCommand({
         consola.success(
           `Parsed ${result.tables.length} tables from schema documentation`,
         );
+      }
+    }
+
+    // Filter dbOperations to only reference known schema tables (if schema provided)
+    if (tables.length > 0) {
+      const knownTables = new Set(tables.map(t => t.name));
+      for (const a of custom) {
+        a.dbOperations = a.dbOperations.filter(op => knownTables.has(op.table));
       }
     }
 
