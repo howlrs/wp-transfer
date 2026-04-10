@@ -302,7 +302,7 @@ function generateMigrationAuthSpec(tables: string[], apiRoutes?: Array<{ path: s
   lines.push(" * PHP source had no auth — Next.js adds middleware protection.");
   lines.push(" */");
   lines.push('test.describe("Auth protection: API endpoints reject unauthenticated requests", () => {');
-  lines.push('  test.use({ storageState: undefined }); // No auth');
+  lines.push('  test.use({ storageState: { cookies: [], origins: [] } }); // No auth');
   lines.push("");
 
   for (const table of tables) {
