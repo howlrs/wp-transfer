@@ -249,7 +249,7 @@ describe("Admin Scaffold Generator", () => {
       expect(listPage!.content).not.toContain("style={");
     });
 
-    it("defaults to plain (inline styles) when no option", () => {
+    it("defaults to plain (WP CSS classes) when no option", () => {
       const analyses = [makeAnalysis({ fileName: "page-event-list.php" })];
       const tables = [makeTable("event")];
 
@@ -257,8 +257,8 @@ describe("Admin Scaffold Generator", () => {
       const listPage = findPage(pages, "events/page.tsx");
 
       expect(listPage).toBeDefined();
-      expect(listPage!.content).toContain("style={");
-      expect(listPage!.content).not.toContain("className=");
+      expect(listPage!.content).toContain("className=");
+      expect(listPage!.content).toContain("wp-list-table");
     });
 
     it("generates Tailwind form page without inline styles", () => {
@@ -846,5 +846,74 @@ describe("dashboard cards link to table pages", () => {
     expect(dashboard).toBeDefined();
     expect(dashboard!.content).toContain('href="/event"');
     expect(dashboard!.content).toContain('href="/user"');
+  });
+});
+
+describe("WP admin CSS generation", () => {
+  it("generates globals.css with WP color palette", () => {
+    const pages = generateAdminScaffold([makeAnalysis({ fileName: "page-event-list.php" })], [makeTable("event")]);
+    const css = pages.find((p) => p.path === "app/globals.css");
+    expect(css).toBeDefined();
+    expect(css!.content).toContain("#23282d");
+    expect(css!.content).toContain("#0073aa");
+    expect(css!.content).toContain(".wp-admin-sidebar");
+    expect(css!.content).toContain(".wp-list-table");
+    expect(css!.content).toContain(".wp-notice");
+    expect(css!.content).toContain(".wp-form-field");
+  });
+});
+
+describe("WP CSS class usage", () => {
+  it("layout uses WP CSS classes instead of inline styles", () => {
+    const pages = generateAdminScaffold([makeAnalysis({ fileName: "page-event-list.php" })], [makeTable("event")]);
+    const layout = pages.find((p) => p.path === "app/(admin)/layout.tsx");
+    expect(layout!.content).toContain("wp-admin-sidebar");
+    expect(layout!.content).toContain("wp-admin-menu-item");
+    expect(layout!.content).toContain('import "@/app/globals.css"');
+    expect(layout!.content).not.toContain('backgroundColor: "#1f2937"');
+  });
+
+  it("list page uses wp-list-table", () => {
+    const pages = generateAdminScaffold([makeAnalysis({ fileName: "page-event-list.php" })], [makeTable("event")]);
+    const list = pages.find((p) => p.path.includes("events/page.tsx"));
+    expect(list!.content).toContain("wp-list-table");
+    expect(list!.content).toContain("wp-admin-wrap");
+    expect(list!.content).toContain("wp-admin-title");
+    expect(list!.content).not.toContain('backgroundColor: "#f3f4f6"');
+  });
+
+  it("form page uses wp-form-field classes", () => {
+    const pages = generateAdminScaffold([
+      makeAnalysis({
+        fileName: "page-event.php",
+        formSpec: {
+          fields: [
+            { name: "title", type: "text", label: "タイトル", required: true },
+            { name: "status", type: "select", label: "ステータス", options: [{ value: "1", label: "公開" }] },
+          ],
+          submitLabel: "登録",
+        },
+      }),
+    ], [makeTable("event")]);
+    const form = pages.find((p) => p.path.includes("events/new/page.tsx"));
+    expect(form!.content).toContain("wp-form-field");
+    expect(form!.content).toContain("wp-form-select");
+    expect(form!.content).toContain("wp-button wp-button-primary");
+    expect(form!.content).toContain("wp-notice wp-notice-error");
+  });
+
+  it("detail page uses WP CSS classes", () => {
+    const pages = generateAdminScaffold([], [makeTable("event")]);
+    const detail = pages.find((p) => p.path.includes("[id]/page.tsx") && !p.path.includes("edit"));
+    expect(detail!.content).toContain("wp-admin-wrap");
+    expect(detail!.content).toContain("wp-button wp-button-primary");
+    expect(detail!.content).toContain("wp-button wp-button-danger");
+  });
+
+  it("dashboard uses WP card classes", () => {
+    const pages = generateAdminScaffold([], [makeTable("event"), makeTable("information")]);
+    const dash = pages.find((p) => p.path === "app/(admin)/page.tsx");
+    expect(dash!.content).toContain("wp-dashboard-grid");
+    expect(dash!.content).toContain("wp-dashboard-card");
   });
 });
