@@ -768,6 +768,11 @@ export default defineConfig({
       use: { storageState: undefined },
     },
     {
+      name: "no-auth",
+      testMatch: /migration-auth\\.spec\\.ts/,
+      use: { storageState: { cookies: [], origins: [] } },
+    },
+    {
       name: "tests",
       dependencies: ["setup"],
     },
