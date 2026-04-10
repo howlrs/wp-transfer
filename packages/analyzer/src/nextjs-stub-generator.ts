@@ -677,9 +677,11 @@ function generateTransactionBody(
       (op) => op.type === "INSERT" && op.table === txInfo.childTable && op.inLoop,
     );
     if (childOpsInLoop) {
-      lines.push(`      await tx.${childModel}.createMany({`);
-      lines.push("        data: data.items, // TODO: Extract array field from request body");
-      lines.push("      });");
+      lines.push("      if (Array.isArray(data.items) && data.items.length > 0) {");
+      lines.push(`        await tx.${childModel}.createMany({`);
+      lines.push(`          data: data.items.map((item: Record<string, unknown>) => ({ ...item, ${txInfo.childFkColumn ?? txInfo.parentTable + "_id"}: parent.id })),`);
+      lines.push("        });");
+      lines.push("      }");
     } else {
       lines.push(`      await tx.${childModel}.create({`);
       lines.push("        data: {");
