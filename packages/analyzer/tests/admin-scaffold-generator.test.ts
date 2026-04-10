@@ -833,8 +833,8 @@ describe("dashboard cards link to table pages", () => {
     const dashboard = findPage(pages, "(admin)/page.tsx");
 
     expect(dashboard).toBeDefined();
-    expect(dashboard!.content).toContain('href="/(admin)/event"');
-    expect(dashboard!.content).toContain('href="/(admin)/user"');
+    expect(dashboard!.content).toContain('href="/event"');
+    expect(dashboard!.content).toContain('href="/user"');
   });
 
   it("tailwind dashboard cards link to table pages", () => {
@@ -844,7 +844,7 @@ describe("dashboard cards link to table pages", () => {
     const dashboard = findPage(pages, "(admin)/page.tsx");
 
     expect(dashboard).toBeDefined();
-    expect(dashboard!.content).toContain('href="/(admin)/event"');
-    expect(dashboard!.content).toContain('href="/(admin)/user"');
+    expect(dashboard!.content).toContain('href="/event"');
+    expect(dashboard!.content).toContain('href="/user"');
   });
 });

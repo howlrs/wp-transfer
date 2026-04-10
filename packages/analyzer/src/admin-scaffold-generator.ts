@@ -855,7 +855,7 @@ function generateDashboardPage(tables: TableDefinition[], fw: UiFramework): stri
   if (fw === "tailwind") {
     const twCards = tables
       .map(
-        (t, i) => `        <a key="${t.name}" href="/(admin)/${t.name}" className="block p-6 bg-white rounded-lg shadow-sm no-underline text-inherit">
+        (t, i) => `        <a key="${t.name}" href="/${t.name}" className="block p-6 bg-white rounded-lg shadow-sm no-underline text-inherit">
           <p className="text-sm text-gray-500">${toPascalCase(t.name)}</p>
           <p className="text-3xl font-bold text-blue-800">{count${i}}</p>
         </a>`,
@@ -888,7 +888,7 @@ ${twCards}
     .map(
       (t, i) => `        <a
           key="${t.name}"
-          href="/(admin)/${t.name}"
+          href="/${t.name}"
           style={{
             textDecoration: "none",
             color: "inherit",
@@ -956,7 +956,7 @@ function generateAdminLayout(pages: AdminPage[], tables: TableDefinition[], fw: 
       seen.add(t.name);
       menuItems.push({
         label: toPascalCase(t.name),
-        href: `/(admin)/${t.name}`,
+        href: `/${t.name}`,
       });
     }
   }
@@ -1109,7 +1109,7 @@ ${columns.map((c) => `              <th className="px-4 py-3 text-left text-xs f
               <tr key={String(item.${pk.name})} className="border-t border-gray-200">
 ${columns.map((c) => `                <td className="px-4 py-3 text-sm">{String(item.${c.name} ?? "")}</td>`).join("\n")}
                 <td className="px-4 py-3">
-                  <Link href={\`/(admin)/${table.name}/\${item.${pk.name}}\`} className="text-blue-600 underline">
+                  <Link href={\`/${table.name}/\${item.${pk.name}}\`} className="text-blue-600 underline">
                     詳細
                   </Link>
                 </td>
@@ -1157,7 +1157,7 @@ ${columns.map((c) => `              <th style={{ padding: "12px 16px", textAlign
               <tr key={String(item.${pk.name})} style={{ borderTop: "1px solid #e5e7eb" }}>
 ${columns.map((c) => `                <td style={{ padding: "12px 16px", fontSize: "14px" }}>{String(item.${c.name} ?? "")}</td>`).join("\n")}
                 <td style={{ padding: "12px 16px" }}>
-                  <Link href={\`/(admin)/${table.name}/\${item.${pk.name}}\`} style={{ color: "#2563eb", textDecoration: "underline" }}>
+                  <Link href={\`/${table.name}/\${item.${pk.name}}\`} style={{ color: "#2563eb", textDecoration: "underline" }}>
                     詳細
                   </Link>
                 </td>
@@ -1216,7 +1216,7 @@ export default async function ${modelName}DetailPage({ params }: { params: Promi
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">${modelName} 詳細</h1>
         <div className="flex gap-2">
-          <Link href={\`/(admin)/${table.name}/\${id}/edit\`} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+          <Link href={\`/${table.name}/\${id}/edit\`} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
             編集
           </Link>
           <form action={handleDelete}>
@@ -1258,7 +1258,7 @@ export default async function ${modelName}DetailPage({ params }: { params: Promi
         <h1 style={{ fontSize: "24px", fontWeight: "bold" }}>${modelName} 詳細</h1>
         <div style={{ display: "flex", gap: "8px" }}>
           <Link
-            href={\`/(admin)/${table.name}/\${id}/edit\`}
+            href={\`/${table.name}/\${id}/edit\`}
             style={{ padding: "8px 16px", backgroundColor: "#2563eb", color: "white", borderRadius: "6px", textDecoration: "none" }}
           >
             編集
@@ -1576,9 +1576,8 @@ export function generateAdminScaffold(
         existingPaths.add(`app/(admin)/${resource}/page.tsx`);
       }
 
-      // Detail page
-      const hasDetailPage = existingPaths.has(`app/(admin)/${resource}/[id]/page.tsx`)
-        || existingPaths.has(`app/(admin)/${pluralResource}/[id]/page.tsx`);
+      // Detail page — must be [id]/page.tsx (not summary, not form)
+      const hasDetailPage = existingPaths.has(`app/(admin)/${resource}/[id]/page.tsx`);
       if (!hasDetailPage) {
         pages.push(generateTableDetailPage(table, fw));
         existingPaths.add(`app/(admin)/${resource}/[id]/page.tsx`);
