@@ -262,6 +262,13 @@ export function detectRelations(tables: TableDefinition[]): RelationDefinition[]
       if (candidate === table.name) continue;
 
       if (tableNames.has(candidate)) {
+        // Type-check: FK column type must match parent PK type
+        const parentTable = tables.find((t) => t.name === candidate);
+        const parentPk = parentTable?.columns.find((c) => c.isPrimary);
+        if (parentPk && parentPk.type !== col.type) {
+          // Skip relation — type mismatch (e.g., Int FK → String PK)
+          continue;
+        }
         relations.push({
           childTable: table.name,
           childColumn: col.name,
