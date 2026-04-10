@@ -779,6 +779,52 @@ describe("non-standard primary key support", () => {
   });
 });
 
+describe("CRUD gap filling for PHP-matched tables", () => {
+  it("generates missing new/detail/edit pages even when list page exists from PHP", () => {
+    // page-event-search-list.php creates events/search/page.tsx (a list-like page)
+    const analyses = [makeAnalysis({ fileName: "page-event-search-list.php" })];
+    const tables = [makeTable("event")];
+
+    const pages = generateAdminScaffold(analyses, tables);
+
+    // PHP-matched pages
+    expect(findPage(pages, "events/search/page.tsx")).toBeDefined();
+
+    // Gap-filled table-driven pages
+    expect(findPage(pages, "event/[id]/page.tsx")).toBeDefined();       // detail
+    expect(findPage(pages, "event/[id]/edit/page.tsx")).toBeDefined();  // edit
+    expect(findPage(pages, "event/new/page.tsx")).toBeDefined();        // new
+  });
+
+  it("does not duplicate pages that already exist from PHP patterns", () => {
+    const analyses = [
+      makeAnalysis({ fileName: "page-event-list.php" }),
+      makeAnalysis({ fileName: "page-event-update.php", inputParams: [
+        { name: "title", source: "$_POST", usage: "" },
+      ] }),
+    ];
+    const tables = [makeTable("event")];
+
+    const pages = generateAdminScaffold(analyses, tables);
+
+    // PHP-matched list page
+    const listPages = pages.filter(
+      (p) => p.type === "list" && (p.path.includes("events/page.tsx") || p.path.includes("event/page.tsx")),
+    );
+    expect(listPages.length).toBe(1);
+
+    // PHP-matched edit page (events/[id]/page.tsx)
+    const editPages = pages.filter(
+      (p) => p.type === "form" && p.path.includes("events/[id]/page.tsx"),
+    );
+    expect(editPages.length).toBe(1);
+
+    // Gap-filled new and detail
+    expect(findPage(pages, "event/new/page.tsx")).toBeDefined();
+    expect(findPage(pages, "event/[id]/page.tsx") || findPage(pages, "events/[id]/page.tsx")).toBeDefined();
+  });
+});
+
 describe("dashboard cards link to table pages", () => {
   it("dashboard count cards are wrapped in links to table pages", () => {
     const tables = [makeTable("event"), makeTable("user")];
