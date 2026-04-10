@@ -687,9 +687,15 @@ function generateAuthSetup(): string {
  * Other test files use this via storageState in playwright.config.ts.
  */
 setup("authenticate as admin", async ({ page }) => {
+  // Ensure auth directory exists
+  const fs = await import("node:fs");
+  fs.mkdirSync("e2e/.auth", { recursive: true });
+
   await page.goto("/login");
-  await page.fill('input[name="username"]', "admin");
-  await page.fill('input[name="password"]', "admin123");
+  // Wait for client-side hydration (login is a "use client" component)
+  await page.waitForSelector('input[type="text"]', { timeout: 10_000 });
+  await page.fill('input[type="text"]', "admin");
+  await page.fill('input[type="password"]', "admin123");
   await page.click('button[type="submit"]');
 
   // Wait for redirect after login
@@ -755,6 +761,8 @@ export function generateVerifyScaffold(input: VerifyInput): VerifyScaffoldFile[]
   // Add auth setup if auth is enabled
   if (input.hasAuth) {
     files.push({ path: "e2e/auth.setup.ts", content: generateAuthSetup() });
+    // Seed empty storageState so Playwright doesn't error before setup runs
+    files.push({ path: "e2e/.auth/user.json", content: '{"cookies":[],"origins":[]}' });
   }
 
   const apiSpec = generateApiSpec(input);
