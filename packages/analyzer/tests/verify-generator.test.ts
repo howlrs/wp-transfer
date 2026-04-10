@@ -322,6 +322,103 @@ describe("Migration business logic tests", () => {
   });
 });
 
+// ── Form UI E2E test generation ──
+
+const formInput = {
+  postSlugs: [],
+  categorySlugs: [],
+  hasAuth: true,
+  tableNames: ["event", "information"],
+  tables: [
+    {
+      name: "event",
+      columns: [
+        { name: "id", type: "Int", nullable: false, isPrimary: true, isAutoIncrement: true },
+        { name: "title", type: "String", nullable: false, isPrimary: false, isAutoIncrement: false, comment: "タイトル" },
+        { name: "status", type: "Int", nullable: false, isPrimary: false, isAutoIncrement: false, comment: "ステータス" },
+        { name: "start_time", type: "DateTime", nullable: true, isPrimary: false, isAutoIncrement: false, comment: "開始日時" },
+      ],
+    },
+    {
+      name: "information",
+      columns: [
+        { name: "id", type: "Int", nullable: false, isPrimary: true, isAutoIncrement: true },
+        { name: "text", type: "String", nullable: true, isPrimary: false, isAutoIncrement: false, comment: "本文" },
+        { name: "banner", type: "String", nullable: true, isPrimary: false, isAutoIncrement: false, comment: "バナー" },
+      ],
+    },
+  ],
+};
+
+describe("Migration form UI tests", () => {
+  it("generates migration-form.spec.ts when tables provided", () => {
+    const files = generateVerifyScaffold(formInput);
+    const spec = findFile(files, "e2e/migration-form.spec.ts");
+    expect(spec).toBeDefined();
+  });
+
+  it("generates new page render test per table", () => {
+    const files = generateVerifyScaffold(formInput);
+    const spec = findFile(files, "e2e/migration-form.spec.ts");
+    expect(spec).toBeDefined();
+    expect(spec!.content).toContain("/event/new");
+    expect(spec!.content).toContain("/information/new");
+    expect(spec!.content).toContain("新規作成");
+  });
+
+  it("generates form fill and submit test", () => {
+    const files = generateVerifyScaffold(formInput);
+    const spec = findFile(files, "e2e/migration-form.spec.ts");
+    expect(spec).toBeDefined();
+    expect(spec!.content).toContain("fill");
+    expect(spec!.content).toContain('button[type="submit"]');
+    expect(spec!.content).toContain("click");
+  });
+
+  it("generates list page verification test", () => {
+    const files = generateVerifyScaffold(formInput);
+    const spec = findFile(files, "e2e/migration-form.spec.ts");
+    expect(spec).toBeDefined();
+    expect(spec!.content).toContain("一覧");
+    expect(spec!.content).toContain("table");
+    expect(spec!.content).toContain("詳細");
+  });
+
+  it("generates detail page test with edit link", () => {
+    const files = generateVerifyScaffold(formInput);
+    const spec = findFile(files, "e2e/migration-form.spec.ts");
+    expect(spec).toBeDefined();
+    expect(spec!.content).toContain("詳細");
+    expect(spec!.content).toContain("編集");
+  });
+
+  it("generates edit page pre-fill test", () => {
+    const files = generateVerifyScaffold(formInput);
+    const spec = findFile(files, "e2e/migration-form.spec.ts");
+    expect(spec).toBeDefined();
+    expect(spec!.content).toContain("編集");
+    expect(spec!.content).toContain('button[type="submit"]');
+  });
+
+  it("includes sample data based on column types", () => {
+    const files = generateVerifyScaffold(formInput);
+    const spec = findFile(files, "e2e/migration-form.spec.ts");
+    expect(spec).toBeDefined();
+    // String field should have テスト prefix
+    expect(spec!.content).toContain("テスト");
+    // DateTime field should have datetime value
+    expect(spec!.content).toContain("2026-01-15");
+  });
+
+  it("does not generate form spec when no tables provided", () => {
+    const files = generateVerifyScaffold({
+      postSlugs: [],
+      categorySlugs: [],
+    });
+    expect(findFile(files, "e2e/migration-form.spec.ts")).toBeUndefined();
+  });
+});
+
 describe("Migration tests are not generated without phpAnalyses", () => {
   it("does not generate migration specs without phpAnalyses", () => {
     const files = generateVerifyScaffold({

@@ -628,6 +628,17 @@ export const analyzePhpCommand = defineCommand({
         dbOperations: a.dbOperations.map(op => ({ type: op.type as "INSERT" | "UPDATE" | "DELETE" | "SELECT", table: op.table })),
         inputParams: a.inputParams.map(p => ({ name: p.name, source: p.source })),
       })),
+      tables: tables.map(t => ({
+        name: t.name,
+        columns: t.columns.map(c => ({
+          name: c.name,
+          type: c.type,
+          nullable: c.nullable,
+          isPrimary: c.isPrimary,
+          isAutoIncrement: c.isAutoIncrement,
+          comment: c.comment,
+        })),
+      })),
     };
     const verifyFiles = generateVerifyScaffold(verifyInput);
     for (const file of verifyFiles) {
