@@ -1324,21 +1324,46 @@ export function generateAdminScaffold(
     pages.push({ path: mapping.path, content, type: mapping.type });
   }
 
-  // Add table-driven CRUD pages for tables without PHP-matched pages
+  // Add table-driven CRUD pages — fill gaps for all tables
   if (tables.length > 0) {
-    const existingResources = new Set(
-      pages.map((p) => {
-        const match = p.path.match(/app\/\(admin\)\/([^/]+)\//);
-        return match ? match[1] : null;
-      }).filter(Boolean),
-    );
+    const existingPaths = new Set(pages.map((p) => p.path));
 
     for (const table of tables) {
-      if (!existingResources.has(table.name) && !existingResources.has(pluralize(table.name))) {
+      const resource = table.name;
+      const pluralResource = pluralize(resource);
+
+      // List page: check both singular and plural paths
+      const hasListPage = existingPaths.has(`app/(admin)/${resource}/page.tsx`)
+        || existingPaths.has(`app/(admin)/${pluralResource}/page.tsx`)
+        || [...existingPaths].some((p) => p.includes(`/${pluralResource}/`) && p.endsWith("/page.tsx") && !p.includes("[id]") && !p.includes("/new/"));
+      if (!hasListPage) {
         pages.push(generateTableListPage(table, fw));
+        existingPaths.add(`app/(admin)/${resource}/page.tsx`);
+      }
+
+      // Detail page
+      const hasDetailPage = existingPaths.has(`app/(admin)/${resource}/[id]/page.tsx`)
+        || existingPaths.has(`app/(admin)/${pluralResource}/[id]/page.tsx`);
+      if (!hasDetailPage) {
         pages.push(generateTableDetailPage(table, fw));
+        existingPaths.add(`app/(admin)/${resource}/[id]/page.tsx`);
+      }
+
+      // Edit page
+      const hasEditPage = existingPaths.has(`app/(admin)/${resource}/[id]/edit/page.tsx`)
+        || existingPaths.has(`app/(admin)/${pluralResource}/[id]/edit/page.tsx`)
+        || existingPaths.has(`app/(admin)/${pluralResource}/[id]/page.tsx`);
+      if (!hasEditPage) {
         pages.push(generateTableFormPage(table, true, fw));
+        existingPaths.add(`app/(admin)/${resource}/[id]/edit/page.tsx`);
+      }
+
+      // New page
+      const hasNewPage = existingPaths.has(`app/(admin)/${resource}/new/page.tsx`)
+        || existingPaths.has(`app/(admin)/${pluralResource}/new/page.tsx`);
+      if (!hasNewPage) {
         pages.push(generateTableFormPage(table, false, fw));
+        existingPaths.add(`app/(admin)/${resource}/new/page.tsx`);
       }
     }
   }
