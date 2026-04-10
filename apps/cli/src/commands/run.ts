@@ -136,7 +136,14 @@ export const runCommand = defineCommand({
 
     // Set DATABASE_URL for host-side Prisma operations (replace Docker hostname with localhost)
     if (!args["no-docker"]) {
+      // Copy .env.example to .env if .env doesn't exist
       const envPath = resolve(projectDir, ".env");
+      const envExamplePath = resolve(projectDir, ".env.example");
+      if (!existsSync(envPath) && existsSync(envExamplePath)) {
+        const { copyFileSync } = await import("node:fs");
+        copyFileSync(envExamplePath, envPath);
+        consola.info("Created .env from .env.example");
+      }
       if (existsSync(envPath)) {
         const envContent = readFileSync(envPath, "utf-8");
         const dbUrlMatch = envContent.match(/DATABASE_URL="?([^"\n]+)"?/);
