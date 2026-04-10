@@ -716,6 +716,69 @@ describe("table-driven CRUD complete set", () => {
   });
 });
 
+describe("non-standard primary key support", () => {
+  const gpsTable: TableDefinition = {
+    name: "gps_area",
+    columns: [
+      makeColumn({ name: "area_id", type: "Int", isPrimary: true, isAutoIncrement: false }),
+      makeColumn({ name: "name", type: "String", isPrimary: false, isAutoIncrement: false }),
+      makeColumn({ name: "latitude", type: "String", isPrimary: false, isAutoIncrement: false }),
+    ],
+  };
+
+  it("list page uses actual PK column for orderBy and key", () => {
+    const pages = generateAdminScaffold([], [gpsTable]);
+    const listPage = findPage(pages, "gps_area/page.tsx");
+
+    expect(listPage).toBeDefined();
+    expect(listPage!.content).toContain('orderBy: { area_id: "desc" }');
+    expect(listPage!.content).toContain("item.area_id");
+    expect(listPage!.content).not.toContain('orderBy: { id: "desc" }');
+  });
+
+  it("detail page uses actual PK column for findUnique", () => {
+    const pages = generateAdminScaffold([], [gpsTable]);
+    const detailPage = findPage(pages, "gps_area/[id]/page.tsx");
+
+    expect(detailPage).toBeDefined();
+    expect(detailPage!.content).toContain("where: { area_id: Number(id) }");
+  });
+
+  it("falls back to first column when no isPrimary is set", () => {
+    const noPkTable: TableDefinition = {
+      name: "gps_area",
+      columns: [
+        makeColumn({ name: "area_id", type: "Int", isPrimary: false, isAutoIncrement: false }),
+        makeColumn({ name: "name", type: "String", isPrimary: false, isAutoIncrement: false }),
+      ],
+    };
+
+    const pages = generateAdminScaffold([], [noPkTable]);
+    const listPage = findPage(pages, "gps_area/page.tsx");
+
+    expect(listPage).toBeDefined();
+    expect(listPage!.content).toContain('orderBy: { area_id: "desc" }');
+    expect(listPage!.content).not.toContain('orderBy: { id: "desc" }');
+  });
+
+  it("handles String PK without Number() coercion", () => {
+    const stringPkTable: TableDefinition = {
+      name: "device",
+      columns: [
+        makeColumn({ name: "device_id", type: "String", isPrimary: true, isAutoIncrement: false }),
+        makeColumn({ name: "name", type: "String", isPrimary: false, isAutoIncrement: false }),
+      ],
+    };
+
+    const pages = generateAdminScaffold([], [stringPkTable]);
+    const detailPage = findPage(pages, "device/[id]/page.tsx");
+
+    expect(detailPage).toBeDefined();
+    expect(detailPage!.content).toContain("where: { device_id: id }");
+    expect(detailPage!.content).not.toContain("Number(id)");
+  });
+});
+
 describe("dashboard cards link to table pages", () => {
   it("dashboard count cards are wrapped in links to table pages", () => {
     const tables = [makeTable("event"), makeTable("user")];
