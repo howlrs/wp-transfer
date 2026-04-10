@@ -1563,41 +1563,38 @@ export function generateAdminScaffold(
   if (tables.length > 0) {
     const existingPaths = new Set(pages.map((p) => p.path));
 
-    for (const table of tables) {
-      const resource = table.name;
-      const pluralResource = pluralize(resource);
+    // Helper: check if path exists in singular or plural form
+    const hasPath = (pattern: string) => {
+      return existingPaths.has(pattern);
+    };
 
-      // List page: check both singular and plural paths
-      const hasListPage = existingPaths.has(`app/(admin)/${resource}/page.tsx`)
-        || existingPaths.has(`app/(admin)/${pluralResource}/page.tsx`)
-        || [...existingPaths].some((p) => p.includes(`/${pluralResource}/`) && p.endsWith("/page.tsx") && !p.includes("[id]") && !p.includes("/new/"));
-      if (!hasListPage) {
+    for (const table of tables) {
+      const s = table.name;           // singular (table name)
+      const p = pluralize(s);         // plural
+      const pre = "app/(admin)/";
+
+      // List page
+      if (!hasPath(`${pre}${s}/page.tsx`) && !hasPath(`${pre}${p}/page.tsx`)) {
         pages.push(generateTableListPage(table, fw));
-        existingPaths.add(`app/(admin)/${resource}/page.tsx`);
+        existingPaths.add(`${pre}${s}/page.tsx`);
       }
 
-      // Detail page — must be [id]/page.tsx (not summary, not form)
-      const hasDetailPage = existingPaths.has(`app/(admin)/${resource}/[id]/page.tsx`);
-      if (!hasDetailPage) {
+      // Detail page (singular only — PHP form pages at plural/[id] are NOT detail)
+      if (!hasPath(`${pre}${s}/[id]/page.tsx`)) {
         pages.push(generateTableDetailPage(table, fw));
-        existingPaths.add(`app/(admin)/${resource}/[id]/page.tsx`);
+        existingPaths.add(`${pre}${s}/[id]/page.tsx`);
       }
 
       // Edit page
-      const hasEditPage = existingPaths.has(`app/(admin)/${resource}/[id]/edit/page.tsx`)
-        || existingPaths.has(`app/(admin)/${pluralResource}/[id]/edit/page.tsx`)
-        || existingPaths.has(`app/(admin)/${pluralResource}/[id]/page.tsx`);
-      if (!hasEditPage) {
+      if (!hasPath(`${pre}${s}/[id]/edit/page.tsx`) && !hasPath(`${pre}${p}/[id]/edit/page.tsx`)) {
         pages.push(generateTableFormPage(table, true, fw));
-        existingPaths.add(`app/(admin)/${resource}/[id]/edit/page.tsx`);
+        existingPaths.add(`${pre}${s}/[id]/edit/page.tsx`);
       }
 
       // New page
-      const hasNewPage = existingPaths.has(`app/(admin)/${resource}/new/page.tsx`)
-        || existingPaths.has(`app/(admin)/${pluralResource}/new/page.tsx`);
-      if (!hasNewPage) {
+      if (!hasPath(`${pre}${s}/new/page.tsx`) && !hasPath(`${pre}${p}/new/page.tsx`)) {
         pages.push(generateTableFormPage(table, false, fw));
-        existingPaths.add(`app/(admin)/${resource}/new/page.tsx`);
+        existingPaths.add(`${pre}${s}/new/page.tsx`);
       }
     }
   }
