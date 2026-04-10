@@ -417,3 +417,147 @@ for ($i = 0; $i < count($arr); $i++) {
     });
   });
 });
+
+describe("form spec extraction", () => {
+  it("extracts select elements with options", () => {
+    const html = `<?php get_header(); ?>
+<form action="/insert.php" method="post">
+  <h4>【募集タイプ】</h4>
+  <select name="recruiting_type">
+    <option value="1">先着順</option>
+    <option value="2">抽選</option>
+    <option value="3">定時抽選</option>
+  </select>
+  <input type="submit" value="登録する" />
+</form>`;
+    const result = analyzePhpFile(html, "page-event.php");
+    expect(result.formSpec).toBeDefined();
+    expect(result.formSpec!.fields).toHaveLength(1);
+    expect(result.formSpec!.fields[0]!.type).toBe("select");
+    expect(result.formSpec!.fields[0]!.name).toBe("recruiting_type");
+    expect(result.formSpec!.fields[0]!.options).toHaveLength(3);
+    expect(result.formSpec!.fields[0]!.options![0]!.label).toBe("先着順");
+  });
+
+  it("extracts textarea elements", () => {
+    const html = `<form action="/insert.php" method="post">
+  <h4>【概要】</h4>
+  <textarea rows="5" name="description"></textarea>
+  <input type="submit" value="登録" />
+</form>`;
+    const result = analyzePhpFile(html, "page-event.php");
+    expect(result.formSpec).toBeDefined();
+    const desc = result.formSpec!.fields.find(f => f.name === "description");
+    expect(desc).toBeDefined();
+    expect(desc!.type).toBe("textarea");
+    expect(desc!.label).toBe("概要");
+  });
+
+  it("extracts input elements with types", () => {
+    const html = `<form action="/insert.php" method="post">
+  <h4>【イベントタイトル】</h4>
+  <input type="text" name="title" required="required" />
+  <h4>【当選人数】</h4>
+  <input type="number" name="winners_limit" required="required" />
+  <h4>【開始日時】</h4>
+  <input type="datetime-local" name="start_time" required="required" />
+  <input type="submit" value="作成" />
+</form>`;
+    const result = analyzePhpFile(html, "page-event.php");
+    expect(result.formSpec).toBeDefined();
+    expect(result.formSpec!.fields).toHaveLength(3);
+    expect(result.formSpec!.fields[0]!.type).toBe("text");
+    expect(result.formSpec!.fields[0]!.required).toBe(true);
+    expect(result.formSpec!.fields[1]!.type).toBe("number");
+    expect(result.formSpec!.fields[2]!.type).toBe("datetime-local");
+  });
+
+  it("extracts array fields (isArray=true)", () => {
+    const html = `<form action="/insert.php" method="post">
+  <h4>【イベント枠名称】</h4>
+  <input type="text" name="event_time_text[]" required="required" />
+  <input type="submit" value="作成" />
+</form>`;
+    const result = analyzePhpFile(html, "page-event.php");
+    expect(result.formSpec).toBeDefined();
+    const field = result.formSpec!.fields.find(f => f.name === "event_time_text");
+    expect(field).toBeDefined();
+    expect(field!.isArray).toBe(true);
+  });
+
+  it("extracts file upload fields", () => {
+    const html = `<form action="/upload.php" method="post" enctype="multipart/form-data">
+  <h4>【バナー画像】</h4>
+  <input type="file" name="banner_img" accept="image/*" />
+  <input type="submit" value="登録する" />
+</form>`;
+    const result = analyzePhpFile(html, "page-info.php");
+    expect(result.formSpec).toBeDefined();
+    expect(result.formSpec!.enctype).toBe("multipart/form-data");
+    const file = result.formSpec!.fields.find(f => f.name === "banner_img");
+    expect(file).toBeDefined();
+    expect(file!.type).toBe("file");
+    expect(file!.accept).toBe("image/*");
+  });
+
+  it("extracts submit button label", () => {
+    const html = `<form action="/insert.php" method="post">
+  <h4>【タイトル】</h4>
+  <input type="text" name="title" />
+  <input type="submit" value="コピーする" />
+</form>`;
+    const result = analyzePhpFile(html, "page-copy.php");
+    expect(result.formSpec).toBeDefined();
+    expect(result.formSpec!.submitLabel).toBe("コピーする");
+  });
+
+  it("returns undefined formSpec for non-template files", () => {
+    const php = `<?php
+$title = $_POST["title"];
+$sql = "INSERT INTO event (title) VALUES ('$title')";
+header("Location: /");
+?>`;
+    const result = analyzePhpFile(php, "insert.php");
+    expect(result.formSpec).toBeUndefined();
+  });
+
+  it("extracts form spec from real page-event-copy.php pattern", () => {
+    const html = `<?php get_header(); ?>
+<form action="https://jra-event.com/test/event-copy.php" method="post">
+  <h4>【イベントタイトル】</h4>
+  <input type="text" name="title" size="10" value="" required="required" />
+  <h4>【募集タイプ】</h4>
+  <select id="r_type" name="recruiting_type">
+    <option value="1">先着順</option>
+    <option value="2">抽選</option>
+    <option value="3">定時抽選</option>
+  </select>
+  <h4>【もぎり番号設定】</h4>
+  <select id="mogiri_mode" name="mogiri_mode" required="required">
+    <option value="1">番号引き換えあり</option>
+    <option value="3">番号引き換えなし</option>
+  </select>
+  <h4>【概要】</h4>
+  <textarea id="textarea" rows="5" name="description"></textarea>
+  <h4>【開始日時】</h4>
+  <input type="datetime-local" name="start_time" value="" required="required">
+  <h4>【当選人数】</h4>
+  <input type="number" name="winners_limit" value="" required="required">
+  <input type="submit" value="コピーする" />
+</form>`;
+    const result = analyzePhpFile(html, "page-event-copy.php");
+    expect(result.formSpec).toBeDefined();
+    expect(result.formSpec!.action).toBe("https://jra-event.com/test/event-copy.php");
+    expect(result.formSpec!.submitLabel).toBe("コピーする");
+    expect(result.formSpec!.fields.length).toBeGreaterThanOrEqual(6);
+
+    const rt = result.formSpec!.fields.find(f => f.name === "recruiting_type");
+    expect(rt).toBeDefined();
+    expect(rt!.type).toBe("select");
+    expect(rt!.options).toHaveLength(3);
+
+    const desc = result.formSpec!.fields.find(f => f.name === "description");
+    expect(desc).toBeDefined();
+    expect(desc!.type).toBe("textarea");
+  });
+});

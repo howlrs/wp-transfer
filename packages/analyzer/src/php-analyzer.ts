@@ -11,6 +11,32 @@ export interface PhpVersionHint {
   reason: string;
 }
 
+export interface FormSelectOption {
+  value: string;
+  label: string;
+}
+
+export interface FormField {
+  name: string;
+  type: "text" | "number" | "select" | "textarea" | "datetime-local" | "date" | "file" | "url" | "hidden" | "checkbox";
+  label: string;
+  required: boolean;
+  options?: FormSelectOption[];
+  isArray?: boolean;
+  /** Field name that controls disabled state */
+  disabledWhen?: { field: string; value: string };
+  placeholder?: string;
+  accept?: string;
+}
+
+export interface FormSpec {
+  action: string;
+  method: string;
+  enctype?: string;
+  fields: FormField[];
+  submitLabel: string;
+}
+
 export interface PhpFileAnalysis {
   fileName: string;
   purpose: string;
@@ -20,6 +46,8 @@ export interface PhpFileAnalysis {
   redirectTarget?: string;
   securityIssues: string[];
   phpVersionHints: PhpVersionHint[];
+  /** Form specification extracted from HTML template */
+  formSpec?: FormSpec;
 }
 
 export interface DbOperation {
@@ -364,6 +392,125 @@ function inferPurpose(fileName: string, content: string): string {
   return `PHP script: ${base}`;
 }
 
+// ── Form extraction from HTML templates ──
+
+function extractFormSpec(content: string): FormSpec | undefined {
+  // Only extract from template files (contain <form>)
+  const formMatch = content.match(/<form\s+([^>]*)>/i);
+  if (!formMatch) return undefined;
+
+  const formAttrs = formMatch[1];
+  const action = formAttrs.match(/action="([^"]+)"/)?.[1] ?? "";
+  const method = formAttrs.match(/method="([^"]+)"/i)?.[1] ?? "post";
+  const enctype = formAttrs.match(/enctype="([^"]+)"/)?.[1];
+
+  const fields: FormField[] = [];
+  const seen = new Set<string>();
+
+  // Extract <select> elements with options
+  const selectRe = /<h4>【([^】]+)】<\/h4>\s*(?:<[^>]*>\s*)*<select[^>]*name="([^"]+)"[^>]*>([\s\S]*?)<\/select>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = selectRe.exec(content)) !== null) {
+    const label = m[1];
+    const name = m[2];
+    const optHtml = m[3];
+    if (seen.has(name)) continue;
+    seen.add(name);
+
+    const options: FormSelectOption[] = [];
+    const optRe = /<option[^>]*value="([^"]*)"[^>]*>([^<]+)<\/option>/gi;
+    let om: RegExpExecArray | null;
+    while ((om = optRe.exec(optHtml)) !== null) {
+      options.push({ value: om[1], label: om[2].trim() });
+    }
+
+    // Detect disabled condition from PHP code before this select
+    let disabledWhen: FormField["disabledWhen"];
+    const disabledAttr = m[0].match(/\$dis\b/);
+    if (disabledAttr) {
+      // $dis is set when recruiting_type==1
+      disabledWhen = { field: "recruiting_type", value: "1" };
+    }
+
+    fields.push({ name, type: "select", label, required: false, options, disabledWhen });
+  }
+
+  // Extract <textarea> elements
+  const textareaRe = /<h4>【([^】]+)】<\/h4>\s*(?:<[^>]*>\s*)*<textarea[^>]*name="([^"]+)"[^>]*>/gi;
+  while ((m = textareaRe.exec(content)) !== null) {
+    const name = m[2];
+    if (seen.has(name)) continue;
+    seen.add(name);
+    fields.push({ name, type: "textarea", label: m[1], required: false });
+  }
+
+  // Extract <input> elements with labels (allow tags, whitespace, PHP blocks between h4 and input)
+  const inputRe = /<h4>【([^】]+)】<\/h4>[\s\S]*?<input\s+([\s\S]*?)(?:\/?>)/gi;
+  while ((m = inputRe.exec(content)) !== null) {
+    const label = m[1];
+    const attrs = m[2];
+    const name = attrs.match(/name="([^"]+)"/)?.[1];
+    if (!name || seen.has(name.replace(/\[\]$/, ""))) continue;
+
+    const isArray = name.endsWith("[]");
+    const cleanName = name.replace(/\[\]$/, "");
+    seen.add(cleanName);
+
+    let type: FormField["type"] = "text";
+    const typeMatch = attrs.match(/type="([^"]+)"/);
+    if (typeMatch) {
+      const t = typeMatch[1].toLowerCase();
+      if (t === "number") type = "number";
+      else if (t === "datetime-local" || t === "datetime") type = "datetime-local";
+      else if (t === "date") type = "date";
+      else if (t === "file") type = "file";
+      else if (t === "url") type = "url";
+      else if (t === "hidden") type = "hidden";
+    }
+
+    const required = /required/.test(attrs);
+    const placeholder = attrs.match(/placeholder="([^"]+)"/)?.[1];
+    const accept = attrs.match(/accept="([^"]+)"/)?.[1];
+
+    // Detect disabled conditions
+    let disabledWhen: FormField["disabledWhen"];
+    if (/\$dis2/.test(attrs)) {
+      disabledWhen = { field: "recruiting_type", value: "1,2" };
+    } else if (/\$dis\b/.test(attrs)) {
+      disabledWhen = { field: "recruiting_type", value: "1" };
+    }
+
+    fields.push({
+      name: cleanName,
+      type,
+      label,
+      required,
+      isArray: isArray || undefined,
+      disabledWhen,
+      placeholder,
+      accept,
+    });
+  }
+
+  // Extract file inputs without labels
+  const fileRe = /<input\s+[^>]*type="file"[^>]*name="([^"]+)"[^>]*>/gi;
+  while ((m = fileRe.exec(content)) !== null) {
+    const name = m[1];
+    if (seen.has(name)) continue;
+    seen.add(name);
+    const accept = m[0].match(/accept="([^"]+)"/)?.[1];
+    fields.push({ name, type: "file", label: name.replace(/_/g, " "), required: false, accept });
+  }
+
+  // Detect submit button label
+  const submitMatch = content.match(/<input\s+type="submit"\s+value="([^"]+)"/i);
+  const submitLabel = submitMatch?.[1] ?? "送信";
+
+  if (fields.length === 0) return undefined;
+
+  return { action, method, fields, submitLabel, ...(enctype ? { enctype } : {}) };
+}
+
 export function analyzePhpFile(
   content: string,
   fileName: string,
@@ -374,6 +521,7 @@ export function analyzePhpFile(
   const securityIssues = detectSecurityIssues(content);
   const purpose = inferPurpose(fileName, content);
   const phpVersionHints = detectPhpVersionHints(content);
+  const formSpec = extractFormSpec(content);
 
   return {
     fileName,
@@ -384,5 +532,6 @@ export function analyzePhpFile(
     ...(redirectTarget ? { redirectTarget } : {}),
     securityIssues,
     phpVersionHints,
+    ...(formSpec ? { formSpec } : {}),
   };
 }
