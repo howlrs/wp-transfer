@@ -814,6 +814,24 @@ ${menuItemsJsx}
 `;
 }
 
+// ── Table-driven helpers ──
+
+function getPrimaryKey(table: TableDefinition): { name: string; type: string } {
+  const pk = table.columns.find((c) => c.isPrimary);
+  if (pk) return { name: pk.name, type: pk.type };
+  // Fallback: column named "id", or first column
+  const idCol = table.columns.find((c) => c.name === "id");
+  if (idCol) return { name: idCol.name, type: idCol.type };
+  const first = table.columns[0];
+  return first ? { name: first.name, type: first.type } : { name: "id", type: "Int" };
+}
+
+function pkCoerce(pkType: string, expr: string): string {
+  return pkType === "Int" || pkType === "BigInt" || pkType === "Float"
+    ? `Number(${expr})`
+    : expr;
+}
+
 // ── Table-driven CRUD page generators ──
 
 function generateTableListPage(
@@ -822,6 +840,7 @@ function generateTableListPage(
 ): AdminPage {
   const modelName = toPascalCase(table.name);
   const camelModel = toCamelCase(table.name);
+  const pk = getPrimaryKey(table);
   const columns = table.columns.slice(0, 6);
 
   let content: string;
@@ -833,7 +852,7 @@ export const dynamic = "force-dynamic";
 
 export default async function ${modelName}ListPage() {
   const items = await prisma.${camelModel}.findMany({
-    orderBy: { id: "desc" },
+    orderBy: { ${pk.name}: "desc" },
     take: 100,
   });
 
@@ -852,10 +871,10 @@ ${columns.map((c) => `              <th className="px-4 py-3 text-left text-xs f
           </thead>
           <tbody>
             {items.map((item: Record<string, unknown>) => (
-              <tr key={String(item.id)} className="border-t border-gray-200">
+              <tr key={String(item.${pk.name})} className="border-t border-gray-200">
 ${columns.map((c) => `                <td className="px-4 py-3 text-sm">{String(item.${c.name} ?? "")}</td>`).join("\n")}
                 <td className="px-4 py-3">
-                  <Link href={\`/(admin)/${table.name}/\${item.id}\`} className="text-blue-600 underline">
+                  <Link href={\`/(admin)/${table.name}/\${item.${pk.name}}\`} className="text-blue-600 underline">
                     詳細
                   </Link>
                 </td>
@@ -881,7 +900,7 @@ export const dynamic = "force-dynamic";
 
 export default async function ${modelName}ListPage() {
   const items = await prisma.${camelModel}.findMany({
-    orderBy: { id: "desc" },
+    orderBy: { ${pk.name}: "desc" },
     take: 100,
   });
 
@@ -900,10 +919,10 @@ ${columns.map((c) => `              <th style={{ padding: "12px 16px", textAlign
           </thead>
           <tbody>
             {items.map((item: Record<string, unknown>) => (
-              <tr key={String(item.id)} style={{ borderTop: "1px solid #e5e7eb" }}>
+              <tr key={String(item.${pk.name})} style={{ borderTop: "1px solid #e5e7eb" }}>
 ${columns.map((c) => `                <td style={{ padding: "12px 16px", fontSize: "14px" }}>{String(item.${c.name} ?? "")}</td>`).join("\n")}
                 <td style={{ padding: "12px 16px" }}>
-                  <Link href={\`/(admin)/${table.name}/\${item.id}\`} style={{ color: "#2563eb", textDecoration: "underline" }}>
+                  <Link href={\`/(admin)/${table.name}/\${item.${pk.name}}\`} style={{ color: "#2563eb", textDecoration: "underline" }}>
                     詳細
                   </Link>
                 </td>
@@ -936,6 +955,7 @@ function generateTableDetailPage(
 ): AdminPage {
   const modelName = toPascalCase(table.name);
   const camelModel = toCamelCase(table.name);
+  const pk = getPrimaryKey(table);
   const columns = table.columns;
 
   let content: string;
@@ -948,7 +968,7 @@ export const dynamic = "force-dynamic";
 
 export default async function ${modelName}DetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const item = await prisma.${camelModel}.findUnique({ where: { id: Number(id) } });
+  const item = await prisma.${camelModel}.findUnique({ where: { ${pk.name}: ${pkCoerce(pk.type, "id")} } });
   if (!item) return notFound();
 
   async function handleDelete() {
@@ -989,7 +1009,7 @@ export const dynamic = "force-dynamic";
 
 export default async function ${modelName}DetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const item = await prisma.${camelModel}.findUnique({ where: { id: Number(id) } });
+  const item = await prisma.${camelModel}.findUnique({ where: { ${pk.name}: ${pkCoerce(pk.type, "id")} } });
   if (!item) return notFound();
 
   async function handleDelete() {
