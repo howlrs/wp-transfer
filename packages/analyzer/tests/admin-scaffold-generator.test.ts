@@ -118,6 +118,25 @@ describe("Admin Scaffold Generator", () => {
       expect(copyPage!.content).toContain("status");
     });
 
+    it("edit form imports useParams from next/navigation, not react", () => {
+      const analyses = [
+        makeAnalysis({
+          fileName: "page-event-update.php",
+          inputParams: [
+            { name: "title", source: "$_POST", usage: "$_POST[\"title\"]" },
+          ],
+        }),
+      ];
+      const tables = [makeTable("event")];
+
+      const pages = generateAdminScaffold(analyses, tables);
+      const editPage = findPage(pages, "events/[id]/page.tsx");
+
+      expect(editPage).toBeDefined();
+      expect(editPage!.content).toContain('useParams } from "next/navigation"');
+      expect(editPage!.content).not.toMatch(/useParams.*from "react"/);
+    });
+
     it("generates an edit form page from page-*-update.php", () => {
       const analyses = [
         makeAnalysis({
@@ -590,6 +609,17 @@ describe("table-driven CRUD edit page", () => {
     expect(editPage!.content).toContain("status");
     // auto-increment PK should not be a form field
     expect(editPage!.content).not.toMatch(/onChange.*\bid\b/);
+  });
+
+  it("imports useParams from next/navigation, not react", () => {
+    const tables = [makeTable("product")];
+
+    const pages = generateAdminScaffold([], tables);
+    const editPage = findPage(pages, "product/[id]/edit/page.tsx");
+
+    expect(editPage).toBeDefined();
+    expect(editPage!.content).toContain('useParams } from "next/navigation"');
+    expect(editPage!.content).not.toMatch(/useParams.*from "react"/);
   });
 
   it("generates tailwind edit page", () => {

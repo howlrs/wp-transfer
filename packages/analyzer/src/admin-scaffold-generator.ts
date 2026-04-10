@@ -347,12 +347,10 @@ function generateFormPage(
     ? `\n  const params = useParams();\n  const id = params.id;`
     : "";
 
-  const extraImports = isEdit ? ', useParams' : '';
-
   const jsxPreamble = `"use client";
 
-import { useState${isEdit ? ", useEffect" : ""}${extraImports} } from "react";
-import { useRouter } from "next/navigation";
+import { useState${isEdit ? ", useEffect" : ""} } from "react";
+import { useRouter${isEdit ? ", useParams" : ""} } from "next/navigation";
 
 export default function ${pageName}() {
   const router = useRouter();${paramsLine}
@@ -1083,14 +1081,12 @@ function generateTableFormPage(
     ? `\n  const params = useParams();\n  const id = params.id;`
     : "";
 
-  const extraImports = isEdit ? ', useParams' : '';
-
   const redirectPath = `/${table.name}`;
 
   const jsxPreamble = `"use client";
 
-import { useState${isEdit ? ", useEffect" : ""}${extraImports} } from "react";
-import { useRouter } from "next/navigation";
+import { useState${isEdit ? ", useEffect" : ""} } from "react";
+import { useRouter${isEdit ? ", useParams" : ""} } from "next/navigation";
 
 export default function ${pageName}() {
   const router = useRouter();${paramsLine}
