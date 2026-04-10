@@ -131,16 +131,25 @@ function generateEnvExample(
   dbProvider: "mysql" | "postgresql",
 ): string {
   const dbName = projectName.replace(/-/g, "_");
-  const dbUrl =
+  const dbUrlTemplate =
     dbProvider === "mysql"
       ? `mysql://USER:PASSWORD@HOST:3306/${dbName}`
       : `postgresql://USER:PASSWORD@HOST:5432/${dbName}`;
 
-  return `# Database connection
-DATABASE_URL="${dbUrl}"
+  // Docker-ready URL uses the compose service hostname and actual credentials
+  const dbUrlDocker =
+    dbProvider === "mysql"
+      ? `mysql://appuser:apppassword@db:3306/${dbName}`
+      : `postgresql://appuser:apppassword@db:5432/${dbName}`;
+
+  return `# Database connection (Docker Compose — matches docker-compose.yml)
+DATABASE_URL="${dbUrlDocker}"
+
+# For production, replace with:
+# DATABASE_URL="${dbUrlTemplate}"
 
 # Auth secret — generate with: openssl rand -base64 32
-AUTH_SECRET="your-secret-here"
+AUTH_SECRET="change-me-generate-with-openssl-rand-base64-32"
 `;
 }
 
