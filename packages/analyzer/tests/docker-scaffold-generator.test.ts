@@ -178,16 +178,16 @@ describe("Docker Scaffold Generator", () => {
       expect(envExample.content).toContain("openssl rand -base64 32");
     });
 
-    it("contains placeholder AUTH_SECRET", () => {
+    it("contains AUTH_SECRET", () => {
       const files = generateDockerScaffold("my-project", "mysql");
       const envExample = findFile(files, ".env.example")!;
-      expect(envExample.content).toContain('AUTH_SECRET="your-secret-here"');
+      expect(envExample.content).toContain("AUTH_SECRET=");
     });
 
-    it("uses placeholder credentials", () => {
+    it("uses Docker-ready credentials matching docker-compose", () => {
       const files = generateDockerScaffold("my-project", "mysql");
       const envExample = findFile(files, ".env.example")!;
-      expect(envExample.content).toContain("USER:PASSWORD");
+      expect(envExample.content).toContain("appuser:apppassword@db:");
     });
   });
 
