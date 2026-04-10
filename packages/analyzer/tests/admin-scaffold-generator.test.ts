@@ -397,3 +397,315 @@ describe("generated URLs use correct plurals (no double-s)", () => {
     expect(listPage!.content).not.toMatch(/\/events+s"/);
   });
 });
+
+describe("table-driven CRUD pages", () => {
+  it("generates list pages for each table when no PHP analyses exist", () => {
+    const tables = [makeTable("product"), makeTable("order"), makeTable("customer")];
+
+    const pages = generateAdminScaffold([], tables);
+    const productPage = findPage(pages, "product/page.tsx");
+    const orderPage = findPage(pages, "order/page.tsx");
+    const customerPage = findPage(pages, "customer/page.tsx");
+
+    expect(productPage).toBeDefined();
+    expect(productPage!.type).toBe("list");
+    expect(productPage!.content).toContain("Product 一覧");
+    expect(productPage!.content).toContain("prisma.product.findMany");
+
+    expect(orderPage).toBeDefined();
+    expect(orderPage!.type).toBe("list");
+    expect(orderPage!.content).toContain("Order 一覧");
+
+    expect(customerPage).toBeDefined();
+    expect(customerPage!.type).toBe("list");
+  });
+
+  it("does not duplicate pages for tables already covered by PHP patterns", () => {
+    const analyses = [makeAnalysis({ fileName: "page-event-list.php" })];
+    const tables = [makeTable("event"), makeTable("user")];
+
+    const pages = generateAdminScaffold(analyses, tables);
+
+    // event is already covered by the PHP-matched page (events/)
+    const eventListPages = pages.filter(
+      (p) => p.type === "list" && (p.path.includes("events/page.tsx") || p.path.includes("event/page.tsx")),
+    );
+    expect(eventListPages.length).toBe(1);
+
+    // user should get a table-driven page
+    const userPage = findPage(pages, "user/page.tsx");
+    expect(userPage).toBeDefined();
+    expect(userPage!.type).toBe("list");
+  });
+
+  it("renders first 6 columns in table-driven list page", () => {
+    const columns = [
+      makeColumn({ name: "id", type: "Int", isPrimary: true, isAutoIncrement: true }),
+      makeColumn({ name: "name", type: "String", isPrimary: false, isAutoIncrement: false, comment: "名前" }),
+      makeColumn({ name: "email", type: "String", isPrimary: false, isAutoIncrement: false }),
+      makeColumn({ name: "age", type: "Int", isPrimary: false, isAutoIncrement: false }),
+      makeColumn({ name: "role", type: "String", isPrimary: false, isAutoIncrement: false }),
+      makeColumn({ name: "status", type: "Int", isPrimary: false, isAutoIncrement: false }),
+      makeColumn({ name: "bio", type: "String", isPrimary: false, isAutoIncrement: false }),
+      makeColumn({ name: "avatar", type: "String", isPrimary: false, isAutoIncrement: false }),
+    ];
+    const tables = [{ name: "member", columns }];
+
+    const pages = generateAdminScaffold([], tables);
+    const memberPage = findPage(pages, "member/page.tsx");
+
+    expect(memberPage).toBeDefined();
+    // First 6 columns should be present
+    expect(memberPage!.content).toContain("item.id");
+    expect(memberPage!.content).toContain("item.status");
+    // 7th and 8th columns should NOT be in table-driven page (limit 6)
+    expect(memberPage!.content).not.toContain("item.bio");
+    expect(memberPage!.content).not.toContain("item.avatar");
+  });
+
+  it("uses column comments as headers when available", () => {
+    const tables = [makeTable("product")];
+
+    const pages = generateAdminScaffold([], tables);
+    const productPage = findPage(pages, "product/page.tsx");
+
+    expect(productPage).toBeDefined();
+    expect(productPage!.content).toContain("タイトル");
+    expect(productPage!.content).toContain("ステータス");
+  });
+
+  it("generates tailwind table-driven list page", () => {
+    const tables = [makeTable("product")];
+
+    const pages = generateAdminScaffold([], tables, { uiFramework: "tailwind" });
+    const productPage = findPage(pages, "product/page.tsx");
+
+    expect(productPage).toBeDefined();
+    expect(productPage!.content).toContain("className=");
+    expect(productPage!.content).not.toContain("style={");
+  });
+});
+
+describe("navigation includes all tables", () => {
+  it("layout has nav links for table-driven pages", () => {
+    const tables = [makeTable("product"), makeTable("order")];
+
+    const pages = generateAdminScaffold([], tables);
+    const layout = findPage(pages, "layout.tsx");
+
+    expect(layout).toBeDefined();
+    expect(layout!.content).toContain("Product");
+    expect(layout!.content).toContain("Order");
+    // Table-driven list pages get picked up as list pages in layout nav
+    expect(layout!.content).toContain('href="/product"');
+    expect(layout!.content).toContain('href="/order"');
+  });
+
+  it("layout includes both PHP-matched and table-driven nav links", () => {
+    const analyses = [makeAnalysis({ fileName: "page-event-list.php" })];
+    const tables = [makeTable("event"), makeTable("user")];
+
+    const pages = generateAdminScaffold(analyses, tables);
+    const layout = findPage(pages, "layout.tsx");
+
+    expect(layout).toBeDefined();
+    // PHP-matched events
+    expect(layout!.content).toContain("/events");
+    // table-driven user
+    expect(layout!.content).toContain("/user");
+    expect(layout!.content).toContain("User");
+  });
+});
+
+describe("table-driven CRUD detail page", () => {
+  it("generates a detail page for each table at /[id]", () => {
+    const tables = [makeTable("product")];
+
+    const pages = generateAdminScaffold([], tables);
+    const detailPage = findPage(pages, "product/[id]/page.tsx");
+
+    expect(detailPage).toBeDefined();
+    expect(detailPage!.type).toBe("detail");
+    expect(detailPage!.content).toContain("prisma.product.findUnique");
+    expect(detailPage!.content).toContain("タイトル");
+    expect(detailPage!.content).toContain("ステータス");
+  });
+
+  it("includes edit and delete links on detail page", () => {
+    const tables = [makeTable("product")];
+
+    const pages = generateAdminScaffold([], tables);
+    const detailPage = findPage(pages, "product/[id]/page.tsx");
+
+    expect(detailPage).toBeDefined();
+    expect(detailPage!.content).toContain("/edit");
+    expect(detailPage!.content).toContain("DELETE");
+  });
+
+  it("generates tailwind detail page", () => {
+    const tables = [makeTable("product")];
+
+    const pages = generateAdminScaffold([], tables, { uiFramework: "tailwind" });
+    const detailPage = findPage(pages, "product/[id]/page.tsx");
+
+    expect(detailPage).toBeDefined();
+    expect(detailPage!.content).toContain("className=");
+    expect(detailPage!.content).not.toContain("style={");
+  });
+});
+
+describe("table-driven CRUD edit page", () => {
+  it("generates an edit page for each table at /[id]/edit", () => {
+    const tables = [makeTable("product")];
+
+    const pages = generateAdminScaffold([], tables);
+    const editPage = findPage(pages, "product/[id]/edit/page.tsx");
+
+    expect(editPage).toBeDefined();
+    expect(editPage!.type).toBe("form");
+    expect(editPage!.content).toContain("use client");
+    expect(editPage!.content).toContain("PUT");
+    expect(editPage!.content).toContain("編集");
+  });
+
+  it("edit page fetches existing data on mount", () => {
+    const tables = [makeTable("product")];
+
+    const pages = generateAdminScaffold([], tables);
+    const editPage = findPage(pages, "product/[id]/edit/page.tsx");
+
+    expect(editPage).toBeDefined();
+    expect(editPage!.content).toContain("useEffect");
+    expect(editPage!.content).toContain("useParams");
+  });
+
+  it("generates form fields from table columns excluding auto-increment PK", () => {
+    const tables = [makeTable("product")];
+
+    const pages = generateAdminScaffold([], tables);
+    const editPage = findPage(pages, "product/[id]/edit/page.tsx");
+
+    expect(editPage).toBeDefined();
+    expect(editPage!.content).toContain("title");
+    expect(editPage!.content).toContain("status");
+    // auto-increment PK should not be a form field
+    expect(editPage!.content).not.toMatch(/onChange.*\bid\b/);
+  });
+
+  it("generates tailwind edit page", () => {
+    const tables = [makeTable("product")];
+
+    const pages = generateAdminScaffold([], tables, { uiFramework: "tailwind" });
+    const editPage = findPage(pages, "product/[id]/edit/page.tsx");
+
+    expect(editPage).toBeDefined();
+    expect(editPage!.content).toContain("className=");
+    expect(editPage!.content).not.toContain("style={");
+  });
+});
+
+describe("table-driven CRUD new page", () => {
+  it("generates a new page for each table at /new", () => {
+    const tables = [makeTable("product")];
+
+    const pages = generateAdminScaffold([], tables);
+    const newPage = findPage(pages, "product/new/page.tsx");
+
+    expect(newPage).toBeDefined();
+    expect(newPage!.type).toBe("form");
+    expect(newPage!.content).toContain("use client");
+    expect(newPage!.content).toContain("POST");
+    expect(newPage!.content).toContain("新規作成");
+  });
+
+  it("new page does not fetch existing data", () => {
+    const tables = [makeTable("product")];
+
+    const pages = generateAdminScaffold([], tables);
+    const newPage = findPage(pages, "product/new/page.tsx");
+
+    expect(newPage).toBeDefined();
+    expect(newPage!.content).not.toContain("useEffect");
+    expect(newPage!.content).not.toContain("useParams");
+  });
+
+  it("generates tailwind new page", () => {
+    const tables = [makeTable("product")];
+
+    const pages = generateAdminScaffold([], tables, { uiFramework: "tailwind" });
+    const newPage = findPage(pages, "product/new/page.tsx");
+
+    expect(newPage).toBeDefined();
+    expect(newPage!.content).toContain("className=");
+    expect(newPage!.content).not.toContain("style={");
+  });
+});
+
+describe("table-driven CRUD complete set", () => {
+  it("generates 4 CRUD pages + layout + dashboard for a single table", () => {
+    const tables = [makeTable("product")];
+
+    const pages = generateAdminScaffold([], tables);
+
+    expect(findPage(pages, "product/page.tsx")).toBeDefined();       // list
+    expect(findPage(pages, "product/[id]/page.tsx")).toBeDefined();  // detail
+    expect(findPage(pages, "product/[id]/edit/page.tsx")).toBeDefined(); // edit
+    expect(findPage(pages, "product/new/page.tsx")).toBeDefined();   // new
+    expect(findPage(pages, "layout.tsx")).toBeDefined();
+    expect(findPage(pages, "(admin)/page.tsx")).toBeDefined();
+  });
+
+  it("list page links to detail, not edit", () => {
+    const tables = [makeTable("product")];
+
+    const pages = generateAdminScaffold([], tables);
+    const listPage = findPage(pages, "product/page.tsx");
+
+    expect(listPage).toBeDefined();
+    expect(listPage!.content).toContain("詳細");
+  });
+
+  it("does not generate CRUD pages for tables already covered by PHP patterns", () => {
+    const analyses = [makeAnalysis({ fileName: "page-event-list.php" })];
+    const tables = [makeTable("event"), makeTable("user")];
+
+    const pages = generateAdminScaffold(analyses, tables);
+
+    // event is covered by PHP, so no table-driven detail/edit/new for event
+    const eventDetailPages = pages.filter(
+      (p) => p.path.includes("event/[id]/page.tsx") || p.path.includes("events/[id]/page.tsx"),
+    );
+    // Only user should have table-driven CRUD
+    const userDetail = findPage(pages, "user/[id]/page.tsx");
+    const userEdit = findPage(pages, "user/[id]/edit/page.tsx");
+    const userNew = findPage(pages, "user/new/page.tsx");
+
+    expect(userDetail).toBeDefined();
+    expect(userEdit).toBeDefined();
+    expect(userNew).toBeDefined();
+  });
+});
+
+describe("dashboard cards link to table pages", () => {
+  it("dashboard count cards are wrapped in links to table pages", () => {
+    const tables = [makeTable("event"), makeTable("user")];
+
+    const pages = generateAdminScaffold([], tables);
+    const dashboard = findPage(pages, "(admin)/page.tsx");
+
+    expect(dashboard).toBeDefined();
+    expect(dashboard!.content).toContain('href="/(admin)/event"');
+    expect(dashboard!.content).toContain('href="/(admin)/user"');
+  });
+
+  it("tailwind dashboard cards link to table pages", () => {
+    const tables = [makeTable("event"), makeTable("user")];
+
+    const pages = generateAdminScaffold([], tables, { uiFramework: "tailwind" });
+    const dashboard = findPage(pages, "(admin)/page.tsx");
+
+    expect(dashboard).toBeDefined();
+    expect(dashboard!.content).toContain('href="/(admin)/event"');
+    expect(dashboard!.content).toContain('href="/(admin)/user"');
+  });
+});
