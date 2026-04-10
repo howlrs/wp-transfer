@@ -622,10 +622,10 @@ function generateDashboardPage(tables: TableDefinition[], fw: UiFramework): stri
   if (fw === "tailwind") {
     const twCards = tables
       .map(
-        (t, i) => `        <div key="${t.name}" className="p-6 bg-white rounded-lg shadow-sm">
+        (t, i) => `        <a key="${t.name}" href="/(admin)/${t.name}" className="block p-6 bg-white rounded-lg shadow-sm no-underline text-inherit">
           <p className="text-sm text-gray-500">${toPascalCase(t.name)}</p>
           <p className="text-3xl font-bold text-blue-800">{count${i}}</p>
-        </div>`,
+        </a>`,
       )
       .join("\n");
 
@@ -653,18 +653,22 @@ ${twCards}
 
   const cards = tables
     .map(
-      (t, i) => `        <div
+      (t, i) => `        <a
           key="${t.name}"
+          href="/(admin)/${t.name}"
           style={{
+            textDecoration: "none",
+            color: "inherit",
             padding: "24px",
             backgroundColor: "white",
             borderRadius: "8px",
             boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
+            display: "block",
           }}
         >
           <p style={{ fontSize: "14px", color: "#6b7280" }}>${toPascalCase(t.name)}</p>
           <p style={{ fontSize: "32px", fontWeight: "bold", color: "#1e40af" }}>{count${i}}</p>
-        </div>`,
+        </a>`,
     )
     .join("\n");
 
@@ -690,7 +694,7 @@ ${cards}
 `;
 }
 
-function generateAdminLayout(pages: AdminPage[], fw: UiFramework): string {
+function generateAdminLayout(pages: AdminPage[], tables: TableDefinition[], fw: UiFramework): string {
   // Derive menu items from list pages
   const menuItems: Array<{ label: string; href: string }> = [];
 
@@ -709,6 +713,17 @@ function generateAdminLayout(pages: AdminPage[], fw: UiFramework): string {
       menuItems.push({
         label: toPascalCase(resource) + " 一覧",
         href: `/${resource}`,
+      });
+    }
+  }
+
+  // Add nav links for tables not already covered by list pages
+  for (const t of tables) {
+    if (!seen.has(t.name) && !seen.has(pluralize(t.name))) {
+      seen.add(t.name);
+      menuItems.push({
+        label: toPascalCase(t.name),
+        href: `/(admin)/${t.name}`,
       });
     }
   }
@@ -801,6 +816,452 @@ ${menuItemsJsx}
 `;
 }
 
+// ── Table-driven CRUD page generators ──
+
+function generateTableListPage(
+  table: TableDefinition,
+  fw: UiFramework,
+): AdminPage {
+  const modelName = toPascalCase(table.name);
+  const camelModel = toCamelCase(table.name);
+  const columns = table.columns.slice(0, 6);
+
+  let content: string;
+  if (fw === "tailwind") {
+    content = `import { prisma } from "@/lib/db";
+import Link from "next/link";
+
+export const dynamic = "force-dynamic";
+
+export default async function ${modelName}ListPage() {
+  const items = await prisma.${camelModel}.findMany({
+    orderBy: { id: "desc" },
+    take: 100,
+  });
+
+  return (
+    <div className="p-6">
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-2xl font-bold">${modelName} 一覧</h1>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full">
+          <thead>
+            <tr className="bg-gray-100">
+${columns.map((c) => `              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">${c.comment ?? c.name}</th>`).join("\n")}
+              <th className="px-4 py-3"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((item: Record<string, unknown>) => (
+              <tr key={String(item.id)} className="border-t border-gray-200">
+${columns.map((c) => `                <td className="px-4 py-3 text-sm">{String(item.${c.name} ?? "")}</td>`).join("\n")}
+                <td className="px-4 py-3">
+                  <Link href={\`/(admin)/${table.name}/\${item.id}\`} className="text-blue-600 underline">
+                    詳細
+                  </Link>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {items.length === 0 && (
+        <p className="text-center py-12 text-gray-500">
+          データがありません
+        </p>
+      )}
+    </div>
+  );
+}
+`;
+  } else {
+    content = `import { prisma } from "@/lib/db";
+import Link from "next/link";
+
+export const dynamic = "force-dynamic";
+
+export default async function ${modelName}ListPage() {
+  const items = await prisma.${camelModel}.findMany({
+    orderBy: { id: "desc" },
+    take: 100,
+  });
+
+  return (
+    <div style={{ padding: "24px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
+        <h1 style={{ fontSize: "24px", fontWeight: "bold" }}>${modelName} 一覧</h1>
+      </div>
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead>
+            <tr style={{ backgroundColor: "#f3f4f6" }}>
+${columns.map((c) => `              <th style={{ padding: "12px 16px", textAlign: "left", fontSize: "12px", fontWeight: "600", color: "#6b7280", textTransform: "uppercase" }}>${c.comment ?? c.name}</th>`).join("\n")}
+              <th style={{ padding: "12px 16px" }}></th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((item: Record<string, unknown>) => (
+              <tr key={String(item.id)} style={{ borderTop: "1px solid #e5e7eb" }}>
+${columns.map((c) => `                <td style={{ padding: "12px 16px", fontSize: "14px" }}>{String(item.${c.name} ?? "")}</td>`).join("\n")}
+                <td style={{ padding: "12px 16px" }}>
+                  <Link href={\`/(admin)/${table.name}/\${item.id}\`} style={{ color: "#2563eb", textDecoration: "underline" }}>
+                    詳細
+                  </Link>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {items.length === 0 && (
+        <p style={{ textAlign: "center", padding: "48px", color: "#6b7280" }}>
+          データがありません
+        </p>
+      )}
+    </div>
+  );
+}
+`;
+  }
+
+  return {
+    path: `app/(admin)/${table.name}/page.tsx`,
+    content,
+    type: "list" as const,
+  };
+}
+
+function generateTableDetailPage(
+  table: TableDefinition,
+  fw: UiFramework,
+): AdminPage {
+  const modelName = toPascalCase(table.name);
+  const camelModel = toCamelCase(table.name);
+  const columns = table.columns;
+
+  let content: string;
+  if (fw === "tailwind") {
+    content = `import { prisma } from "@/lib/db";
+import Link from "next/link";
+import { notFound } from "next/navigation";
+
+export const dynamic = "force-dynamic";
+
+export default async function ${modelName}DetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const item = await prisma.${camelModel}.findUnique({ where: { id: Number(id) } });
+  if (!item) return notFound();
+
+  async function handleDelete() {
+    "use server";
+    await fetch(\`\${process.env.NEXT_PUBLIC_BASE_URL ?? ""}/api/${table.name}/\${id}\`, { method: "DELETE" });
+  }
+
+  return (
+    <div className="p-6 max-w-3xl">
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-2xl font-bold">${modelName} 詳細</h1>
+        <div className="flex gap-2">
+          <Link href={\`/(admin)/${table.name}/\${id}/edit\`} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+            編集
+          </Link>
+          <form action={handleDelete}>
+            <button type="submit" className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700">
+              DELETE
+            </button>
+          </form>
+        </div>
+      </div>
+
+      <dl className="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-3">
+${columns.map((c) => `        <dt className="text-sm font-medium text-gray-500">${c.comment ?? c.name}</dt>
+        <dd className="text-sm">{String((item as Record<string, unknown>).${c.name} ?? "")}</dd>`).join("\n")}
+      </dl>
+    </div>
+  );
+}
+`;
+  } else {
+    content = `import { prisma } from "@/lib/db";
+import Link from "next/link";
+import { notFound } from "next/navigation";
+
+export const dynamic = "force-dynamic";
+
+export default async function ${modelName}DetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const item = await prisma.${camelModel}.findUnique({ where: { id: Number(id) } });
+  if (!item) return notFound();
+
+  async function handleDelete() {
+    "use server";
+    await fetch(\`\${process.env.NEXT_PUBLIC_BASE_URL ?? ""}/api/${table.name}/\${id}\`, { method: "DELETE" });
+  }
+
+  return (
+    <div style={{ padding: "24px", maxWidth: "800px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
+        <h1 style={{ fontSize: "24px", fontWeight: "bold" }}>${modelName} 詳細</h1>
+        <div style={{ display: "flex", gap: "8px" }}>
+          <Link
+            href={\`/(admin)/${table.name}/\${id}/edit\`}
+            style={{ padding: "8px 16px", backgroundColor: "#2563eb", color: "white", borderRadius: "6px", textDecoration: "none" }}
+          >
+            編集
+          </Link>
+          <form action={handleDelete}>
+            <button
+              type="submit"
+              style={{ padding: "8px 16px", backgroundColor: "#dc2626", color: "white", border: "none", borderRadius: "6px", cursor: "pointer" }}
+            >
+              DELETE
+            </button>
+          </form>
+        </div>
+      </div>
+
+      <dl style={{ display: "grid", gridTemplateColumns: "max-content 1fr", columnGap: "24px", rowGap: "12px" }}>
+${columns.map((c) => `        <dt style={{ fontSize: "14px", fontWeight: "500", color: "#6b7280" }}>${c.comment ?? c.name}</dt>
+        <dd style={{ fontSize: "14px" }}>{String((item as Record<string, unknown>).${c.name} ?? "")}</dd>`).join("\n")}
+      </dl>
+    </div>
+  );
+}
+`;
+  }
+
+  return {
+    path: `app/(admin)/${table.name}/[id]/page.tsx`,
+    content,
+    type: "detail" as const,
+  };
+}
+
+function generateTableFormPage(
+  table: TableDefinition,
+  isEdit: boolean,
+  fw: UiFramework,
+): AdminPage {
+  const modelName = toPascalCase(table.name);
+  const camelModel = toCamelCase(table.name);
+
+  const formFields: Array<{ name: string; type: string; label: string }> = [];
+  for (const col of table.columns) {
+    if (col.isPrimary && col.isAutoIncrement) continue;
+    formFields.push({
+      name: col.name,
+      type: fieldTypeToInputType(col.type),
+      label: col.comment ?? fieldLabel(col.name),
+    });
+  }
+
+  const pageName = isEdit ? `${modelName}EditPage` : `${modelName}NewPage`;
+  const pageTitle = isEdit ? `${modelName} 編集` : `${modelName} 新規作成`;
+  const apiMethod = isEdit ? "PUT" : "POST";
+  const apiUrl = isEdit
+    ? `\`/api/${table.name}/\${id}\``
+    : `"/api/${table.name}"`;
+
+  const editFetch = isEdit
+    ? `
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch(\`/api/${table.name}/\${id}\`)
+      .then((res) => res.json())
+      .then((data) => {
+        setForm(data);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, [id]);
+`
+    : "";
+
+  const paramsLine = isEdit
+    ? `\n  const params = useParams();\n  const id = params.id;`
+    : "";
+
+  const extraImports = isEdit ? ', useParams' : '';
+
+  const redirectPath = `/${table.name}`;
+
+  const jsxPreamble = `"use client";
+
+import { useState${isEdit ? ", useEffect" : ""}${extraImports} } from "react";
+import { useRouter } from "next/navigation";
+
+export default function ${pageName}() {
+  const router = useRouter();${paramsLine}
+  const [form, setForm] = useState<Record<string, string | number | boolean>>({});
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);${editFetch}
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true);
+    setError(null);
+
+    try {
+      const res = await fetch(${apiUrl}, {
+        method: "${apiMethod}",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error ?? "保存に失敗しました");
+      }
+
+      router.push("${redirectPath}");
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "エラーが発生しました");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+`;
+
+  let content: string;
+  if (fw === "tailwind") {
+    content = jsxPreamble + `  return (
+    <div className="p-6 max-w-3xl">
+      <h1 className="text-2xl font-bold mb-6">${pageTitle}</h1>
+
+      {error && (
+        <div className="p-3 bg-red-50 text-red-600 rounded-md mb-4">
+          {error}
+        </div>
+      )}
+
+      <form onSubmit={handleSubmit}>
+        <div className="grid gap-4 max-w-2xl">
+${formFields
+  .map(
+    (f) => `          <div className="flex flex-col gap-1">
+            <label className="text-sm font-medium">
+              ${f.label}
+            </label>
+            <input
+              type="${f.type}"
+              value={String(form.${f.name} ?? "")}
+              onChange={(e) => setForm({ ...form, ${f.name}: ${f.type === "number" ? "Number(e.target.value)" : f.type === "checkbox" ? "e.target.checked" : "e.target.value"} })}
+              className="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>`,
+  )
+  .join("\n")}
+        </div>
+
+        <div className="flex gap-3 mt-6">
+          <button
+            type="submit"
+            disabled={submitting}
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+          >
+            {submitting ? "保存中..." : "保存"}
+          </button>
+          <button
+            type="button"
+            onClick={() => router.back()}
+            className="px-4 py-2 bg-gray-100 text-gray-700 border border-gray-300 rounded-md hover:bg-gray-200"
+          >
+            キャンセル
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+`;
+  } else {
+    content = jsxPreamble + `  return (
+    <div style={{ padding: "24px", maxWidth: "800px" }}>
+      <h1 style={{ fontSize: "24px", fontWeight: "bold", marginBottom: "24px" }}>${pageTitle}</h1>
+
+      {error && (
+        <div style={{ padding: "12px", backgroundColor: "#fef2f2", color: "#dc2626", borderRadius: "6px", marginBottom: "16px" }}>
+          {error}
+        </div>
+      )}
+
+      <form onSubmit={handleSubmit}>
+${formFields
+  .map(
+    (f) => `        <div style={{ marginBottom: "16px" }}>
+          <label style={{ display: "block", marginBottom: "4px", fontWeight: "500", fontSize: "14px" }}>
+            ${f.label}
+          </label>
+          <input
+            type="${f.type}"
+            value={String(form.${f.name} ?? "")}
+            onChange={(e) => setForm({ ...form, ${f.name}: ${f.type === "number" ? "Number(e.target.value)" : f.type === "checkbox" ? "e.target.checked" : "e.target.value"} })}
+            style={{
+              width: "100%",
+              padding: "8px 12px",
+              border: "1px solid #d1d5db",
+              borderRadius: "6px",
+              fontSize: "14px",
+            }}
+          />
+        </div>`,
+  )
+  .join("\n")}
+
+        <div style={{ display: "flex", gap: "12px", marginTop: "24px" }}>
+          <button
+            type="submit"
+            disabled={submitting}
+            style={{
+              padding: "10px 24px",
+              backgroundColor: submitting ? "#9ca3af" : "#2563eb",
+              color: "white",
+              border: "none",
+              borderRadius: "6px",
+              cursor: submitting ? "not-allowed" : "pointer",
+              fontSize: "14px",
+            }}
+          >
+            {submitting ? "保存中..." : "保存"}
+          </button>
+          <button
+            type="button"
+            onClick={() => router.back()}
+            style={{
+              padding: "10px 24px",
+              backgroundColor: "#f3f4f6",
+              color: "#374151",
+              border: "1px solid #d1d5db",
+              borderRadius: "6px",
+              cursor: "pointer",
+              fontSize: "14px",
+            }}
+          >
+            キャンセル
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+`;
+  }
+
+  const path = isEdit
+    ? `app/(admin)/${table.name}/[id]/edit/page.tsx`
+    : `app/(admin)/${table.name}/new/page.tsx`;
+
+  return {
+    path,
+    content,
+    type: "form" as const,
+  };
+}
+
 // ── Public API ──
 
 export function generateAdminScaffold(
@@ -847,10 +1308,29 @@ export function generateAdminScaffold(
     pages.push({ path: mapping.path, content, type: mapping.type });
   }
 
+  // Add table-driven CRUD pages for tables without PHP-matched pages
+  if (tables.length > 0) {
+    const existingResources = new Set(
+      pages.map((p) => {
+        const match = p.path.match(/app\/\(admin\)\/([^/]+)\//);
+        return match ? match[1] : null;
+      }).filter(Boolean),
+    );
+
+    for (const table of tables) {
+      if (!existingResources.has(table.name) && !existingResources.has(pluralize(table.name))) {
+        pages.push(generateTableListPage(table, fw));
+        pages.push(generateTableDetailPage(table, fw));
+        pages.push(generateTableFormPage(table, true, fw));
+        pages.push(generateTableFormPage(table, false, fw));
+      }
+    }
+  }
+
   // Generate admin layout
   pages.push({
     path: "app/(admin)/layout.tsx",
-    content: generateAdminLayout(pages, fw),
+    content: generateAdminLayout(pages, tables, fw),
     type: "dashboard",
   });
 
