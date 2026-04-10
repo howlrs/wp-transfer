@@ -419,6 +419,167 @@ describe("Migration form UI tests", () => {
   });
 });
 
+// ── Enhanced E2E test generation (Tasks 8-10) ──
+
+describe("enhanced auth spec", () => {
+  it("tests unauthenticated API returns 401", () => {
+    const result = generateVerifyScaffold({
+      postSlugs: [], categorySlugs: [],
+      hasAuth: true, tableNames: ["event"],
+    });
+    const authSpec = result.find(f => f.path === "e2e/auth.spec.ts");
+    expect(authSpec).toBeDefined();
+    expect(authSpec!.content).toContain("401");
+  });
+
+  it("tests authenticated session returns user data with role", () => {
+    const result = generateVerifyScaffold({
+      postSlugs: [], categorySlugs: [],
+      hasAuth: true, tableNames: ["event"],
+    });
+    const authSpec = result.find(f => f.path === "e2e/auth.spec.ts");
+    expect(authSpec).toBeDefined();
+    expect(authSpec!.content).toContain("role");
+    expect(authSpec!.content).toContain("user");
+  });
+});
+
+describe("enhanced CRUD spec", () => {
+  it("validates response body after POST", () => {
+    const result = generateVerifyScaffold({
+      postSlugs: [], categorySlugs: [],
+      hasAuth: true, tableNames: ["event"],
+      phpAnalyses: [
+        { fileName: "insert.php", dbOperations: [{ type: "INSERT", table: "event" }], inputParams: [{ name: "title", source: "POST" }] },
+        { fileName: "update.php", dbOperations: [{ type: "UPDATE", table: "event" }], inputParams: [] },
+        { fileName: "delete.php", dbOperations: [{ type: "DELETE", table: "event" }], inputParams: [] },
+      ],
+    });
+    const crudSpec = result.find(f => f.path === "e2e/migration-crud.spec.ts");
+    expect(crudSpec).toBeDefined();
+    expect(crudSpec!.content).toContain("body.id");
+    expect(crudSpec!.content).toContain("serial");
+  });
+
+  it("stores created ID for PUT and DELETE", () => {
+    const result = generateVerifyScaffold({
+      postSlugs: [], categorySlugs: [],
+      hasAuth: true, tableNames: ["event"],
+      phpAnalyses: [
+        { fileName: "insert.php", dbOperations: [{ type: "INSERT", table: "event" }], inputParams: [] },
+        { fileName: "update.php", dbOperations: [{ type: "UPDATE", table: "event" }], inputParams: [] },
+        { fileName: "delete.php", dbOperations: [{ type: "DELETE", table: "event" }], inputParams: [] },
+      ],
+    });
+    const crudSpec = result.find(f => f.path === "e2e/migration-crud.spec.ts");
+    expect(crudSpec).toBeDefined();
+    expect(crudSpec!.content).toContain("createdId = body.id");
+    expect(crudSpec!.content).toContain("createdId");
+  });
+
+  it("verifies update persisted with GET after PUT", () => {
+    const result = generateVerifyScaffold({
+      postSlugs: [], categorySlugs: [],
+      hasAuth: true, tableNames: ["event"],
+      phpAnalyses: [
+        { fileName: "insert.php", dbOperations: [{ type: "INSERT", table: "event" }], inputParams: [] },
+        { fileName: "update.php", dbOperations: [{ type: "UPDATE", table: "event" }], inputParams: [] },
+        { fileName: "delete.php", dbOperations: [{ type: "DELETE", table: "event" }], inputParams: [] },
+      ],
+    });
+    const crudSpec = result.find(f => f.path === "e2e/migration-crud.spec.ts");
+    expect(crudSpec).toBeDefined();
+    expect(crudSpec!.content).toContain("Verify update persisted");
+  });
+});
+
+describe("enhanced logic spec", () => {
+  it("verifies state before and after transitions", () => {
+    const result = generateVerifyScaffold({
+      postSlugs: [], categorySlugs: [],
+      hasAuth: true, tableNames: ["event", "user"],
+      phpAnalyses: [
+        { fileName: "event-stop.php", dbOperations: [{ type: "UPDATE", table: "event" }], inputParams: [] },
+        { fileName: "event-restoration.php", dbOperations: [{ type: "UPDATE", table: "event" }], inputParams: [] },
+        { fileName: "user-blacklist.php", dbOperations: [{ type: "UPDATE", table: "user" }], inputParams: [] },
+        { fileName: "user-blacklist-out.php", dbOperations: [{ type: "UPDATE", table: "user" }], inputParams: [] },
+      ],
+    });
+    const logicSpec = result.find(f => f.path === "e2e/migration-logic.spec.ts");
+    expect(logicSpec).toBeDefined();
+    expect(logicSpec!.content).toContain("status");
+    expect(logicSpec!.content).toContain("blacklist");
+  });
+
+  it("includes initial state verification before transitions", () => {
+    const result = generateVerifyScaffold({
+      postSlugs: [], categorySlugs: [],
+      hasAuth: true, tableNames: ["event"],
+      phpAnalyses: [
+        { fileName: "event-stop.php", dbOperations: [{ type: "UPDATE", table: "event" }], inputParams: [] },
+        { fileName: "event-restoration.php", dbOperations: [{ type: "UPDATE", table: "event" }], inputParams: [] },
+      ],
+    });
+    const logicSpec = result.find(f => f.path === "e2e/migration-logic.spec.ts");
+    expect(logicSpec).toBeDefined();
+    expect(logicSpec!.content).toContain("Verify initial state");
+    expect(logicSpec!.content).toContain("initial.status");
+  });
+});
+
+describe("enhanced form spec with WP classes", () => {
+  it("uses WP CSS class selectors", () => {
+    const result = generateVerifyScaffold({
+      postSlugs: [], categorySlugs: [],
+      hasAuth: true,
+      tables: [{
+        name: "event",
+        columns: [
+          { name: "id", type: "Int", nullable: false, isPrimary: true, isAutoIncrement: true },
+          { name: "title", type: "String", nullable: false, isPrimary: false, isAutoIncrement: false },
+        ],
+      }],
+    });
+    const formSpec = result.find(f => f.path === "e2e/migration-form.spec.ts");
+    expect(formSpec).toBeDefined();
+    expect(formSpec!.content).toContain("wp-form-field");
+  });
+
+  it("uses wp-list-table for list pages", () => {
+    const result = generateVerifyScaffold({
+      postSlugs: [], categorySlugs: [],
+      hasAuth: true,
+      tables: [{
+        name: "event",
+        columns: [
+          { name: "id", type: "Int", nullable: false, isPrimary: true, isAutoIncrement: true },
+          { name: "title", type: "String", nullable: false, isPrimary: false, isAutoIncrement: false },
+        ],
+      }],
+    });
+    const formSpec = result.find(f => f.path === "e2e/migration-form.spec.ts");
+    expect(formSpec).toBeDefined();
+    expect(formSpec!.content).toContain("wp-list-table");
+  });
+
+  it("uses wp-admin-title for page headings", () => {
+    const result = generateVerifyScaffold({
+      postSlugs: [], categorySlugs: [],
+      hasAuth: true,
+      tables: [{
+        name: "event",
+        columns: [
+          { name: "id", type: "Int", nullable: false, isPrimary: true, isAutoIncrement: true },
+          { name: "title", type: "String", nullable: false, isPrimary: false, isAutoIncrement: false },
+        ],
+      }],
+    });
+    const formSpec = result.find(f => f.path === "e2e/migration-form.spec.ts");
+    expect(formSpec).toBeDefined();
+    expect(formSpec!.content).toContain("wp-admin-title");
+  });
+});
+
 describe("Migration tests are not generated without phpAnalyses", () => {
   it("does not generate migration specs without phpAnalyses", () => {
     const files = generateVerifyScaffold({
