@@ -511,6 +511,27 @@ describe("form spec extraction", () => {
     expect(result.formSpec!.submitLabel).toBe("コピーする");
   });
 
+  it("extracts select options from PHP templates with embedded PHP tags", () => {
+    const html = `<form action="/copy.php" method="post">
+  <h4>【募集タイプ】</h4>
+  <select id="r_type" name="recruiting_type">
+    <option <?php echo $type1 ?> value="1">先着順</option>
+    <option <?php echo $type2 ?> value="2">抽選</option>
+    <option <?php echo $type3 ?> value="3">定時抽選</option>
+  </select>
+  <input type="submit" value="コピー" />
+</form>`;
+    const result = analyzePhpFile(html, "page-event-copy.php");
+    expect(result.formSpec).toBeDefined();
+    const rt = result.formSpec!.fields.find(f => f.name === "recruiting_type");
+    expect(rt).toBeDefined();
+    expect(rt!.options).toHaveLength(3);
+    expect(rt!.options![0]!.value).toBe("1");
+    expect(rt!.options![0]!.label).toBe("先着順");
+    expect(rt!.options![1]!.label).toBe("抽選");
+    expect(rt!.options![2]!.label).toBe("定時抽選");
+  });
+
   it("returns undefined formSpec for non-template files", () => {
     const php = `<?php
 $title = $_POST["title"];
