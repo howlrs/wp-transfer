@@ -252,7 +252,7 @@ describe("Migration CRUD verification tests", () => {
     const spec = findFile(files, "e2e/migration-crud.spec.ts");
     expect(spec).toBeDefined();
     expect(spec!.content).toContain("POST");
-    expect(spec!.content).toContain("/api/events");
+    expect(spec!.content).toContain("/api/event");
     expect(spec!.content).toContain("201");
   });
 

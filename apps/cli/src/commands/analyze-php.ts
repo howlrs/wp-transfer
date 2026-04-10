@@ -634,6 +634,10 @@ export const analyzePhpCommand = defineCommand({
       postSlugs: [] as string[],
       categorySlugs: [] as string[],
       tableNames: tables.map(t => t.name),
+      apiRoutes: [...stubs.keys()].map(path => {
+        const method = path.includes("[id]") ? "GET" : "GET";
+        return { path, method };
+      }),
       hasAuth,
       adminPages: adminPages.map(p => p.path),
       phpAnalyses: custom.map(a => ({
