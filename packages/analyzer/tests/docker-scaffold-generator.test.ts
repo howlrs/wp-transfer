@@ -89,7 +89,7 @@ describe("Docker Scaffold Generator", () => {
       const files = generateDockerScaffold("my-project", "mysql");
       const envExample = findFile(files, ".env.example")!;
       expect(envExample.content).toContain("mysql://");
-      expect(envExample.content).toContain("my-project");
+      expect(envExample.content).toContain("my_project");
     });
 
     it("uses mysql healthcheck", () => {
@@ -116,7 +116,7 @@ describe("Docker Scaffold Generator", () => {
       const files = generateDockerScaffold("my-project", "postgresql");
       const envExample = findFile(files, ".env.example")!;
       expect(envExample.content).toContain("postgresql://");
-      expect(envExample.content).toContain("my-project");
+      expect(envExample.content).toContain("my_project");
     });
 
     it("uses pg_isready healthcheck", () => {
@@ -130,13 +130,13 @@ describe("Docker Scaffold Generator", () => {
     it("uses project name in database configuration", () => {
       const files = generateDockerScaffold("jra-tokyo", "mysql");
       const compose = findFile(files, "docker-compose.yml")!;
-      expect(compose.content).toContain("jra-tokyo");
+      expect(compose.content).toContain("jra_tokyo");
     });
 
     it("uses project name in .env.example", () => {
       const files = generateDockerScaffold("jra-tokyo", "mysql");
       const envExample = findFile(files, ".env.example")!;
-      expect(envExample.content).toContain("jra-tokyo");
+      expect(envExample.content).toContain("jra_tokyo");
     });
   });
 

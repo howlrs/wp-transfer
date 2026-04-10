@@ -527,7 +527,7 @@ describe("H. Docker scaffold", () => {
       (f) => f.path === "docker-compose.yml",
     )!;
     expect(compose.content).toContain("mysql:8.0");
-    expect(compose.content).toContain("jra-tokyo");
+    expect(compose.content).toContain("jra_tokyo");
   });
 
   it("generates Dockerfile with multi-stage build", () => {
@@ -540,7 +540,7 @@ describe("H. Docker scaffold", () => {
   it("generates .env.example with mysql connection string", () => {
     const env = dockerFiles.find((f) => f.path === ".env.example")!;
     expect(env.content).toContain("mysql://");
-    expect(env.content).toContain("jra-tokyo");
+    expect(env.content).toContain("jra_tokyo");
   });
 
   it("generates health endpoint", () => {
