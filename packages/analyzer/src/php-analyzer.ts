@@ -407,8 +407,8 @@ function extractFormSpec(content: string): FormSpec | undefined {
   const fields: FormField[] = [];
   const seen = new Set<string>();
 
-  // Extract <select> elements with options
-  const selectRe = /<h4>【([^】]+)】<\/h4>\s*(?:<[^>]*>\s*)*<select[^>]*name="([^"]+)"[^>]*>([\s\S]*?)<\/select>/gi;
+  // Extract <select> elements with options (allow PHP blocks between h4 and select)
+  const selectRe = /<h4>【([^】]+)】<\/h4>[\s\S]*?<select[^>]*name="([^"]+)"[^>]*>([\s\S]*?)<\/select>/gi;
   let m: RegExpExecArray | null;
   while ((m = selectRe.exec(content)) !== null) {
     const label = m[1];
@@ -418,9 +418,11 @@ function extractFormSpec(content: string): FormSpec | undefined {
     seen.add(name);
 
     const options: FormSelectOption[] = [];
+    // Strip PHP tags before parsing options (handles <?php echo $var ?>)
+    const cleanOptHtml = optHtml.replace(/<\?php[^?]*\?>/gi, "");
     const optRe = /<option[^>]*value="([^"]*)"[^>]*>([^<]+)<\/option>/gi;
     let om: RegExpExecArray | null;
-    while ((om = optRe.exec(optHtml)) !== null) {
+    while ((om = optRe.exec(cleanOptHtml)) !== null) {
       options.push({ value: om[1], label: om[2].trim() });
     }
 

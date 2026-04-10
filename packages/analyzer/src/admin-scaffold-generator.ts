@@ -282,6 +282,236 @@ ${displayColumns.map((c) => `                <td style={{ padding: "12px 16px", 
 `;
 }
 
+function generateFormFieldJsx(f: import("./php-analyzer.js").FormField, index: number): string {
+  if (f.type === "hidden") return "";
+
+  if (f.type === "select" && f.options) {
+    const opts = f.options
+      .map((o) => `              <option value="${o.value}">${o.label}</option>`)
+      .join("\n");
+    return `        <div style={{ marginBottom: "16px" }}>
+          <label style={{ display: "block", marginBottom: "4px", fontWeight: "500", fontSize: "14px" }}>
+            ${f.label}
+          </label>
+          <select
+            value={String(form.${f.name} ?? "")}
+            onChange={(e) => setForm({ ...form, ${f.name}: e.target.value })}
+            style={{ width: "100%", padding: "8px 12px", border: "1px solid #d1d5db", borderRadius: "6px", fontSize: "14px" }}
+          >
+            <option value="">選択してください</option>
+${opts}
+          </select>
+        </div>`;
+  }
+
+  if (f.type === "textarea") {
+    return `        <div style={{ marginBottom: "16px" }}>
+          <label style={{ display: "block", marginBottom: "4px", fontWeight: "500", fontSize: "14px" }}>
+            ${f.label}
+          </label>
+          <textarea
+            rows={5}
+            value={String(form.${f.name} ?? "")}
+            onChange={(e) => setForm({ ...form, ${f.name}: e.target.value })}
+            style={{ width: "100%", padding: "8px 12px", border: "1px solid #d1d5db", borderRadius: "6px", fontSize: "14px", resize: "vertical" }}
+          />
+        </div>`;
+  }
+
+  if (f.type === "file") {
+    return `        <div style={{ marginBottom: "16px" }}>
+          <label style={{ display: "block", marginBottom: "4px", fontWeight: "500", fontSize: "14px" }}>
+            ${f.label}
+          </label>
+          <input
+            type="file"${f.accept ? `\n            accept="${f.accept}"` : ""}
+            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+            style={{ fontSize: "14px" }}
+          />
+        </div>`;
+  }
+
+  const inputType = f.type === "datetime-local" || f.type === "date" || f.type === "url"
+    ? f.type
+    : f.type === "number" ? "number" : "text";
+
+  const valueCoerce = f.type === "number"
+    ? "Number(e.target.value)"
+    : "e.target.value";
+
+  return `        <div style={{ marginBottom: "16px" }}>
+          <label style={{ display: "block", marginBottom: "4px", fontWeight: "500", fontSize: "14px" }}>
+            ${f.label}
+          </label>
+          <input
+            type="${inputType}"
+            value={String(form.${f.name} ?? "")}
+            onChange={(e) => setForm({ ...form, ${f.name}: ${valueCoerce} })}${f.required ? '\n            required' : ""}${f.placeholder ? `\n            placeholder="${f.placeholder}"` : ""}
+            style={{ width: "100%", padding: "8px 12px", border: "1px solid #d1d5db", borderRadius: "6px", fontSize: "14px" }}
+          />
+        </div>`;
+}
+
+function generateFormFromSpec(
+  resource: string,
+  formSpec: import("./php-analyzer.js").FormSpec,
+  isEdit: boolean,
+): string {
+  const modelName = toPascalCase(resource);
+  const pageName = isEdit ? `${modelName}EditPage` : `${modelName}NewPage`;
+  const pageTitle = isEdit ? `${modelName} 編集` : `${modelName} 新規作成`;
+  const apiUrl = isEdit
+    ? `\`/api/${pluralize(resource)}/\${id}\``
+    : `"/api/${pluralize(resource)}"`;
+  const apiMethod = isEdit ? "PUT" : "POST";
+  const hasFile = formSpec.fields.some((f) => f.type === "file");
+  const arrayFields = formSpec.fields.filter((f) => f.isArray);
+  const hasArrayFields = arrayFields.length > 0;
+
+  const fieldsJsx = formSpec.fields
+    .filter((f) => !f.isArray && f.type !== "hidden")
+    .map((f, i) => generateFormFieldJsx(f, i))
+    .filter(Boolean)
+    .join("\n\n");
+
+  // Array fields: generate dynamic slot section
+  let arrayFieldsJsx = "";
+  if (hasArrayFields) {
+    const slotFields = arrayFields
+      .map((f) => `              <input
+                type="${f.type === "number" ? "number" : f.type === "datetime-local" ? "datetime-local" : "text"}"
+                placeholder="${f.label}"
+                value={String(slot.${f.name} ?? "")}
+                onChange={(e) => {
+                  const updated = [...slots];
+                  updated[i] = { ...updated[i]!, ${f.name}: e.target.value };
+                  setSlots(updated);
+                }}
+                style={{ padding: "8px 12px", border: "1px solid #d1d5db", borderRadius: "6px", fontSize: "14px", flex: 1 }}
+              />`)
+      .join("\n");
+
+    arrayFieldsJsx = `
+        <div style={{ marginTop: "24px", borderTop: "2px solid #e5e7eb", paddingTop: "16px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+            <h3 style={{ fontSize: "16px", fontWeight: "bold" }}>イベント枠</h3>
+            <button
+              type="button"
+              onClick={() => setSlots([...slots, {}])}
+              style={{ padding: "6px 12px", backgroundColor: "#059669", color: "white", border: "none", borderRadius: "6px", cursor: "pointer", fontSize: "14px" }}
+            >
+              ＋ 枠追加
+            </button>
+          </div>
+          {slots.map((slot, i) => (
+            <div key={i} style={{ display: "flex", gap: "8px", marginBottom: "8px", alignItems: "center" }}>
+${slotFields}
+              <button
+                type="button"
+                onClick={() => setSlots(slots.filter((_, j) => j !== i))}
+                style={{ padding: "6px 12px", backgroundColor: "#dc2626", color: "white", border: "none", borderRadius: "6px", cursor: "pointer" }}
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>`;
+  }
+
+  const paramsLine = isEdit ? `\n  const params = useParams();\n  const id = params.id;` : "";
+  const editFetch = isEdit ? `
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    fetch(\`/api/${pluralize(resource)}/\${id}\`)
+      .then((res) => res.json())
+      .then((data) => { setForm(data); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, [id]);
+` : "";
+
+  return `"use client";
+
+import { useState${isEdit ? ", useEffect" : ""} } from "react";
+import { useRouter${isEdit ? ", useParams" : ""} } from "next/navigation";
+
+export default function ${pageName}() {
+  const router = useRouter();${paramsLine}
+  const [form, setForm] = useState<Record<string, string | number | boolean>>({});${hasArrayFields ? "\n  const [slots, setSlots] = useState<Record<string, string | number>[]>([{}]);" : ""}${hasFile ? "\n  const [file, setFile] = useState<File | null>(null);" : ""}
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);${editFetch}
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true);
+    setError(null);
+
+    try {${hasFile ? `
+      const formData = new FormData();
+      for (const [k, v] of Object.entries(form)) formData.append(k, String(v));
+      if (file) formData.append("banner_img", file);
+      const res = await fetch(${apiUrl}, { method: "${apiMethod}", body: formData });` : hasArrayFields ? `
+      const payload = { ...form, slots };
+      const res = await fetch(${apiUrl}, {
+        method: "${apiMethod}",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });` : `
+      const res = await fetch(${apiUrl}, {
+        method: "${apiMethod}",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });`}
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error ?? "保存に失敗しました");
+      }
+
+      router.push("/${pluralize(resource)}");
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "エラーが発生しました");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div style={{ padding: "24px", maxWidth: "800px" }}>
+      <h1 style={{ fontSize: "24px", fontWeight: "bold", marginBottom: "24px" }}>${pageTitle}</h1>
+
+      {error && (
+        <div style={{ padding: "12px", backgroundColor: "#fef2f2", color: "#dc2626", borderRadius: "6px", marginBottom: "16px" }}>
+          {error}
+        </div>
+      )}
+
+      <form onSubmit={handleSubmit}>
+${fieldsJsx}
+${arrayFieldsJsx}
+        <div style={{ display: "flex", gap: "12px", marginTop: "24px" }}>
+          <button
+            type="submit"
+            disabled={submitting}
+            style={{ padding: "10px 24px", backgroundColor: submitting ? "#9ca3af" : "#2563eb", color: "white", border: "none", borderRadius: "6px", cursor: submitting ? "not-allowed" : "pointer", fontSize: "14px" }}
+          >
+            {submitting ? "保存中..." : "${formSpec.submitLabel}"}
+          </button>
+          <button
+            type="button"
+            onClick={() => router.back()}
+            style={{ padding: "10px 24px", backgroundColor: "#f3f4f6", color: "#374151", border: "1px solid #d1d5db", borderRadius: "6px", cursor: "pointer", fontSize: "14px" }}
+          >
+            キャンセル
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+`;
+}
+
 function generateFormPage(
   resource: string,
   table: TableDefinition | undefined,
@@ -289,6 +519,11 @@ function generateFormPage(
   isEdit: boolean,
   fw: UiFramework,
 ): string {
+  // If PHP template has a form spec, generate faithful form
+  if (analysis?.formSpec && analysis.formSpec.fields.length > 0) {
+    return generateFormFromSpec(resource, analysis.formSpec, isEdit);
+  }
+
   const modelName = toPascalCase(table?.name ?? resource);
   const camelModel = toCamelCase(table?.name ?? resource);
 
