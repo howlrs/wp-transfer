@@ -2,12 +2,12 @@
  * Run Command — one-command migration verification
  *
  * Runs a generated Next.js project end-to-end:
- * npm ci → docker compose up → prisma migrate → seed → playwright test
+ * npm install → docker compose up → prisma generate → prisma db push → seed → playwright test
  */
 import { defineCommand } from "citty";
 import { consola } from "consola";
 import { execSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 /* ── Task 12: Error Recovery Guidance ── */
@@ -134,12 +134,28 @@ export const runCommand = defineCommand({
 
     consola.box(`wp-transfer run\n${projectDir}`);
 
+    // Set DATABASE_URL for host-side Prisma operations (replace Docker hostname with localhost)
+    if (!args["no-docker"]) {
+      const envPath = resolve(projectDir, ".env");
+      if (existsSync(envPath)) {
+        const envContent = readFileSync(envPath, "utf-8");
+        const dbUrlMatch = envContent.match(/DATABASE_URL="?([^"\n]+)"?/);
+        if (dbUrlMatch) {
+          // Replace Docker service hostname (e.g., @db:) with @localhost:
+          const hostUrl = dbUrlMatch[1]!.replace(/@[a-zA-Z_-]+:(\d+)/, "@localhost:$1");
+          process.env["DATABASE_URL"] = hostUrl;
+          consola.info(`Database URL: ${hostUrl.replace(/:[^:@]+@/, ":***@")}`);
+        }
+      }
+    }
+
     const steps: Array<{ name: string; command: string; optional?: boolean; skip?: boolean }> = [
-      { name: "[1/5] Installing dependencies...", command: "npm ci" },
-      { name: "[2/5] Starting Docker services...", command: "docker compose up -d --wait", optional: true, skip: args["no-docker"] as boolean },
-      { name: "[3/5] Running database migration...", command: "npx prisma migrate deploy" },
-      { name: "[4/5] Seeding test data...", command: "npx prisma db seed", optional: true },
-      { name: "[5/5] Running tests...", command: "npx playwright test", skip: args["no-test"] as boolean },
+      { name: "[1/6] Installing dependencies...", command: "npm install" },
+      { name: "[2/6] Starting Docker services...", command: "docker compose up -d --wait", optional: true, skip: args["no-docker"] as boolean },
+      { name: "[3/6] Generating Prisma client...", command: "npx prisma generate" },
+      { name: "[4/6] Pushing database schema...", command: "npx prisma db push --accept-data-loss" },
+      { name: "[5/6] Seeding test data...", command: "npx prisma db seed", optional: true },
+      { name: "[6/6] Running tests...", command: "npx playwright test", skip: args["no-test"] as boolean },
     ];
 
     let passed = 0;
