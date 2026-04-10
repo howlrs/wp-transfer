@@ -279,7 +279,20 @@ function generateZodSchema(
   options?: { partial?: boolean },
 ): string {
   // Exclude file params only; array params are now included with z.array()
-  const bodyParams = params.filter((p) => p.source !== "$_FILES");
+  let bodyParams = params.filter((p) => p.source !== "$_FILES");
+
+  // Filter to columns that actually exist in the target table's Prisma schema
+  // This prevents generating Zod fields for PHP form params that don't map to DB columns
+  if (ctx.tables && ctx.primaryTable) {
+    const table = ctx.tables.find((t) => t.name === ctx.primaryTable);
+    if (table) {
+      const columnNames = new Set(table.columns.map((c) => c.name));
+      bodyParams = bodyParams.filter((p) => {
+        const fieldName = p.name.replace(/\[\]$/, "");
+        return columnNames.has(fieldName);
+      });
+    }
+  }
 
   if (bodyParams.length === 0) {
     return `const ${schemaName} = z.object({});`;
