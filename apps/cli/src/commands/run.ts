@@ -10,6 +10,24 @@ import { execSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 
+/* ── Task 12: Error Recovery Guidance ── */
+
+const ERROR_GUIDANCE: Record<string, string> = {
+  "EADDRINUSE": "Port already in use. Run: docker compose down && docker compose up -d --wait",
+  "P1001": "Database connection failed. Check: docker compose ps, verify DB is healthy",
+  "P3009": "Migration failed. Run: npx prisma migrate reset (WARNING: drops data)",
+  "ENOENT": "Command not found. Run: npm ci to install dependencies",
+  "ENOMEM": "Out of memory. Increase Docker memory limit in Docker Desktop settings",
+};
+
+function getErrorGuidance(error: Error): string | undefined {
+  const msg = error.message;
+  for (const [pattern, guidance] of Object.entries(ERROR_GUIDANCE)) {
+    if (msg.includes(pattern)) return guidance;
+  }
+  return undefined;
+}
+
 function runStep(name: string, command: string, cwd: string, optional = false): boolean {
   consola.start(name);
   try {
@@ -21,9 +39,57 @@ function runStep(name: string, command: string, cwd: string, optional = false): 
       consola.warn(`${name} (skipped: ${(error as Error).message})`);
       return true;
     }
+    const guidance = getErrorGuidance(error as Error);
+    if (guidance) {
+      consola.info(`Recovery hint: ${guidance}`);
+    }
     consola.fail(name);
     return false;
   }
+}
+
+/* ── Task 11: Migration Coverage Report ── */
+
+export interface CoverageInput {
+  phpScripts: number;
+  testsGenerated: number;
+  testsPassed: number;
+  testsFailed: number;
+  domains: Array<{
+    name: string;
+    scripts: number;
+    tested: number;
+    passed: number;
+  }>;
+}
+
+export function generateCoverageReport(input: CoverageInput): string {
+  const coverage = Math.round((input.testsGenerated / input.phpScripts) * 100);
+  const passRate = input.testsGenerated > 0
+    ? Math.round((input.testsPassed / input.testsGenerated) * 100)
+    : 0;
+
+  const domainRows = input.domains
+    .map((d) => `| ${d.name} | ${d.scripts} | ${d.tested} | ${d.passed} | ${d.scripts === d.passed ? "OK" : "NG"} |`)
+    .join("\n");
+
+  return `# Migration Coverage Report
+
+## Summary
+- **PHP Scripts**: ${input.phpScripts}
+- **Tests Generated**: ${input.testsGenerated} (${coverage}%)
+- **Tests Passed**: ${input.testsPassed} / ${input.testsGenerated} (${passRate}%)
+- **Tests Failed**: ${input.testsFailed}
+
+## Domain Breakdown
+
+| Domain | Scripts | Tested | Passed | Status |
+|--------|---------|--------|--------|--------|
+${domainRows}
+
+## Verdict
+${coverage >= 100 && passRate >= 100 ? "COMPLETE — All scripts tested and passing" : `INCOMPLETE — Coverage ${coverage}%, Pass rate ${passRate}%`}
+`;
 }
 
 export const runCommand = defineCommand({
