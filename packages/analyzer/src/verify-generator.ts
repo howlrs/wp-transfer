@@ -137,18 +137,34 @@ fi
 }
 
 function generateApiSpec(input: VerifyInput): string | null {
-  if (!input.tableNames || input.tableNames.length === 0) return null;
+  // Use actual API route paths when available, fall back to table names
+  const apiPaths: string[] = [];
+  if (input.apiRoutes && input.apiRoutes.length > 0) {
+    const seen = new Set<string>();
+    for (const route of input.apiRoutes) {
+      // Extract base path: /api/events/[id] → events
+      const match = route.path.match(/^app\/api\/([^/[]+)/);
+      if (match && !seen.has(match[1]!)) {
+        seen.add(match[1]!);
+        apiPaths.push(match[1]!);
+      }
+    }
+  }
+  if (apiPaths.length === 0 && input.tableNames) {
+    apiPaths.push(...input.tableNames);
+  }
+  if (apiPaths.length === 0) return null;
 
   const lines: string[] = [];
   lines.push('import { test, expect } from "@playwright/test";');
   lines.push("");
 
-  for (const table of input.tableNames) {
-    lines.push(`test.describe("${table} API", () => {`);
+  for (const apiPath of apiPaths) {
+    lines.push(`test.describe("${apiPath} API", () => {`);
     lines.push(
-      `  test("GET /api/${table} returns list", async ({ request }) => {`,
+      `  test("GET /api/${apiPath} returns list", async ({ request }) => {`,
     );
-    lines.push(`    const res = await request.get("/api/${table}");`);
+    lines.push(`    const res = await request.get("/api/${apiPath}");`);
     lines.push(`    expect(res.status()).toBe(200);`);
     lines.push(`    const body = await res.json();`);
     lines.push(`    expect(body).toHaveProperty("items");`);
@@ -156,9 +172,9 @@ function generateApiSpec(input: VerifyInput): string | null {
     lines.push(`  });`);
     lines.push("");
     lines.push(
-      `  test("GET /api/${table}/1 returns detail or 404", async ({ request }) => {`,
+      `  test("GET /api/${apiPath}/1 returns detail or 404", async ({ request }) => {`,
     );
-    lines.push(`    const res = await request.get("/api/${table}/1");`);
+    lines.push(`    const res = await request.get("/api/${apiPath}/1");`);
     lines.push(`    expect([200, 404]).toContain(res.status());`);
     lines.push(`  });`);
     lines.push(`});`);
@@ -251,13 +267,32 @@ function pluralizeTable(name: string): string {
   return name + "s";
 }
 
-function getApiPath(table: string): string {
-  // Standard: /api/{table} for most, /api/{plural} for event→events
-  const knownPlurals: Record<string, string> = { event: "events" };
-  return `/api/${knownPlurals[table] ?? table}`;
+/** Build a table→API path lookup from generated apiRoutes */
+function buildApiPathMap(apiRoutes?: Array<{ path: string; method: string }>): Map<string, string> {
+  const map = new Map<string, string>();
+  if (!apiRoutes) return map;
+  for (const route of apiRoutes) {
+    const match = route.path.match(/^app\/api\/([^/[]+)/);
+    if (match) map.set(match[1]!, `/api/${match[1]!}`);
+  }
+  return map;
 }
 
-function generateMigrationAuthSpec(tables: string[]): string {
+function getApiPath(table: string, pathMap?: Map<string, string>): string {
+  // First check actual generated routes
+  if (pathMap) {
+    // Direct match
+    if (pathMap.has(table)) return pathMap.get(table)!;
+    // Try plural forms
+    const plural = pluralizeTable(table);
+    if (pathMap.has(plural)) return pathMap.get(plural)!;
+  }
+  // Fallback: use table name directly
+  return `/api/${table}`;
+}
+
+function generateMigrationAuthSpec(tables: string[], apiRoutes?: Array<{ path: string; method: string }>): string {
+  const pathMap = buildApiPathMap(apiRoutes);
   const lines: string[] = [];
   lines.push('import { test, expect } from "@playwright/test";');
   lines.push("");
@@ -271,7 +306,7 @@ function generateMigrationAuthSpec(tables: string[]): string {
   lines.push("");
 
   for (const table of tables) {
-    const apiPath = getApiPath(table);
+    const apiPath = getApiPath(table, pathMap);
     lines.push(`  test("GET ${apiPath} returns 401 without auth", async ({ request }) => {`);
     lines.push(`    const res = await request.get("${apiPath}");`);
     lines.push(`    expect(res.status()).toBe(401);`);
@@ -279,18 +314,20 @@ function generateMigrationAuthSpec(tables: string[]): string {
     lines.push("");
   }
 
-  lines.push('  test("POST /api/events returns 401 without auth", async ({ request }) => {');
-  lines.push('    const res = await request.post("/api/events", { data: {} });');
+  // Test POST/PUT/DELETE on first table
+  const firstApiPath = getApiPath(tables[0]!, pathMap);
+  lines.push(`  test("POST ${firstApiPath} returns 401 without auth", async ({ request }) => {`);
+  lines.push(`    const res = await request.post("${firstApiPath}", { data: {} });`);
   lines.push("    expect(res.status()).toBe(401);");
   lines.push("  });");
   lines.push("");
-  lines.push('  test("PUT /api/events/1 returns 401 without auth", async ({ request }) => {');
-  lines.push('    const res = await request.put("/api/events/1", { data: {} });');
+  lines.push(`  test("PUT ${firstApiPath}/1 returns 401 without auth", async ({ request }) => {`);
+  lines.push(`    const res = await request.put("${firstApiPath}/1", { data: {} });`);
   lines.push("    expect(res.status()).toBe(401);");
   lines.push("  });");
   lines.push("");
-  lines.push('  test("DELETE /api/events/1 returns 401 without auth", async ({ request }) => {');
-  lines.push('    const res = await request.delete("/api/events/1");');
+  lines.push(`  test("DELETE ${firstApiPath}/1 returns 401 without auth", async ({ request }) => {`);
+  lines.push(`    const res = await request.delete("${firstApiPath}/1");`);
   lines.push("    expect(res.status()).toBe(401);");
   lines.push("  });");
 
@@ -298,7 +335,8 @@ function generateMigrationAuthSpec(tables: string[]): string {
   return lines.join("\n");
 }
 
-function generateMigrationCrudSpec(analyses: PhpAnalysisSummary[], tables: string[]): string {
+function generateMigrationCrudSpec(analyses: PhpAnalysisSummary[], tables: string[], apiRoutes?: Array<{ path: string; method: string }>): string {
+  const pathMap = buildApiPathMap(apiRoutes);
   const lines: string[] = [];
   lines.push('import { test, expect } from "@playwright/test";');
   lines.push("");
@@ -319,7 +357,7 @@ function generateMigrationCrudSpec(analyses: PhpAnalysisSummary[], tables: strin
   }
 
   for (const [table, ops] of tableOps) {
-    const apiPath = getApiPath(table);
+    const apiPath = getApiPath(table, pathMap);
     const hasFullCrud = ops.has("INSERT") && ops.has("UPDATE") && ops.has("DELETE");
 
     if (hasFullCrud) {
@@ -788,12 +826,12 @@ export function generateVerifyScaffold(input: VerifyInput): VerifyScaffoldFile[]
   if (input.phpAnalyses && input.phpAnalyses.length > 0 && input.tableNames) {
     files.push({
       path: "e2e/migration-auth.spec.ts",
-      content: generateMigrationAuthSpec(input.tableNames),
+      content: generateMigrationAuthSpec(input.tableNames, input.apiRoutes),
     });
 
     files.push({
       path: "e2e/migration-crud.spec.ts",
-      content: generateMigrationCrudSpec(input.phpAnalyses, input.tableNames),
+      content: generateMigrationCrudSpec(input.phpAnalyses, input.tableNames, input.apiRoutes),
     });
 
     const logicSpec = generateMigrationLogicSpec(input.phpAnalyses);
