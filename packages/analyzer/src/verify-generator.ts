@@ -725,9 +725,12 @@ function generateAuthSetup(): string {
  * Other test files use this via storageState in playwright.config.ts.
  */
 setup("authenticate as admin", async ({ page }) => {
-  // Ensure auth directory exists
+  // Ensure auth directory and initial state file exist
   const fs = await import("node:fs");
   fs.mkdirSync("e2e/.auth", { recursive: true });
+  if (!fs.existsSync("e2e/.auth/user.json")) {
+    fs.writeFileSync("e2e/.auth/user.json", JSON.stringify({ cookies: [], origins: [] }));
+  }
 
   await page.goto("/login");
   // Wait for client-side hydration (login is a "use client" component)
