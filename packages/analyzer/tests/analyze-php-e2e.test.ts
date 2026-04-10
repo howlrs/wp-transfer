@@ -179,7 +179,7 @@ describe("analyze-php E2E pipeline", () => {
     it("Docker scaffold DB matches schema provider", () => {
       const compose = dockerFiles.find((f) => f.path === "docker-compose.yml")!;
       expect(compose.content).toContain("mysql:8.0");
-      expect(compose.content).toContain("e2e-test");
+      expect(compose.content).toContain("e2e_test");
     });
   });
 });

@@ -18,6 +18,8 @@ function generateDockerCompose(
   projectName: string,
   dbProvider: "mysql" | "postgresql",
 ): string {
+  // Sanitize project name for DB: replace hyphens with underscores (MySQL compatibility)
+  const dbName = projectName.replace(/-/g, "_");
   const dbService =
     dbProvider === "mysql"
       ? `  db:
@@ -27,7 +29,7 @@ function generateDockerCompose(
       - "3306:3306"
     environment:
       MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: ${projectName}
+      MYSQL_DATABASE: ${dbName}
       MYSQL_USER: appuser
       MYSQL_PASSWORD: apppassword
     volumes:
@@ -43,21 +45,21 @@ function generateDockerCompose(
     ports:
       - "5432:5432"
     environment:
-      POSTGRES_DB: ${projectName}
+      POSTGRES_DB: ${dbName}
       POSTGRES_USER: appuser
       POSTGRES_PASSWORD: apppassword
     volumes:
       - db_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U appuser -d ${projectName}"]
+      test: ["CMD-SHELL", "pg_isready -U appuser -d ${dbName}"]
       interval: 10s
       timeout: 5s
       retries: 5`;
 
   const dbUrl =
     dbProvider === "mysql"
-      ? `mysql://appuser:apppassword@db:3306/${projectName}`
-      : `postgresql://appuser:apppassword@db:5432/${projectName}`;
+      ? `mysql://appuser:apppassword@db:3306/${dbName}`
+      : `postgresql://appuser:apppassword@db:5432/${dbName}`;
 
   return `services:
 ${dbService}
@@ -127,10 +129,11 @@ function generateEnvExample(
   projectName: string,
   dbProvider: "mysql" | "postgresql",
 ): string {
+  const dbName = projectName.replace(/-/g, "_");
   const dbUrl =
     dbProvider === "mysql"
-      ? `mysql://USER:PASSWORD@HOST:3306/${projectName}`
-      : `postgresql://USER:PASSWORD@HOST:5432/${projectName}`;
+      ? `mysql://USER:PASSWORD@HOST:3306/${dbName}`
+      : `postgresql://USER:PASSWORD@HOST:5432/${dbName}`;
 
   return `# Database connection
 DATABASE_URL="${dbUrl}"
