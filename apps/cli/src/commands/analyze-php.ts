@@ -191,6 +191,15 @@ export default nextConfig;
 function generateDbLib(): string {
   return `import { PrismaClient } from "@prisma/client";
 
+// BigInt JSON serialization: Prisma models with BigInt columns would throw
+// "Do not know how to serialize a BigInt" from NextResponse.json() otherwise.
+// Install once per process.
+if (!(BigInt.prototype as unknown as { toJSON?: () => string }).toJSON) {
+  (BigInt.prototype as unknown as { toJSON: () => string }).toJSON = function () {
+    return this.toString();
+  };
+}
+
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
@@ -291,7 +300,17 @@ function generateSeedScript(
   }
 
   // Sample data for detected tables (FK parents first)
-  for (const table of sortTablesByFkDependency(tables)) {
+  const tableNameSet = new Set(tables.map(t => t.name));
+  const createdRefs = new Map<string, { pkCol: string; pkType: string }>();
+  const sortedTables = sortTablesByFkDependency(tables);
+
+  // Track String PKs (non-autoincrement) so FK children can reference them
+  for (const table of sortedTables) {
+    const pk = table.columns.find(c => c.isPrimary);
+    if (pk) createdRefs.set(table.name, { pkCol: pk.name, pkType: pk.type });
+  }
+
+  for (const table of sortedTables) {
     const modelName = table.name
       .split("_")
       .map((p, i) =>
@@ -302,9 +321,34 @@ function generateSeedScript(
       .join("");
 
     const sampleData: Record<string, string> = {};
+    let whereClause: string | null = null;
+    const pk = table.columns.find(c => c.isPrimary);
+
     for (const col of table.columns) {
       if (col.isPrimary && col.isAutoIncrement) continue;
       if (col.name === "created_at" || col.name === "updated_at") continue;
+
+      // FK resolution: column ends with _id, prefix matches a known table
+      const fkParent = col.name.endsWith("_id")
+        ? (() => {
+            const base = col.name.replace(/_id$/, "");
+            return tableNameSet.has(base) ? base : null;
+          })()
+        : null;
+      if (fkParent && createdRefs.has(fkParent)) {
+        // Type must match this column's type (not parent's PK type) — schema
+        // may declare child FK as Int even when parent PK is String.
+        if (col.type === "BigInt") {
+          sampleData[col.name] = "1n";
+        } else if (col.type === "Int") {
+          sampleData[col.name] = "1";
+        } else if (col.type === "String") {
+          sampleData[col.name] = `"sample-${fkParent}"`;
+        } else {
+          sampleData[col.name] = "1";
+        }
+        continue;
+      }
 
       switch (col.type) {
         case "String":
@@ -319,6 +363,9 @@ function generateSeedScript(
         case "Int":
           sampleData[col.name] = "1";
           break;
+        case "BigInt":
+          sampleData[col.name] = "1n";
+          break;
         case "Boolean":
           sampleData[col.name] = "true";
           break;
@@ -328,20 +375,50 @@ function generateSeedScript(
         case "Float":
           sampleData[col.name] = "0.0";
           break;
+        case "Decimal":
+          sampleData[col.name] = `"0"`;
+          break;
+        case "Json":
+          sampleData[col.name] = "{}";
+          break;
+        case "Bytes":
+          sampleData[col.name] = "Buffer.from([])";
+          break;
         default:
           sampleData[col.name] = `"sample"`;
       }
     }
 
+    // For String-PK non-auto-increment tables, set deterministic id for FK child lookup
+    if (pk && pk.type === "String" && !pk.isAutoIncrement) {
+      sampleData[pk.name] = `"sample-${table.name}"`;
+      whereClause = `{ ${pk.name}: "sample-${table.name}" }`;
+    } else if (pk && (pk.type === "BigInt" || pk.type === "Int") && pk.isAutoIncrement) {
+      whereClause = `{ ${pk.name}: ${pk.type === "BigInt" ? "1n" : "1"} }`;
+    }
+
     if (Object.keys(sampleData).length > 0) {
       lines.push(`  // Sample ${table.name} data`);
-      lines.push(`  await prisma.${modelName}.create({`);
-      lines.push("    data: {");
-      for (const [key, value] of Object.entries(sampleData)) {
-        lines.push(`      ${key}: ${value},`);
+      if (whereClause) {
+        // Idempotent upsert
+        lines.push(`  await prisma.${modelName}.upsert({`);
+        lines.push(`    where: ${whereClause},`);
+        lines.push(`    update: {},`);
+        lines.push(`    create: {`);
+        for (const [key, value] of Object.entries(sampleData)) {
+          lines.push(`      ${key}: ${value},`);
+        }
+        lines.push("    },");
+        lines.push("  });");
+      } else {
+        lines.push(`  await prisma.${modelName}.create({`);
+        lines.push("    data: {");
+        for (const [key, value] of Object.entries(sampleData)) {
+          lines.push(`      ${key}: ${value},`);
+        }
+        lines.push("    },");
+        lines.push("  });");
       }
-      lines.push("    },");
-      lines.push("  });");
       lines.push(`  console.log("  Sample ${table.name} created");`);
       lines.push("");
     }

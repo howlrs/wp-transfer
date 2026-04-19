@@ -28,10 +28,16 @@ function getErrorGuidance(error: Error): string | undefined {
   return undefined;
 }
 
-function runStep(name: string, command: string, cwd: string, optional = false): boolean {
+function runStep(
+  name: string,
+  command: string,
+  cwd: string,
+  optional = false,
+  timeoutMs = 300_000,
+): boolean {
   consola.start(name);
   try {
-    execSync(command, { cwd, stdio: "inherit", timeout: 300_000 });
+    execSync(command, { cwd, stdio: "inherit", timeout: timeoutMs });
     consola.success(name);
     return true;
   } catch (error) {
@@ -165,13 +171,13 @@ export const runCommand = defineCommand({
       }
     }
 
-    const steps: Array<{ name: string; command: string; optional?: boolean; skip?: boolean }> = [
-      { name: "[1/6] Installing dependencies...", command: "npm install" },
-      { name: "[2/6] Starting Docker services...", command: "docker compose up -d --wait", optional: true, skip: args["no-docker"] as boolean },
+    const steps: Array<{ name: string; command: string; optional?: boolean; skip?: boolean; timeoutMs?: number }> = [
+      { name: "[1/6] Installing dependencies...", command: "npm install", timeoutMs: 600_000 },
+      { name: "[2/6] Starting Docker services...", command: "docker compose up -d --wait", skip: args["no-docker"] as boolean, timeoutMs: 1_200_000 },
       { name: "[3/6] Generating Prisma client...", command: "npx prisma generate" },
       { name: "[4/6] Pushing database schema...", command: "npx prisma db push --accept-data-loss" },
       { name: "[5/6] Seeding test data...", command: "npx prisma db seed", optional: true },
-      { name: "[6/6] Running tests...", command: "npx playwright test", skip: args["no-test"] as boolean },
+      { name: "[6/6] Running tests...", command: "npx playwright test", skip: args["no-test"] as boolean, timeoutMs: 900_000 },
     ];
 
     let passed = 0;
@@ -182,7 +188,7 @@ export const runCommand = defineCommand({
         consola.info(`${step.name} (skipped)`);
         continue;
       }
-      const ok = runStep(step.name, step.command, projectDir, step.optional);
+      const ok = runStep(step.name, step.command, projectDir, step.optional, step.timeoutMs);
       if (ok) passed++;
       else {
         failed++;

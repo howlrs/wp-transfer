@@ -284,7 +284,7 @@ export function detectRelations(tables: TableDefinition[]): RelationDefinition[]
 
 // ── Primary key fallback ──
 
-function ensurePrimaryKey(table: TableDefinition): { columns: ColumnDefinition[]; compositeId: string[] | null } {
+export function ensurePrimaryKey(table: TableDefinition): { columns: ColumnDefinition[]; compositeId: string[] | null } {
   if (table.columns.some((c) => c.isPrimary)) {
     return { columns: table.columns, compositeId: null };
   }
@@ -499,5 +499,12 @@ export function parseSchemaToPrisma(content: string): PrismaSchemaResult {
   const tables = parseDbSchemaMarkdown(content);
   const relations = detectRelations(tables);
   const schema = generatePrismaSchema(tables, relations);
-  return { schema, tables, relations };
+
+  // Resolve PK fallback into the returned tables so downstream generators
+  // (stub-generator, seed-generator) see the same PK columns Prisma uses.
+  const resolvedTables = tables.map(t => {
+    const { columns } = ensurePrimaryKey(t);
+    return { ...t, columns };
+  });
+  return { schema, tables: resolvedTables, relations };
 }
