@@ -97,9 +97,10 @@ const IRREGULARS: Record<string, string> = {
 export function pluralize(word: string): string {
   const lower = word.toLowerCase();
   if (IRREGULARS[lower]) return IRREGULARS[lower];
-  if (lower.endsWith('s') || lower.endsWith('sh') || lower.endsWith('ch') || lower.endsWith('x') || lower.endsWith('z')) return word + 'es';
-  if (lower.endsWith('y') && !['a','e','i','o','u'].includes(lower[lower.length - 2] ?? '')) return word.slice(0, -1) + 'ies';
+  // Already plural (ends in s) — leave as-is.
   if (lower.endsWith('s')) return word;
+  if (lower.endsWith('sh') || lower.endsWith('ch') || lower.endsWith('x') || lower.endsWith('z')) return word + 'es';
+  if (lower.endsWith('y') && !['a','e','i','o','u'].includes(lower[lower.length - 2] ?? '')) return word.slice(0, -1) + 'ies';
   return word + 's';
 }
 
@@ -635,6 +636,12 @@ ${displayColumns.map((c) => `                <td className="px-4 py-3 text-sm">{
                     href={\`/${pluralize(resource)}/\${item.id}\`}
                     className="text-blue-600 underline mr-2"
                   >
+                    詳細
+                  </Link>
+                  <Link
+                    href={\`/${pluralize(resource)}/\${item.id}/edit\`}
+                    className="text-blue-600 underline"
+                  >
                     編集
                   </Link>
                 </td>
@@ -691,7 +698,11 @@ ${displayColumns.map((c) => `            <th>${c.comment ?? fieldLabel(c.name)}<
             <tr key={item.id}>
 ${displayColumns.map((c) => `              <td>{String(item.${c.name} ?? "")}</td>`).join("\n")}
               <td>
-                <Link href={\`/${pluralize(resource)}/\${item.id}\`}>
+                <Link href={\`/${pluralize(resource)}/\${item.id}\`} className="wp-row-action">
+                  詳細
+                </Link>
+                {" / "}
+                <Link href={\`/${pluralize(resource)}/\${item.id}/edit\`} className="wp-row-action">
                   編集
                 </Link>
               </td>
@@ -1448,6 +1459,7 @@ function pkCoerce(pkType: string, expr: string): string {
 function generateTableListPage(
   table: TableDefinition,
   fw: UiFramework,
+  hasSinglePk = true,
 ): AdminPage {
   const modelName = toPascalCase(table.name);
   const camelModel = toCamelCase(table.name);
@@ -1484,11 +1496,14 @@ ${columns.map((c) => `              <th className="px-4 py-3 text-left text-xs f
             {items.map((item: Record<string, unknown>) => (
               <tr key={String(item.${pk.name})} className="border-t border-gray-200">
 ${columns.map((c) => `                <td className="px-4 py-3 text-sm">{String(item.${c.name} ?? "")}</td>`).join("\n")}
-                <td className="px-4 py-3">
-                  <Link href={\`/${table.name}/\${item.${pk.name}}\`} className="text-blue-600 underline">
+                ${hasSinglePk ? `<td className="px-4 py-3">
+                  <Link href={\`/${pluralize(table.name)}/\${item.${pk.name}}\`} className="text-blue-600 underline mr-2">
                     詳細
                   </Link>
-                </td>
+                  <Link href={\`/${pluralize(table.name)}/\${item.${pk.name}}/edit\`} className="text-blue-600 underline">
+                    編集
+                  </Link>
+                </td>` : `<td className="px-4 py-3 text-xs text-gray-400">{/* composite-key table — no single-record routes */}</td>`}
               </tr>
             ))}
           </tbody>
@@ -1534,11 +1549,15 @@ ${columns.map((c) => `            <th>${c.comment ?? c.name}</th>`).join("\n")}
           {items.map((item: Record<string, unknown>) => (
             <tr key={String(item.${pk.name})}>
 ${columns.map((c) => `              <td>{String(item.${c.name} ?? "")}</td>`).join("\n")}
-              <td>
-                <Link href={\`/${table.name}/\${item.${pk.name}}\`}>
+              ${hasSinglePk ? `<td className="wp-row-action">
+                <Link href={\`/${pluralize(table.name)}/\${item.${pk.name}}\`} className="wp-row-action">
                   詳細
                 </Link>
-              </td>
+                {" / "}
+                <Link href={\`/${pluralize(table.name)}/\${item.${pk.name}}/edit\`} className="wp-row-action">
+                  編集
+                </Link>
+              </td>` : `<td className="wp-row-action">{/* composite-key table — no single-record routes */}</td>`}
             </tr>
           ))}
         </tbody>
@@ -1555,7 +1574,7 @@ ${columns.map((c) => `              <td>{String(item.${c.name} ?? "")}</td>`).jo
   }
 
   return {
-    path: `app/(admin)/${table.name}/page.tsx`,
+    path: `app/(admin)/${pluralize(table.name)}/page.tsx`,
     content,
     type: "list" as const,
   };
@@ -1585,7 +1604,7 @@ export default async function ${modelName}DetailPage({ params }: { params: Promi
 
   async function handleDelete() {
     "use server";
-    await fetch(\`\${process.env.NEXT_PUBLIC_BASE_URL ?? ""}/api/${table.name}/\${id}\`, { method: "DELETE" });
+    await fetch(\`\${process.env.NEXT_PUBLIC_BASE_URL ?? ""}/api/${pluralize(table.name)}/\${id}\`, { method: "DELETE" });
   }
 
   return (
@@ -1593,7 +1612,7 @@ export default async function ${modelName}DetailPage({ params }: { params: Promi
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">${modelName} 詳細</h1>
         <div className="flex gap-2">
-          <Link href={\`/${table.name}/\${id}/edit\`} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+          <Link href={\`/${pluralize(table.name)}/\${id}/edit\`} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
             編集
           </Link>
           <form action={handleDelete}>
@@ -1626,7 +1645,7 @@ export default async function ${modelName}DetailPage({ params }: { params: Promi
 
   async function handleDelete() {
     "use server";
-    await fetch(\`\${process.env.NEXT_PUBLIC_BASE_URL ?? ""}/api/${table.name}/\${id}\`, { method: "DELETE" });
+    await fetch(\`\${process.env.NEXT_PUBLIC_BASE_URL ?? ""}/api/${pluralize(table.name)}/\${id}\`, { method: "DELETE" });
   }
 
   return (
@@ -1634,7 +1653,7 @@ export default async function ${modelName}DetailPage({ params }: { params: Promi
       <div className="wp-admin-header">
         <h1 className="wp-admin-title">${modelName} 詳細</h1>
         <div style={{ display: "flex", gap: "8px" }}>
-          <Link href={\`/${table.name}/\${id}/edit\`} className="wp-button wp-button-primary">
+          <Link href={\`/${pluralize(table.name)}/\${id}/edit\`} className="wp-button wp-button-primary">
             編集
           </Link>
           <form action={handleDelete}>
@@ -1656,7 +1675,7 @@ ${columns.map((c) => `        <dt style={{ fontSize: "14px", fontWeight: "500", 
   }
 
   return {
-    path: `app/(admin)/${table.name}/[id]/page.tsx`,
+    path: `app/(admin)/${pluralize(table.name)}/[id]/page.tsx`,
     content,
     type: "detail" as const,
   };
@@ -1683,16 +1702,17 @@ function generateTableFormPage(
   const pageName = isEdit ? `${modelName}EditPage` : `${modelName}NewPage`;
   const pageTitle = isEdit ? `${modelName} 編集` : `${modelName} 新規作成`;
   const apiMethod = isEdit ? "PUT" : "POST";
+  const apiResource = pluralize(table.name);
   const apiUrl = isEdit
-    ? `\`/api/${table.name}/\${id}\``
-    : `"/api/${table.name}"`;
+    ? `\`/api/${apiResource}/\${id}\``
+    : `"/api/${apiResource}"`;
 
   const editFetch = isEdit
     ? `
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(\`/api/${table.name}/\${id}\`)
+    fetch(\`/api/${pluralize(table.name)}/\${id}\`)
       .then((res) => res.json())
       .then((data) => {
         setForm(data);
@@ -1707,7 +1727,7 @@ function generateTableFormPage(
     ? `\n  const params = useParams();\n  const id = params.id;`
     : "";
 
-  const redirectPath = `/${table.name}`;
+  const redirectPath = `/${pluralize(table.name)}`;
 
   const jsxPreamble = `"use client";
 
@@ -1851,9 +1871,11 @@ ${formFields
 `;
   }
 
+  // Use pluralized path to match list page (generateTableListPage uses pluralize)
+  const resource = pluralize(table.name);
   const path = isEdit
-    ? `app/(admin)/${table.name}/[id]/edit/page.tsx`
-    : `app/(admin)/${table.name}/new/page.tsx`;
+    ? `app/(admin)/${resource}/[id]/edit/page.tsx`
+    : `app/(admin)/${resource}/new/page.tsx`;
 
   return {
     path,
@@ -1922,11 +1944,20 @@ export function generateAdminScaffold(
       const p = pluralize(s);         // plural
       const pre = "app/(admin)/";
 
+      // Composite-key tables (no single isPrimary and no "id" column) cannot
+      // use findUnique({ where: { id } }) — skip detail/edit/new and keep
+      // only the list page for operational visibility.
+      const hasSinglePk =
+        table.columns.some(c => c.isPrimary) ||
+        table.columns.some(c => c.name === "id");
+
       // List page
       if (!hasPath(`${pre}${s}/page.tsx`) && !hasPath(`${pre}${p}/page.tsx`)) {
-        pages.push(generateTableListPage(table, fw));
+        pages.push(generateTableListPage(table, fw, hasSinglePk));
         existingPaths.add(`${pre}${s}/page.tsx`);
       }
+
+      if (!hasSinglePk) continue;
 
       // Detail page (singular only — PHP form pages at plural/[id] are NOT detail)
       if (!hasPath(`${pre}${s}/[id]/page.tsx`)) {

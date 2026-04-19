@@ -422,9 +422,9 @@ describe("table-driven CRUD pages", () => {
     const tables = [makeTable("product"), makeTable("order"), makeTable("customer")];
 
     const pages = generateAdminScaffold([], tables);
-    const productPage = findPage(pages, "product/page.tsx");
-    const orderPage = findPage(pages, "order/page.tsx");
-    const customerPage = findPage(pages, "customer/page.tsx");
+    const productPage = findPage(pages, "products/page.tsx");
+    const orderPage = findPage(pages, "orders/page.tsx");
+    const customerPage = findPage(pages, "customers/page.tsx");
 
     expect(productPage).toBeDefined();
     expect(productPage!.type).toBe("list");
@@ -452,7 +452,7 @@ describe("table-driven CRUD pages", () => {
     expect(eventListPages.length).toBe(1);
 
     // user should get a table-driven page
-    const userPage = findPage(pages, "user/page.tsx");
+    const userPage = findPage(pages, "users/page.tsx");
     expect(userPage).toBeDefined();
     expect(userPage!.type).toBe("list");
   });
@@ -471,7 +471,7 @@ describe("table-driven CRUD pages", () => {
     const tables = [{ name: "member", columns }];
 
     const pages = generateAdminScaffold([], tables);
-    const memberPage = findPage(pages, "member/page.tsx");
+    const memberPage = findPage(pages, "members/page.tsx");
 
     expect(memberPage).toBeDefined();
     // First 6 columns should be present
@@ -486,7 +486,7 @@ describe("table-driven CRUD pages", () => {
     const tables = [makeTable("product")];
 
     const pages = generateAdminScaffold([], tables);
-    const productPage = findPage(pages, "product/page.tsx");
+    const productPage = findPage(pages, "products/page.tsx");
 
     expect(productPage).toBeDefined();
     expect(productPage!.content).toContain("タイトル");
@@ -497,7 +497,7 @@ describe("table-driven CRUD pages", () => {
     const tables = [makeTable("product")];
 
     const pages = generateAdminScaffold([], tables, { uiFramework: "tailwind" });
-    const productPage = findPage(pages, "product/page.tsx");
+    const productPage = findPage(pages, "products/page.tsx");
 
     expect(productPage).toBeDefined();
     expect(productPage!.content).toContain("className=");
@@ -516,8 +516,8 @@ describe("navigation includes all tables", () => {
     expect(layout!.content).toContain("Product");
     expect(layout!.content).toContain("Order");
     // Table-driven list pages get picked up as list pages in layout nav
-    expect(layout!.content).toContain('href="/product"');
-    expect(layout!.content).toContain('href="/order"');
+    expect(layout!.content).toContain('href="/products"');
+    expect(layout!.content).toContain('href="/orders"');
   });
 
   it("layout includes both PHP-matched and table-driven nav links", () => {
@@ -541,7 +541,7 @@ describe("table-driven CRUD detail page", () => {
     const tables = [makeTable("product")];
 
     const pages = generateAdminScaffold([], tables);
-    const detailPage = findPage(pages, "product/[id]/page.tsx");
+    const detailPage = findPage(pages, "products/[id]/page.tsx");
 
     expect(detailPage).toBeDefined();
     expect(detailPage!.type).toBe("detail");
@@ -554,7 +554,7 @@ describe("table-driven CRUD detail page", () => {
     const tables = [makeTable("product")];
 
     const pages = generateAdminScaffold([], tables);
-    const detailPage = findPage(pages, "product/[id]/page.tsx");
+    const detailPage = findPage(pages, "products/[id]/page.tsx");
 
     expect(detailPage).toBeDefined();
     expect(detailPage!.content).toContain("/edit");
@@ -565,7 +565,7 @@ describe("table-driven CRUD detail page", () => {
     const tables = [makeTable("product")];
 
     const pages = generateAdminScaffold([], tables, { uiFramework: "tailwind" });
-    const detailPage = findPage(pages, "product/[id]/page.tsx");
+    const detailPage = findPage(pages, "products/[id]/page.tsx");
 
     expect(detailPage).toBeDefined();
     expect(detailPage!.content).toContain("className=");
@@ -578,7 +578,7 @@ describe("table-driven CRUD edit page", () => {
     const tables = [makeTable("product")];
 
     const pages = generateAdminScaffold([], tables);
-    const editPage = findPage(pages, "product/[id]/edit/page.tsx");
+    const editPage = findPage(pages, "products/[id]/edit/page.tsx");
 
     expect(editPage).toBeDefined();
     expect(editPage!.type).toBe("form");
@@ -591,7 +591,7 @@ describe("table-driven CRUD edit page", () => {
     const tables = [makeTable("product")];
 
     const pages = generateAdminScaffold([], tables);
-    const editPage = findPage(pages, "product/[id]/edit/page.tsx");
+    const editPage = findPage(pages, "products/[id]/edit/page.tsx");
 
     expect(editPage).toBeDefined();
     expect(editPage!.content).toContain("useEffect");
@@ -602,7 +602,7 @@ describe("table-driven CRUD edit page", () => {
     const tables = [makeTable("product")];
 
     const pages = generateAdminScaffold([], tables);
-    const editPage = findPage(pages, "product/[id]/edit/page.tsx");
+    const editPage = findPage(pages, "products/[id]/edit/page.tsx");
 
     expect(editPage).toBeDefined();
     expect(editPage!.content).toContain("title");
@@ -615,7 +615,7 @@ describe("table-driven CRUD edit page", () => {
     const tables = [makeTable("product")];
 
     const pages = generateAdminScaffold([], tables);
-    const editPage = findPage(pages, "product/[id]/edit/page.tsx");
+    const editPage = findPage(pages, "products/[id]/edit/page.tsx");
 
     expect(editPage).toBeDefined();
     expect(editPage!.content).toContain('useParams } from "next/navigation"');
@@ -626,7 +626,7 @@ describe("table-driven CRUD edit page", () => {
     const tables = [makeTable("product")];
 
     const pages = generateAdminScaffold([], tables, { uiFramework: "tailwind" });
-    const editPage = findPage(pages, "product/[id]/edit/page.tsx");
+    const editPage = findPage(pages, "products/[id]/edit/page.tsx");
 
     expect(editPage).toBeDefined();
     expect(editPage!.content).toContain("className=");
@@ -639,7 +639,7 @@ describe("table-driven CRUD new page", () => {
     const tables = [makeTable("product")];
 
     const pages = generateAdminScaffold([], tables);
-    const newPage = findPage(pages, "product/new/page.tsx");
+    const newPage = findPage(pages, "products/new/page.tsx");
 
     expect(newPage).toBeDefined();
     expect(newPage!.type).toBe("form");
@@ -652,7 +652,7 @@ describe("table-driven CRUD new page", () => {
     const tables = [makeTable("product")];
 
     const pages = generateAdminScaffold([], tables);
-    const newPage = findPage(pages, "product/new/page.tsx");
+    const newPage = findPage(pages, "products/new/page.tsx");
 
     expect(newPage).toBeDefined();
     expect(newPage!.content).not.toContain("useEffect");
@@ -663,7 +663,7 @@ describe("table-driven CRUD new page", () => {
     const tables = [makeTable("product")];
 
     const pages = generateAdminScaffold([], tables, { uiFramework: "tailwind" });
-    const newPage = findPage(pages, "product/new/page.tsx");
+    const newPage = findPage(pages, "products/new/page.tsx");
 
     expect(newPage).toBeDefined();
     expect(newPage!.content).toContain("className=");
@@ -677,10 +677,10 @@ describe("table-driven CRUD complete set", () => {
 
     const pages = generateAdminScaffold([], tables);
 
-    expect(findPage(pages, "product/page.tsx")).toBeDefined();       // list
-    expect(findPage(pages, "product/[id]/page.tsx")).toBeDefined();  // detail
-    expect(findPage(pages, "product/[id]/edit/page.tsx")).toBeDefined(); // edit
-    expect(findPage(pages, "product/new/page.tsx")).toBeDefined();   // new
+    expect(findPage(pages, "products/page.tsx")).toBeDefined();       // list
+    expect(findPage(pages, "products/[id]/page.tsx")).toBeDefined();  // detail
+    expect(findPage(pages, "products/[id]/edit/page.tsx")).toBeDefined(); // edit
+    expect(findPage(pages, "products/new/page.tsx")).toBeDefined();   // new
     expect(findPage(pages, "layout.tsx")).toBeDefined();
     expect(findPage(pages, "(admin)/page.tsx")).toBeDefined();
   });
@@ -689,7 +689,7 @@ describe("table-driven CRUD complete set", () => {
     const tables = [makeTable("product")];
 
     const pages = generateAdminScaffold([], tables);
-    const listPage = findPage(pages, "product/page.tsx");
+    const listPage = findPage(pages, "products/page.tsx");
 
     expect(listPage).toBeDefined();
     expect(listPage!.content).toContain("詳細");
@@ -706,9 +706,9 @@ describe("table-driven CRUD complete set", () => {
       (p) => p.path.includes("event/[id]/page.tsx") || p.path.includes("events/[id]/page.tsx"),
     );
     // Only user should have table-driven CRUD
-    const userDetail = findPage(pages, "user/[id]/page.tsx");
-    const userEdit = findPage(pages, "user/[id]/edit/page.tsx");
-    const userNew = findPage(pages, "user/new/page.tsx");
+    const userDetail = findPage(pages, "users/[id]/page.tsx");
+    const userEdit = findPage(pages, "users/[id]/edit/page.tsx");
+    const userNew = findPage(pages, "users/new/page.tsx");
 
     expect(userDetail).toBeDefined();
     expect(userEdit).toBeDefined();
@@ -728,7 +728,7 @@ describe("non-standard primary key support", () => {
 
   it("list page uses actual PK column for orderBy and key", () => {
     const pages = generateAdminScaffold([], [gpsTable]);
-    const listPage = findPage(pages, "gps_area/page.tsx");
+    const listPage = findPage(pages, "gps_areas/page.tsx");
 
     expect(listPage).toBeDefined();
     expect(listPage!.content).toContain('orderBy: { area_id: "desc" }');
@@ -738,7 +738,7 @@ describe("non-standard primary key support", () => {
 
   it("detail page uses actual PK column for findUnique", () => {
     const pages = generateAdminScaffold([], [gpsTable]);
-    const detailPage = findPage(pages, "gps_area/[id]/page.tsx");
+    const detailPage = findPage(pages, "gps_areas/[id]/page.tsx");
 
     expect(detailPage).toBeDefined();
     expect(detailPage!.content).toContain("where: { area_id: Number(id) }");
@@ -754,7 +754,7 @@ describe("non-standard primary key support", () => {
     };
 
     const pages = generateAdminScaffold([], [noPkTable]);
-    const listPage = findPage(pages, "gps_area/page.tsx");
+    const listPage = findPage(pages, "gps_areas/page.tsx");
 
     expect(listPage).toBeDefined();
     expect(listPage!.content).toContain('orderBy: { area_id: "desc" }');
@@ -771,7 +771,7 @@ describe("non-standard primary key support", () => {
     };
 
     const pages = generateAdminScaffold([], [stringPkTable]);
-    const detailPage = findPage(pages, "device/[id]/page.tsx");
+    const detailPage = findPage(pages, "devices/[id]/page.tsx");
 
     expect(detailPage).toBeDefined();
     expect(detailPage!.content).toContain("where: { device_id: id }");
@@ -791,9 +791,9 @@ describe("CRUD gap filling for PHP-matched tables", () => {
     expect(findPage(pages, "events/search/page.tsx")).toBeDefined();
 
     // Gap-filled table-driven pages
-    expect(findPage(pages, "event/[id]/page.tsx")).toBeDefined();       // detail
-    expect(findPage(pages, "event/[id]/edit/page.tsx")).toBeDefined();  // edit
-    expect(findPage(pages, "event/new/page.tsx")).toBeDefined();        // new
+    expect(findPage(pages, "events/[id]/page.tsx")).toBeDefined();       // detail
+    expect(findPage(pages, "events/[id]/edit/page.tsx")).toBeDefined();  // edit
+    expect(findPage(pages, "events/new/page.tsx")).toBeDefined();        // new
   });
 
   it("does not duplicate pages that already exist from PHP patterns", () => {
@@ -820,8 +820,8 @@ describe("CRUD gap filling for PHP-matched tables", () => {
     expect(editPages.length).toBe(1);
 
     // Gap-filled new and detail
-    expect(findPage(pages, "event/new/page.tsx")).toBeDefined();
-    expect(findPage(pages, "event/[id]/page.tsx") || findPage(pages, "events/[id]/page.tsx")).toBeDefined();
+    expect(findPage(pages, "events/new/page.tsx")).toBeDefined();
+    expect(findPage(pages, "events/[id]/page.tsx") || findPage(pages, "events/[id]/page.tsx")).toBeDefined();
   });
 });
 

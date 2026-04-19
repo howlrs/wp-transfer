@@ -842,7 +842,7 @@ function generateDirectBody(
 /**
  * Generate a list (GET /api/{resource}) handler from a DB table definition.
  */
-function generateListHandler(modelName: string): string {
+function generateListHandler(modelName: string, pkColumn: string): string {
   return `import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 
@@ -853,7 +853,40 @@ export async function GET(request: NextRequest) {
   const take = parseInt(searchParams.get("take") ?? "20", 10);
 
   const [items, total] = await Promise.all([
-    prisma.${modelName}.findMany({ skip, take, orderBy: { id: "desc" } }),
+    prisma.${modelName}.findMany({ skip, take, orderBy: { ${pkColumn}: "desc" } }),
+    prisma.${modelName}.count(),
+  ]);
+
+  return NextResponse.json({ items, total, skip, take });
+}
+
+// Schema-driven POST — admin form scaffold posts here. Customize validation.
+export async function POST(request: NextRequest) {
+  try {
+    const data = await request.json();
+    const created = await prisma.${modelName}.create({ data });
+    return NextResponse.json(created, { status: 201 });
+  } catch (error) {
+    console.error("[POST /${modelName}]", error);
+    return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+  }
+}
+`;
+}
+
+/** List handler for composite-key tables (no orderBy — no single PK column). */
+function generateListHandlerNoOrder(modelName: string): string {
+  return `import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/lib/db";
+
+// TODO: Composite-key table — add explicit orderBy if ordering matters
+export async function GET(request: NextRequest) {
+  const { searchParams } = request.nextUrl;
+  const skip = parseInt(searchParams.get("skip") ?? "0", 10);
+  const take = parseInt(searchParams.get("take") ?? "20", 10);
+
+  const [items, total] = await Promise.all([
+    prisma.${modelName}.findMany({ skip, take }),
     prisma.${modelName}.count(),
   ]);
 
@@ -865,7 +898,11 @@ export async function GET(request: NextRequest) {
 /**
  * Generate a detail (GET /api/{resource}/[id]) handler from a DB table definition.
  */
-function generateDetailHandler(modelName: string): string {
+function generateDetailHandler(modelName: string, pkColumn: string, pkType: string): string {
+  const parseExpr =
+    pkType === "Int" ? "parseInt(id, 10)"
+    : pkType === "BigInt" ? "BigInt(id)"
+    : "id";
   return `import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 
@@ -876,7 +913,7 @@ export async function GET(
 ) {
   const { id } = await params;
   const item = await prisma.${modelName}.findUnique({
-    where: { id: parseInt(id, 10) },
+    where: { ${pkColumn}: ${parseExpr} },
   });
 
   if (!item) {
@@ -884,6 +921,38 @@ export async function GET(
   }
 
   return NextResponse.json(item);
+}
+
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    const { id } = await params;
+    const data = await request.json();
+    const updated = await prisma.${modelName}.update({
+      where: { ${pkColumn}: ${parseExpr} },
+      data,
+    });
+    return NextResponse.json(updated);
+  } catch (error) {
+    console.error("[PUT /${modelName}/:id]", error);
+    return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+  }
+}
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    const { id } = await params;
+    await prisma.${modelName}.delete({ where: { ${pkColumn}: ${parseExpr} } });
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error("[DELETE /${modelName}/:id]", error);
+    return NextResponse.json({ error: "Not found or conflict" }, { status: 404 });
+  }
 }
 `;
 }
@@ -901,24 +970,60 @@ function generateGetEndpoints(
 ): Map<string, string> {
   const getStubs = new Map<string, string>();
 
-  for (const table of tables) {
-    const resource = table.name;
-    const modelName = toPrismaModelName(resource);
+  // Collect top-level resource segments already present in existingPaths
+  // (e.g. app/api/users/[id]/blacklist/route.ts → "users").
+  // This lets us co-locate schema-driven GETs under plural PHP routes even
+  // when the table name is singular (user).
+  const existingResources = new Set<string>();
+  for (const p of existingPaths) {
+    const m = p.match(/^app\/api\/([^/[]+)/);
+    if (m) existingResources.add(m[1]!);
+  }
 
-    // Check if PHP mapping already created a route for this resource
-    // PHP routes use plural forms (e.g., /api/events/) — match by resource prefix
+  const pluralize = (n: string): string => {
+    if (n.endsWith("s")) return n;
+    if (n.endsWith("y") && !["a","e","i","o","u"].includes(n[n.length - 2] ?? "")) {
+      return n.slice(0, -1) + "ies";
+    }
+    return n + "s";
+  };
+
+  for (const table of tables) {
+    // Pick the resource segment: prefer exact table name, else its plural if
+    // that plural already exists as a PHP-mapped route.
+    let resource = table.name;
+    if (!existingResources.has(resource)) {
+      const plural = pluralize(resource);
+      if (existingResources.has(plural)) resource = plural;
+    }
+    const modelName = toPrismaModelName(table.name);
+
+    const pkCol = table.columns.find(c => c.isPrimary);
+    // Composite PK tables (@@id([a, b])) have no single isPrimary column.
+    // We cannot generate a safe detail GET (requires compound where clause),
+    // so emit only a list without orderBy.
+    const isCompositeOnly = !pkCol;
+
+    // Only reuse existing file paths if they exactly match the target.
     const existingListPath = [...existingPaths].find(
-      p => p.startsWith(`app/api/${resource}`) && p.endsWith("/route.ts") && !p.includes("["),
+      p => p === `app/api/${resource}/route.ts`,
     );
     const existingDetailPath = [...existingPaths].find(
-      p => p.startsWith(`app/api/${resource}`) && p.includes("[id]") && p.endsWith("/route.ts"),
+      p => p === `app/api/${resource}/[id]/route.ts`,
     );
 
     const listPath = existingListPath ?? `app/api/${resource}/route.ts`;
     const detailPath = existingDetailPath ?? `app/api/${resource}/[id]/route.ts`;
 
-    getStubs.set(listPath, generateListHandler(modelName));
-    getStubs.set(detailPath, generateDetailHandler(modelName));
+    if (isCompositeOnly) {
+      getStubs.set(listPath, generateListHandlerNoOrder(modelName));
+      // Skip detail generation for composite-key tables
+    } else {
+      const pkColumn = pkCol!.name;
+      const pkType = pkCol!.type;
+      getStubs.set(listPath, generateListHandler(modelName, pkColumn));
+      getStubs.set(detailPath, generateDetailHandler(modelName, pkColumn, pkType));
+    }
   }
 
   return getStubs;
@@ -962,11 +1067,32 @@ export function generateApiStubs(
     for (const [path, code] of getStubs) {
       const existing = stubs.get(path);
       if (existing) {
-        // Co-locate: append GET handler to existing route file
-        const funcMatch = code.match(/(export async function GET[\s\S]*$)/);
-        if (funcMatch) {
-          stubs.set(path, existing + "\n\n" + funcMatch[1]);
+        // Co-locate: only append handlers that aren't already present.
+        const handlers = ["GET", "POST", "PUT", "DELETE"] as const;
+        // Find each handler block in `code` by locating the "export async function X"
+        // and taking until the next "export async function Y" or end of string.
+        const blocks: Record<string, string> = {};
+        for (let i = 0; i < handlers.length; i++) {
+          const method = handlers[i]!;
+          const startRe = new RegExp(`export async function ${method}\\b`);
+          const startMatch = startRe.exec(code);
+          if (!startMatch) continue;
+          const startIdx = startMatch.index;
+          // Find next "export async function" after this one
+          const nextRe = /export async function \w+\b/g;
+          nextRe.lastIndex = startIdx + startMatch[0].length;
+          const nextMatch = nextRe.exec(code);
+          const endIdx = nextMatch ? nextMatch.index : code.length;
+          blocks[method] = code.slice(startIdx, endIdx).trimEnd();
         }
+        let merged = existing;
+        for (const method of handlers) {
+          if (!blocks[method]) continue;
+          const hasExisting = new RegExp(`export async function ${method}\\b`).test(merged);
+          if (hasExisting) continue;
+          merged = merged.trimEnd() + "\n\n" + blocks[method] + "\n";
+        }
+        stubs.set(path, merged);
       } else {
         stubs.set(path, code);
       }
