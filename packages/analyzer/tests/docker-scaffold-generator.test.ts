@@ -128,15 +128,15 @@ describe("Docker Scaffold Generator", () => {
 
   describe("project name substitution", () => {
     it("uses project name in database configuration", () => {
-      const files = generateDockerScaffold("jra-tokyo", "mysql");
+      const files = generateDockerScaffold("client-a", "mysql");
       const compose = findFile(files, "docker-compose.yml")!;
-      expect(compose.content).toContain("jra_tokyo");
+      expect(compose.content).toContain("client_a");
     });
 
     it("uses project name in .env.example", () => {
-      const files = generateDockerScaffold("jra-tokyo", "mysql");
+      const files = generateDockerScaffold("client-a", "mysql");
       const envExample = findFile(files, ".env.example")!;
-      expect(envExample.content).toContain("jra_tokyo");
+      expect(envExample.content).toContain("client_a");
     });
   });
 

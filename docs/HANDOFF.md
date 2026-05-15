@@ -55,9 +55,9 @@ wp-transfer analyze --interactive
 wp-transfer analyze <file.xml> --templates ./my-templates/
 
 # ワンコマンド移行検証 (生成済みプロジェクト)
-wp-transfer run output/jra-tokyo                  # 全自動: install → Docker → migrate → seed → test
-wp-transfer run output/jra-tokyo --no-docker      # Docker スキップ
-wp-transfer run output/jra-tokyo --open           # テスト後にレポートを開く
+wp-transfer run output/client-a                  # 全自動: install → Docker → migrate → seed → test
+wp-transfer run output/client-a --no-docker      # Docker スキップ
+wp-transfer run output/client-a --open           # テスト後にレポートを開く
 ```
 
 ## 技術スタック
@@ -160,7 +160,7 @@ wp-transfer run output/jra-tokyo --open           # テスト後にレポート�
 - **Fallback**: Claude API direct call (ANTHROPIC_API_KEY)
 - 機密情報マスキング + マークダウン除去 + 出力検証
 - 指数バックオフリトライ + 並列制御 + 巨大ファイルガード
-- JRA tokyo: 24/25ルート AI生成, CRITICAL 6件全解消, $0追加コスト
+- Client A: 24/25ルート AI生成, CRITICAL 6件全解消, $0追加コスト
 
 ### セキュリティ
 - Phase 1: 18件修正 (SSRF, クレデンシャル, SAX, 型安全性)
@@ -171,7 +171,7 @@ wp-transfer run output/jra-tokyo --open           # テスト後にレポート�
 
 ### テスト・品質基盤
 - **901テスト, 66ファイル, 89.7%カバレッジ (analyzerパッケージ)**
-- JRA Tokyo 規模の全パイプライン統合テスト (69ケース: preflight→解析→Prisma→API→CRUD→verify→dashboard→Docker→整合性)
+- Client A 規模の全パイプライン統合テスト (69ケース: preflight→解析→Prisma→API→CRUD→verify→dashboard→Docker→整合性)
 - CLI smokeテスト (--help, analyze実行, エラーケース)
 - 500投稿WXR fixture (544KB) + パフォーマンステスト (150ms)
 - E2E統合テスト (WXR parse → analyze → block convert → scaffold)
@@ -197,7 +197,7 @@ wp-transfer run output/jra-tokyo --open           # テスト後にレポート�
 | 5 | Phase 1-4: Next.js scaffold生成 | Closed |
 | 6 | 12名専門家パネル統合方針 | Closed |
 | 7 | Karpathy原則レビュー: 18件修正 | Closed |
-| 8 | ドッグフーディング: JRA tokyo | Closed |
+| 8 | ドッグフーディング: Client A | Closed |
 | 9 | Security: コード生成サニタイズ不足 | Closed |
 | 10 | Bug: Gutenbergパーサー edge case | Closed |
 | 11 | Enhancement: Yoast/ACF 実運用強化 | Closed |
@@ -280,20 +280,20 @@ pnpm -r typecheck       # 全パッケージ型チェック
 pnpm -r build           # dist/ 生成
 pnpm vitest run --config vitest.config.ts --coverage  # カバレッジ
 
-# JRA tokyo再生成 (静的解析のみ)
+# Client A再生成 (静的解析のみ)
 pnpm --filter wp-transfer-cli dev analyze-php \
-  /path/to/wp/tokyo \
+  /path/to/wp/site \
   --schema /path/to/api/docs/database.md \
-  --output output/jra-tokyo
+  --output output/client-a
 
-# JRA tokyo再生成 (AI Assist付き — 高品質APIルート, 追加コスト$0)
+# Client A再生成 (AI Assist付き — 高品質APIルート, 追加コスト$0)
 pnpm --filter wp-transfer-cli dev analyze-php \
-  /path/to/wp/tokyo \
+  /path/to/wp/site \
   --schema /path/to/api/docs/database.md \
-  --output output/jra-tokyo --ai-assist
+  --output output/client-a --ai-assist
 
 # 生成物の起動
-cd output/jra-tokyo
+cd output/client-a
 npm install && npx prisma db push && npx tsx prisma/seed.ts && npm run dev
 ```
 

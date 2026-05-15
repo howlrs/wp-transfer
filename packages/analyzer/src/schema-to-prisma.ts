@@ -1,5 +1,5 @@
 /**
- * Parse JRA database.md documentation and generate a Prisma schema.
+ * Parse database.md documentation and generate a Prisma schema.
  *
  * Expected markdown format:
  *   ## table_name
@@ -411,7 +411,7 @@ export function generatePrismaSchema(
   }
 
   // Header
-  lines.push("// Auto-generated Prisma schema from JRA database.md");
+  lines.push("// Auto-generated Prisma schema from database.md");
   lines.push("// Generated at: " + new Date().toISOString());
   if (rels.length > 0) {
     lines.push("// Enhanced with auto-detected relations");

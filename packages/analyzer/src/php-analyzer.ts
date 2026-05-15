@@ -271,7 +271,7 @@ function detectSecurityIssues(content: string): string[] {
   }
 
   // Check for hardcoded credentials
-  if (/new\s+PDO\s*\(/.test(content) && /'[^']*password|jra|PolieF1boh/i.test(content)) {
+  if (/new\s+PDO\s*\(/.test(content) && /'[^']*password/i.test(content)) {
     issues.push("Hardcoded database credentials found in source file");
   }
 

@@ -123,11 +123,11 @@ describe("analyzePhpFile", () => {
   describe("output type detection", () => {
     it("detects redirect output", () => {
       const content = phpWrap(`
-        header('Location: https://jra-event.com/tokyo/');
+        header('Location: https://example.com/area/');
       `);
       const result = analyzePhpFile(content, "test.php");
       expect(result.outputType).toBe("redirect");
-      expect(result.redirectTarget).toBe("https://jra-event.com/tokyo/");
+      expect(result.redirectTarget).toBe("https://example.com/area/");
     });
 
     it("detects echo output", () => {
@@ -168,7 +168,7 @@ describe("analyzePhpFile", () => {
 
     it("detects hardcoded credentials", () => {
       const content = phpWrap(`
-        $dbh = new PDO('mysql:host=rds.example.com;dbname=test', 'jra', 'PolieF1boh');
+        $dbh = new PDO('mysql:host=rds.example.com;dbname=test', 'user', 'password123');
       `);
       const result = analyzePhpFile(content, "test.php");
       expect(
@@ -304,7 +304,7 @@ $wp_db_version = 58975;
     });
   });
 
-  describe("real-world JRA insert.php pattern", () => {
+  describe("real-world insert.php pattern", () => {
     it("correctly analyzes the insert.php file pattern", () => {
       const content = `
 <?php
@@ -318,7 +318,7 @@ $start_time = $start_time.":00";
 
 $dbh = NULL;
 try{
-    $dbh = new PDO('mysql:host=rds.example.com;dbname=tokyo', 'jra', 'PolieF1boh',
+    $dbh = new PDO('mysql:host=rds.example.com;dbname=app', 'user', 'password123',
                    array(PDO::ATTR_EMULATE_PREPARES => false));
 }catch( PDOException $e){
     exit;
@@ -344,7 +344,7 @@ try{
     exit;
 }
 
-header('Location: https://jra-event.com/tokyo/');
+header('Location: https://example.com/area/');
 ?>`;
 
       const result = analyzePhpFile(content, "insert.php");
@@ -352,7 +352,7 @@ header('Location: https://jra-event.com/tokyo/');
       expect(result.fileName).toBe("insert.php");
       expect(result.purpose).toBe("Create new record");
       expect(result.outputType).toBe("redirect");
-      expect(result.redirectTarget).toBe("https://jra-event.com/tokyo/");
+      expect(result.redirectTarget).toBe("https://example.com/area/");
 
       // Should find POST params
       const postParams = result.inputParams.filter(
@@ -544,7 +544,7 @@ header("Location: /");
 
   it("extracts form spec from real page-event-copy.php pattern", () => {
     const html = `<?php get_header(); ?>
-<form action="https://jra-event.com/test/event-copy.php" method="post">
+<form action="https://example.com/test/event-copy.php" method="post">
   <h4>【イベントタイトル】</h4>
   <input type="text" name="title" size="10" value="" required="required" />
   <h4>【募集タイプ】</h4>
@@ -568,7 +568,7 @@ header("Location: /");
 </form>`;
     const result = analyzePhpFile(html, "page-event-copy.php");
     expect(result.formSpec).toBeDefined();
-    expect(result.formSpec!.action).toBe("https://jra-event.com/test/event-copy.php");
+    expect(result.formSpec!.action).toBe("https://example.com/test/event-copy.php");
     expect(result.formSpec!.submitLabel).toBe("コピーする");
     expect(result.formSpec!.fields.length).toBeGreaterThanOrEqual(6);
 

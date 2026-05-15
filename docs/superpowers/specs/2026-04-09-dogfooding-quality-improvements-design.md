@@ -1,14 +1,14 @@
-# Design: JRA Tokyo Dogfooding Quality Improvements
+# Design: Client A Dogfooding Quality Improvements
 
 **Date:** 2026-04-09
 **Scope:** wp-transfer analyze-php generator improvements (B-range: structural + HIGH issues)
-**Origin:** JRA Tokyo PHP→Next.js migration dogfooding report
+**Origin:** Client A PHP→Next.js migration dogfooding report
 
 ---
 
 ## Background
 
-JRA Tokyo event management system (39 PHP files, 21 DB tables) was migrated using `analyze-php`.
+Client A event management system (39 PHP files, 21 DB tables) was migrated using `analyze-php`.
 Prisma schema generation scored A (production-ready), but API route generation scored C with
 6 CRITICAL bugs (now fixed in Issue #13/#18/#19) and multiple HIGH/structural issues remaining.
 
