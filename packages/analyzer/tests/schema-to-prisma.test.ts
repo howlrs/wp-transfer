@@ -6,14 +6,14 @@ import {
   detectRelations,
 } from "../src/schema-to-prisma.js";
 
-// ── Minimal fixture matching JRA database.md format ──
+// ── Minimal fixture matching database.md format ──
 
 const FIXTURE = `# Test Schema
 
 ## event
 
 ### 0. 備考
-* jra_eventのみテーブルが存在
+* eventのみテーブルが存在
 
 ### 1. id
 * イベントID:int(11) NOT NULL AUTO_INCREMENT
@@ -82,7 +82,7 @@ describe("parseDbSchemaMarkdown", () => {
   it("parses table notes from 備考 section", () => {
     const tables = parseDbSchemaMarkdown(FIXTURE);
     const event = tables.find((t) => t.name === "event");
-    expect(event?.note).toContain("jra_event");
+    expect(event?.note).toContain("event");
   });
 
   it("skips 備考 (index 0) as column", () => {

@@ -12,7 +12,7 @@ import { generateMigrationDashboard } from "../src/migration-dashboard-generator
 import { runPreflightChecks } from "../src/preflight.js";
 import type { DashboardInput } from "../src/migration-dashboard-generator.js";
 
-const FIXTURE_DIR = join(import.meta.dirname, "fixtures/jra-tokyo");
+const FIXTURE_DIR = join(import.meta.dirname, "fixtures/client-a");
 
 function loadFixture(name: string): string {
   return readFileSync(join(FIXTURE_DIR, name), "utf-8");
@@ -43,7 +43,7 @@ const custom = analyses.filter(
 const stubs = generateApiStubs(custom, tables);
 const adminPages = generateAdminScaffold(custom, tables);
 const authFiles = generateAuthScaffold(["wpfront-user-role-editor"]);
-const dockerFiles = generateDockerScaffold("jra-tokyo", "mysql");
+const dockerFiles = generateDockerScaffold("client-a", "mysql");
 
 // Build CRUD coverage matrix (same logic the CLI uses)
 function buildCrudCoverage() {
@@ -107,7 +107,7 @@ const securityIssues = analyses.flatMap((a) =>
 );
 
 const dashboardInput: DashboardInput = {
-  projectName: "jra-tokyo",
+  projectName: "client-a",
   phpFileCount: phpFiles.length,
   tableCount: tables.length,
   apiRouteCount: stubs.size,
@@ -488,7 +488,7 @@ describe("G. migration dashboard", () => {
   });
 
   it("includes project name in title", () => {
-    expect(dashboard.html).toContain("jra-tokyo");
+    expect(dashboard.html).toContain("client-a");
   });
 
   it("shows correct PHP file count", () => {
@@ -530,7 +530,7 @@ describe("H. Docker scaffold", () => {
       (f) => f.path === "docker-compose.yml",
     )!;
     expect(compose.content).toContain("mysql:8.0");
-    expect(compose.content).toContain("jra_tokyo");
+    expect(compose.content).toContain("client_a");
   });
 
   it("generates Dockerfile with multi-stage build", () => {
@@ -543,7 +543,7 @@ describe("H. Docker scaffold", () => {
   it("generates .env.example with mysql connection string", () => {
     const env = dockerFiles.find((f) => f.path === ".env.example")!;
     expect(env.content).toContain("mysql://");
-    expect(env.content).toContain("jra_tokyo");
+    expect(env.content).toContain("client_a");
   });
 
   it("generates health endpoint", () => {

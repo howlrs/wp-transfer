@@ -112,13 +112,13 @@ Run a generated Next.js project end-to-end: install dependencies, start Docker, 
 
 ```bash
 # Full pipeline
-wp-transfer run output/jra-tokyo
+wp-transfer run output/client-a
 
 # Without Docker (use existing database)
-wp-transfer run output/jra-tokyo --no-docker
+wp-transfer run output/client-a --no-docker
 
 # Open HTML report after tests
-wp-transfer run output/jra-tokyo --open
+wp-transfer run output/client-a --open
 ```
 
 Options:
@@ -170,4 +170,4 @@ MIT
 
 ## Status
 
-**v0.4.0-alpha** -- All phases complete plus 6 PDCA improvement cycles. 901 tests (66 files), 38 issues closed. New in v0.4: Elementor conversion, one-command `run`, migration dashboard, pre-flight checks, enhanced Playwright test generation (API/Auth/Admin), soft-delete detection, loop/batch processing, schema-driven GET endpoints, full CLI integration (preflight + config + dashboard + verify specs). JRA Tokyo full-pipeline integration test (69 cases) proves end-to-end completeness. See `HANDOFF.md` for details.
+**v0.4.0-alpha** -- All phases complete plus 6 PDCA improvement cycles. 901 tests (66 files), 38 issues closed. New in v0.4: Elementor conversion, one-command `run`, migration dashboard, pre-flight checks, enhanced Playwright test generation (API/Auth/Admin), soft-delete detection, loop/batch processing, schema-driven GET endpoints, full CLI integration (preflight + config + dashboard + verify specs). Client A full-pipeline integration test (69 cases) proves end-to-end completeness. See `HANDOFF.md` for details.

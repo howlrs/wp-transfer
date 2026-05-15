@@ -1,7 +1,7 @@
-# JRA tokyo 移行品質評価レポート
+# Client A 移行品質評価レポート
 
 **日付:** 2026-04-09
-**対象:** JRA tokyo イベント管理システム (PHP → Next.js)
+**対象:** Client A イベント管理システム (PHP → Next.js)
 **ツール:** wp-transfer v0.2.0-alpha `analyze-php`
 **レビュアー:** Claude Opus 4.6 + Gemini Pro
 
@@ -172,7 +172,7 @@
 4. **P1: ループ検出** — PHP内のforeachでDB操作しているパターンを検出し、Prismaの createMany/Promise.all に変換
 5. **P2: HTTP Method最適化** — 状態遷移操作をPATCHで生成
 
-### JRA tokyo 個別修正 (生成物側)
+### Client A 個別修正 (生成物側)
 
 修正工数: **4-6時間** (ジェネレーター改善なしの場合)
 - 3件のSchema定義追加

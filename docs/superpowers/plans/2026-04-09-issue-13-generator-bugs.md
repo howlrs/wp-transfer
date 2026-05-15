@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Fix 10 generator blockers found during JRA tokyo dogfooding — Prisma PK detection, API Zod schema generation, admin form fields, and Docker package manager.
+**Goal:** Fix 10 generator blockers found during Client A dogfooding — Prisma PK detection, API Zod schema generation, admin form fields, and Docker package manager.
 
 **Architecture:** Four independent generators fixed in bottom-up order (Docker → Prisma → API → Admin). Each fix includes regression tests. All changes are to generators (code that generates code), not to the generated output.
 
@@ -509,38 +509,38 @@ then from table columns if no params found or all filtered out."
 
 ### Task 5: Re-run dogfooding verification
 
-- [ ] **Step 1: Re-generate JRA tokyo**
+- [ ] **Step 1: Re-generate Client A**
 
 Run:
 ```bash
-rm -rf output/jra-tokyo-v2
+rm -rf output/client-a-v2
 pnpm --filter wp-transfer-cli dev analyze-php \
-  /home/o9oem/workspace/hc/jra/event/2025/wp/tokyo \
-  --schema /home/o9oem/workspace/hc/jra/event/2025/api/docs/database.md \
-  --output output/jra-tokyo-v2
+  /path/to/wp/site \
+  --schema /path/to/api/docs/database.md \
+  --output output/client-a-v2
 ```
 
 - [ ] **Step 2: Verify Prisma schema has @id on all models**
 
-Run: `grep -c "@id" output/jra-tokyo-v2/prisma/schema.prisma`
+Run: `grep -c "@id" output/client-a-v2/prisma/schema.prisma`
 Expected: Every model has at least one @id or @@id
 
-Run: `grep "model " output/jra-tokyo-v2/prisma/schema.prisma | wc -l`
+Run: `grep "model " output/client-a-v2/prisma/schema.prisma | wc -l`
 Then verify same count of @id decorators.
 
 - [ ] **Step 3: Verify API routes have Zod schemas defined**
 
-Run: `grep -rn "Schema" output/jra-tokyo-v2/app/api/ | grep -c "const.*Schema"`
+Run: `grep -rn "Schema" output/client-a-v2/app/api/ | grep -c "const.*Schema"`
 Verify no undefined schema references.
 
 - [ ] **Step 4: Verify Docker uses npm**
 
-Run: `grep "pnpm" output/jra-tokyo-v2/Dockerfile`
+Run: `grep "pnpm" output/client-a-v2/Dockerfile`
 Expected: No matches
 
 - [ ] **Step 5: Verify admin forms have fields**
 
-Run: `grep -c "input" output/jra-tokyo-v2/app/\(admin\)/events/\[id\]/copy/page.tsx`
+Run: `grep -c "input" output/client-a-v2/app/\(admin\)/events/\[id\]/copy/page.tsx`
 Expected: At least 1 input field
 
 - [ ] **Step 6: Run full test suite**

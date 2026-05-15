@@ -1136,34 +1136,34 @@ git commit -m "feat(admin): import globals.css in generated root layout"
 
 ---
 
-## Task 7: Regenerate jra-tokyo Output
+## Task 7: Regenerate client-a Output
 
 **Files:**
-- Output: `output/jra-tokyo-final/` — regenerated with WP styles
+- Output: `output/client-a-final/` — regenerated with WP styles
 
 - [ ] **Step 7.1: Run analyze-php to regenerate**
 
-Run the analyze-php command to regenerate the jra-tokyo project with the new WP-style templates. The exact command depends on the PHP source and schema locations.
+Run the analyze-php command to regenerate the client-a project with the new WP-style templates. The exact command depends on the PHP source and schema locations.
 
-Run: `cd /home/o9oem/workspace/mine/wp-transfer && grep -r "jra-tokyo" apps/cli/ --include="*.ts" -l` to find the command invocation pattern.
+Run: `cd /home/o9oem/workspace/mine/wp-transfer && grep -r "client-a" apps/cli/ --include="*.ts" -l` to find the command invocation pattern.
 
-Then run: `pnpm --filter wp-transfer-cli dev analyze-php --dir <php-source-dir> --schema <schema-path> --output output/jra-tokyo-final`
+Then run: `pnpm --filter wp-transfer-cli dev analyze-php --dir <php-source-dir> --schema <schema-path> --output output/client-a-final`
 
 - [ ] **Step 7.2: Verify globals.css exists in output**
 
-Run: `ls -la output/jra-tokyo-final/app/globals.css`
+Run: `ls -la output/client-a-final/app/globals.css`
 Expected: File exists with WP admin styles
 
 - [ ] **Step 7.3: Verify layout uses CSS classes**
 
-Run: `head -20 output/jra-tokyo-final/app/\(admin\)/layout.tsx`
+Run: `head -20 output/client-a-final/app/\(admin\)/layout.tsx`
 Expected: Contains `wp-admin-sidebar`, no inline backgroundColor styles
 
 - [ ] **Step 7.4: Commit regenerated output**
 
 ```bash
-git add output/jra-tokyo-final/
-git commit -m "chore: regenerate jra-tokyo-final with WP admin CSS"
+git add output/client-a-final/
+git commit -m "chore: regenerate client-a-final with WP admin CSS"
 ```
 
 ---
@@ -1568,24 +1568,24 @@ Expected: All tests pass
 Run: `cd /home/o9oem/workspace/mine/wp-transfer && pnpm -r typecheck`
 Expected: No errors
 
-- [ ] **Step 13.3: Regenerate jra-tokyo-final output**
+- [ ] **Step 13.3: Regenerate client-a-final output**
 
 Run the analyze-php command to regenerate with all new WP-style templates.
 
 - [ ] **Step 13.4: Verify generated output quality**
 
 Check:
-- `output/jra-tokyo-final/app/globals.css` exists with WP colors
-- `output/jra-tokyo-final/app/(admin)/layout.tsx` uses WP CSS classes
-- `output/jra-tokyo-final/app/(admin)/events/page.tsx` uses `wp-list-table`
-- `output/jra-tokyo-final/app/(admin)/events/new/page.tsx` uses `wp-form-field`
-- E2E test files in `output/jra-tokyo-final/e2e/` include enhanced tests
+- `output/client-a-final/app/globals.css` exists with WP colors
+- `output/client-a-final/app/(admin)/layout.tsx` uses WP CSS classes
+- `output/client-a-final/app/(admin)/events/page.tsx` uses `wp-list-table`
+- `output/client-a-final/app/(admin)/events/new/page.tsx` uses `wp-form-field`
+- E2E test files in `output/client-a-final/e2e/` include enhanced tests
 
 - [ ] **Step 13.5: Final commit**
 
 ```bash
 git add -A
-git commit -m "chore: regenerate jra-tokyo-final with WP admin faithful UI + enhanced E2E tests"
+git commit -m "chore: regenerate client-a-final with WP admin faithful UI + enhanced E2E tests"
 ```
 
 ---
