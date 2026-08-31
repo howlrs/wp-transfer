@@ -6,6 +6,8 @@ import {
   loadMigrationConfig,
   mergeConfigWithArgs,
   expandEnvVars,
+  expandEnvVarsInValues,
+  resolveMigrationConfigPaths,
 } from "../src/migration-config.js";
 
 const TMP_DIR = join(import.meta.dirname, "__tmp_migration_config__");
@@ -88,6 +90,19 @@ describe("expandEnvVars", () => {
     const result = expandEnvVars("key: ${NONEXISTENT_VAR_XYZ}");
     expect(result).toBe("key: ");
   });
+
+  it("only expands valid environment variable names", () => {
+    process.env.TEST_MIGRATION_VAR = "hello";
+    expect(expandEnvVars("${TEST_MIGRATION_VAR}:${INVALID-NAME}")).toBe("hello:${INVALID-NAME}");
+    delete process.env.TEST_MIGRATION_VAR;
+  });
+
+  it("expands string values recursively without expanding object keys", () => {
+    process.env.TEST_MIGRATION_VAR = "hello";
+    const expanded = expandEnvVarsInValues({ "${TEST_MIGRATION_VAR}": "${TEST_MIGRATION_VAR}", nested: ["${TEST_MIGRATION_VAR}"] });
+    expect(expanded).toEqual({ "${TEST_MIGRATION_VAR}": "hello", nested: ["hello"] });
+    delete process.env.TEST_MIGRATION_VAR;
+  });
 });
 
 describe("loadMigrationConfig", () => {
@@ -108,6 +123,29 @@ describe("loadMigrationConfig", () => {
     const config = loadMigrationConfig(filePath);
     expect(config.source.path).toBe("/var/wp/site");
     delete process.env.TEST_WP_PATH;
+  });
+
+  it("expands values after JSON parsing, so environment values cannot alter JSON syntax", () => {
+    process.env.TEST_WP_PATH = 'a"},"unexpected":true,"path":"b';
+    mkdirSync(TMP_DIR, { recursive: true });
+    const filePath = join(TMP_DIR, "quoted-env-config.json");
+    writeFileSync(filePath, '{"source":{"type":"php","path":"${TEST_WP_PATH}"}}');
+    const config = loadMigrationConfig(filePath);
+    expect(config.source.path).toBe('a"},"unexpected":true,"path":"b');
+    delete process.env.TEST_WP_PATH;
+  });
+
+  it("resolves config-declared paths from the config file directory", () => {
+    const config = MigrationConfigSchema.parse({
+      source: { type: "php", path: "source", schema: "schema.md" },
+      output: { dir: "out", format: "both" },
+      templates: "templates",
+    });
+    const resolved = resolveMigrationConfigPaths(config, join(TMP_DIR, "nested", "config.json"));
+    expect(resolved.source.path).toBe(join(TMP_DIR, "nested", "source"));
+    expect(resolved.source.schema).toBe(join(TMP_DIR, "nested", "schema.md"));
+    expect(resolved.output.dir).toBe(join(TMP_DIR, "nested", "out"));
+    expect(resolved.templates).toBe(join(TMP_DIR, "nested", "templates"));
   });
 });
 
@@ -134,6 +172,22 @@ describe("mergeConfigWithArgs", () => {
     const config = { features: { multisite: false, aiAssist: false } };
     const result = mergeConfigWithArgs(config, { aiAssist: true });
     expect(result.features?.aiAssist).toBe(true);
+  });
+
+  it("CLI schema, templates, and AI model override config", () => {
+    const config = MigrationConfigSchema.parse({
+      source: { type: "php", schema: "config-schema.md" },
+      templates: "config-templates",
+      features: { aiAssist: false, aiModel: "config-model" },
+    });
+    const result = mergeConfigWithArgs(config, {
+      schema: "cli-schema.md",
+      templates: "cli-templates",
+      aiModel: "cli-model",
+    });
+    expect(result.source?.schema).toBe("cli-schema.md");
+    expect(result.templates).toBe("cli-templates");
+    expect(result.features?.aiModel).toBe("cli-model");
   });
 
   it("preserves config values when args are absent", () => {

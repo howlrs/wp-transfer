@@ -1,0 +1,107 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@ff378ebe6b225b0680b81c1ad4498ae0d1d3a5e3 # v6.0.10
+        with:
+          version: 10.33.0
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Verify tag matches the public CLI package version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="$(node --input-type=module -e 'import manifest from "./apps/cli/package.json" with { type: "json" }; process.stdout.write(manifest.version)')"
+          TAG="${GITHUB_REF_NAME}"
+          test "$TAG" = "v$VERSION"
+          printf 'version=%s\n' "$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Verify checked-out tree is clean
+        run: |
+          git diff --exit-code
+          git diff --cached --exit-code
+          test -z "$(git status --porcelain)"
+
+      - name: Repository hygiene
+        run: pnpm check:hygiene
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm -r typecheck
+
+      - name: Test
+        run: pnpm test
+
+      - name: Coverage
+        run: pnpm vitest run --config vitest.config.ts --coverage
+
+      - name: Security audit
+        run: pnpm audit
+
+      - name: Build
+        run: pnpm -r build
+
+      - name: Packed CLI smoke test
+        run: pnpm test:package
+
+      - name: Verify generated files were not changed
+        run: |
+          git diff --exit-code
+          git diff --cached --exit-code
+          test -z "$(git status --porcelain)"
+
+      - name: Pack release artifact
+        id: pack
+        shell: bash
+        run: |
+          set -euo pipefail
+          ARTIFACT_DIRECTORY="$RUNNER_TEMP/release"
+          mkdir -p "$ARTIFACT_DIRECTORY"
+          pnpm --filter wp-transfer pack --pack-destination "$ARTIFACT_DIRECTORY"
+          ARCHIVE="$ARTIFACT_DIRECTORY/wp-transfer-${{ steps.version.outputs.version }}.tgz"
+          CHECKSUM="$ARTIFACT_DIRECTORY/SHA256SUMS"
+          test -f "$ARCHIVE"
+          (
+            cd "$ARTIFACT_DIRECTORY"
+            sha256sum "wp-transfer-${{ steps.version.outputs.version }}.tgz" > SHA256SUMS
+          )
+          printf 'archive=%s\n' "$ARCHIVE" >> "$GITHUB_OUTPUT"
+          printf 'checksum=%s\n' "$CHECKSUM" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          ARCHIVE: ${{ steps.pack.outputs.archive }}
+          CHECKSUM: ${{ steps.pack.outputs.checksum }}
+        run: >-
+          gh release create "$TAG" "$ARCHIVE" "$CHECKSUM"
+          --verify-tag
+          --title "wp-transfer $TAG"
+          --notes "Pre-1.0 stabilization release. Review the [changelog](https://github.com/${GITHUB_REPOSITORY}/blob/${TAG}/CHANGELOG.md#041---2026-08-31), [known limitations](https://github.com/${GITHUB_REPOSITORY}/blob/${TAG}/README.md#known-limitations), and [security policy](https://github.com/${GITHUB_REPOSITORY}/blob/${TAG}/SECURITY.md) before use."
+          --generate-notes

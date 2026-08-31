@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 
 const workspaceRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const fixturePath = join(workspaceRoot, "fixtures/wxr/minimal.xml");
+const workspaceManifest = JSON.parse(readFileSync(join(workspaceRoot, "apps/cli/package.json"), "utf8"));
 const temporaryRoot = mkdtempSync(join(tmpdir(), "wp-transfer-package-smoke-"));
 const packageDirectory = join(temporaryRoot, "package");
 const installDirectory = join(temporaryRoot, "consumer");
@@ -40,6 +41,9 @@ try {
 
   const installedPackage = join(installDirectory, "node_modules/wp-transfer");
   const manifest = JSON.parse(readFileSync(join(installedPackage, "package.json"), "utf8"));
+  if (manifest.version !== workspaceManifest.version) {
+    throw new Error(`Packed CLI manifest mismatch: expected ${workspaceManifest.version}, received ${manifest.version}`);
+  }
   const runtimeDependencies = Object.values(manifest.dependencies ?? {});
   if (runtimeDependencies.some((value) => String(value).startsWith("workspace:"))) {
     throw new Error("Packed CLI leaks a workspace runtime dependency");
@@ -56,6 +60,11 @@ try {
   const help = run(executable, ["--help"], installDirectory);
   if (!help.includes("analyze")) {
     throw new Error("Packed CLI help does not list the analyze command");
+  }
+
+  const version = run(executable, ["--version"], installDirectory).trim();
+  if (version !== manifest.version) {
+    throw new Error(`Packed CLI version mismatch: expected ${manifest.version}, received ${version}`);
   }
 
   const reportPath = join(installDirectory, "minimal-report");

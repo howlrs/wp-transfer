@@ -1,8 +1,9 @@
 import { describe, it, expect, afterAll } from "vitest";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { resolve } from "node:path";
-import { existsSync, rmSync } from "node:fs";
+import { join, relative, resolve } from "node:path";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 
 const execFileP = promisify(execFile);
 
@@ -68,5 +69,83 @@ describe("CLI smoke tests", () => {
 
   it("analyze with nonexistent file exits with error", async () => {
     await expect(runClean("analyze", "nonexistent.xml")).rejects.toThrow();
+  });
+
+  it("analyze-php uses config paths relative to the config file when no positional directory is supplied", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "wp-transfer-config-"));
+    try {
+      const source = resolve(cliRoot, "../../packages/analyzer/tests/fixtures/generic-pipeline");
+      const output = join(directory, "generated");
+      const templates = join(directory, "templates");
+      mkdirSync(templates);
+      const configPath = join(directory, "migration.json");
+      writeFileSync(configPath, JSON.stringify({
+        source: { type: "php", path: relative(directory, source) },
+        output: { dir: "generated", format: "both" },
+        templates: "templates",
+        features: { aiAssist: false, aiModel: "configured-model" },
+      }));
+
+      await runClean("analyze-php", "--config", configPath, "--skip-preflight");
+      expect(existsSync(join(output, "analysis.json"))).toBe(true);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  it("analyze-php rejects a non-PHP config source", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "wp-transfer-config-"));
+    try {
+      const configPath = join(directory, "migration.json");
+      writeFileSync(configPath, JSON.stringify({ source: { type: "wxr", path: "export.xml" } }));
+      await expect(runClean("analyze-php", "--config", configPath)).rejects.toThrow();
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("analyze-php rejects invalid JSON config without echoing its contents", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "wp-transfer-config-"));
+    const secret = "config-secret-must-not-appear";
+    try {
+      const configPath = join(directory, "migration.json");
+      writeFileSync(configPath, `{ "secret": "${secret}",`);
+      try {
+        await runClean("analyze-php", "--config", configPath);
+        throw new Error("Expected invalid JSON config to fail");
+      } catch (error) {
+        const stderr = String((error as { stderr?: string }).stderr ?? "");
+        expect(stderr).toContain("Invalid config file");
+        expect(stderr).not.toContain(secret);
+      }
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("analyze-php rejects schema-invalid config without echoing its contents", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "wp-transfer-config-"));
+    const secret = "schema-secret-must-not-appear";
+    try {
+      const configPath = join(directory, "migration.json");
+      writeFileSync(configPath, JSON.stringify({
+        source: { type: "php", path: 42 },
+        woocommerce: { secret },
+      }));
+      try {
+        await runClean("analyze-php", "--config", configPath);
+        throw new Error("Expected schema-invalid config to fail");
+      } catch (error) {
+        const stderr = String((error as { stderr?: string }).stderr ?? "");
+        expect(stderr).toContain("Invalid config file");
+        expect(stderr).not.toContain(secret);
+      }
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("analyze-php requires a positional directory or config source.path", async () => {
+    await expect(runClean("analyze-php", "--skip-preflight")).rejects.toThrow();
   });
 });

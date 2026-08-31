@@ -1,16 +1,29 @@
 node_modules/
 package-lock.json
 dist/
+release/
+*.tgz
 .env
 .env.*
 !.env.example
 !**/.env.example
+.envrc
+.npmrc
+!.npmrc.example
 *.log
+*.tsbuildinfo
 .DS_Store
 .turbo/
+.cache/
+.pnpm-store/
+.idea/
+.vscode/
 coverage/
 output/
 .claude/
+.codex/
+.gemini/
+.agents/
 
 # Local migration inputs and generated runtime data
 migration-input/

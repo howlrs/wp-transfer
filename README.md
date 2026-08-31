@@ -6,7 +6,7 @@ A CLI tool that gives agencies and development teams a head start on WordPress-t
 
 ## Features
 
-- **WXR streaming parser** -- SAX-based, XXE-safe, supports WP 4.1 through 6.x
+- **WXR streaming parser** -- SAX-based and XXE-safe, with WXR 1.2 fixtures
 - **Gutenberg block conversion** -- Block AST to Portable Text to React components
 - **Plugin detection** -- Registry of 17+ known plugins with migration guidance
 - **ACF field detection** -- Typed Zod schema generation from Advanced Custom Fields
@@ -15,13 +15,13 @@ A CLI tool that gives agencies and development teams a head start on WordPress-t
 - **Next.js API route stubs** -- Zod validation, transactions, file upload handling
 - **Admin, auth, Docker scaffolds** -- NextAuth v5 + RBAC, admin pages, Docker Compose
 - **WooCommerce migration** -- Product catalog extraction (simple/variable/grouped/external), Prisma schema, Next.js EC scaffold with cart stub
-- **WooCommerce orders/customers** -- REST API client for order and customer data migration
-- **WordPress Multisite** -- Multi-site WXR directory input, network detection (subdomain/subdirectory), user deduplication, media path normalization, cross-site URL rewriting, multi-tenant Next.js scaffold
+- **WooCommerce orders/customers** -- Optional REST inventory and Prisma order schema; data import remains project work
+- **WordPress Multisite** -- Multi-site WXR directory analysis and a multi-tenant scaffold; tenant resolution and UI require completion
 - **i18n / WPML / Polylang** -- Language detection from WXR metadata, Next.js App Router `[locale]` routing scaffold
 - **ACF Pro support** -- Field definition extraction from WXR, Flexible Content, Group, Clone, Nested Repeater Zod schema generation
 - **Meta Box / Pods detection** -- Custom field detection with type inference, Pods table storage warning
 - **Page builder migration guide** -- Elementor, Divi, WPBakery detection with component mapping guide
-- **AI-assisted generation** -- `--ai-assist` flag uses Claude API for high-quality API route generation from PHP
+- **AI-assisted generation** -- `--ai-assist` uses the Claude CLI or Anthropic API for API route generation from PHP
 - **Interactive mode** -- `--interactive` flag for guided analysis setup
 - **Template customization** -- `--templates` flag for scaffold template overrides
 - **Blog scaffold generator** -- Post pages, archive, category, 404, Portable Text renderer (library API; CLI integration pending)
@@ -31,7 +31,7 @@ A CLI tool that gives agencies and development teams a head start on WordPress-t
 - **Pre-flight checks** -- Node.js version, source/output validation, Docker availability
 - **Migration config** -- JSON config file support with `${ENV_VAR}` expansion
 - **ACF Options extractor** -- REST API extraction of site-level ACF Options Page data
-- **Large-site streaming** -- BatchCollector for memory-safe processing of 100K+ posts
+- **Large-site streaming** -- BatchCollector-based processing that avoids retaining every post in memory
 - **One-command verification** -- `run` command: install → isolated Docker database → Prisma → Playwright
 - **Secret scanner** -- Detects AWS keys, GitHub tokens, Stripe keys, WP salts
 - **Security hardened** -- SSRF defense, credential protection, input sanitization, path traversal protection
@@ -42,13 +42,27 @@ A CLI tool that gives agencies and development teams a head start on WordPress-t
 - pnpm 10.33.0 when building from source
 - Docker with Compose for the isolated `run` workflow
 
-This project is currently an alpha and has not been published to npm. Do not assume that `npx wp-transfer` resolves to this repository until an npm release is announced.
+## Release status
+
+**v0.4.1 is a usable pre-1.0 stabilization release.** Its supported workflows
+are suitable for a reviewed, isolated migration project; it is not an automatic
+production-migration system.
+Pre-1.0 releases may introduce breaking changes. See the [v0.4.1 release
+notes](CHANGELOG.md#041---2026-08-31) and [known limitations](#known-limitations)
+before adopting it.
+
+The package is not yet published to the npm registry. Registry publication is
+pending npm authentication and trusted-publisher setup; do not assume that
+`npx wp-transfer` resolves to this project until that publication is announced.
 
 ## Quick Start
 
 ```bash
-# Build from source
-git clone https://github.com/howlrs/wp-transfer.git
+# Install the v0.4.1 GitHub Release tarball
+npm install --global https://github.com/howlrs/wp-transfer/releases/download/v0.4.1/wp-transfer-0.4.1.tgz
+
+# Or build v0.4.1 from source
+git clone --branch v0.4.1 https://github.com/howlrs/wp-transfer.git
 cd wp-transfer
 pnpm install --frozen-lockfile
 pnpm build
@@ -59,12 +73,14 @@ node apps/cli/dist/index.js analyze ./export.xml
 # The default outputs are ./migration-report.json and ./migration-report.md
 ```
 
-To exercise the exact consumer artifact, create and install a local tarball:
+The release tarball is the supported installation artifact for v0.4.1. To
+exercise the exact consumer artifact from a source checkout, create and install
+a local tarball:
 
 ```bash
 mkdir -p release
 pnpm --dir apps/cli pack --pack-destination ../../release
-npm install --global ./release/wp-transfer-0.1.0.tgz
+npm install --global ./release/wp-transfer-0.4.1.tgz
 wp-transfer analyze ./export.xml
 ```
 
@@ -117,7 +133,7 @@ Options:
 | `--multisite` | Enable multisite analysis (source must be a directory of WXR files) |
 | `--multisite-mode` | Scaffold mode: `subpath` or `subdomain` (auto-detected if omitted) |
 
-### `analyze-php <dir>`
+### `analyze-php [dir]`
 
 Analyze PHP source code directly and generate a complete Next.js project scaffold:
 
@@ -134,12 +150,17 @@ Options:
 |------|-------------|
 | `--schema` | Path to database schema doc (Markdown) for enriched Prisma output |
 | `--output` | Output directory (default: `./output/php-analysis`) |
-| `--ai-assist` | Use Claude API for high-quality route generation |
-| `--ai-model` | Claude model to use (default: `claude-sonnet-4`) |
-| `--interactive` | Guided setup wizard |
+| `--ai-assist` | Use the Claude CLI or Anthropic API for route generation |
+| `--ai-model` | Claude model to use (default: `claude-sonnet-4-20250514`) |
 | `--templates` | Custom template directory for scaffold overrides |
+| `--config` | JSON config for PHP source, schema, output, templates, and AI settings |
+| `--skip-preflight` | Skip environment and path pre-flight checks |
 
 When `--schema` is omitted, the CLI infers a conservative local Prisma schema from detected PHP database operations. All inferred column types and constraints must be reviewed before production use.
+
+The positional directory may be omitted when `config.source.path` is present.
+See the package [CLI reference](apps/cli/README.md) for the config shape, path
+resolution, environment expansion, and CLI precedence rules.
 
 `--ai-assist` uses an installed Claude CLI first and the Anthropic API as a
 fallback. It sends the PHP source after best-effort credential masking, static
@@ -206,6 +227,42 @@ wp-transfer/
 
 **Tech stack:** TypeScript 6.0.2, Node.js 20+, pnpm 10.33.0, citty, consola, sax, ofetch, zod 4.3.6, @portabletext/types, vitest 4.1.3
 
+## Supported workflows
+
+- Analyze a WXR export and produce JSON/Markdown migration reports, including
+  content inventory, Gutenberg mapping, plugin guidance, ACF and Yoast metadata
+  summaries, estimates, and risks.
+- Inspect the WordPress REST API for site, plugin, post-type, and exposed
+  content-count metadata. Use an application password over HTTPS; this is
+  metadata discovery, not a full content export.
+- Analyze PHP source, optionally enrich it with a database-schema document, and
+  generate a reviewable Next.js/Prisma/API/admin/auth/Docker/Playwright
+  scaffold. Schema inference is deliberately conservative.
+- Run a generated project against its isolated Docker database to install,
+  migrate, seed, and run Playwright checks, with explicit acknowledgement for
+  destructive schema changes.
+
+The WXR blog scaffold generator is available as a library API, but its command
+line integration is still pending. See the package [CLI reference](apps/cli/README.md)
+for the command surface and [releasing guide](docs/RELEASING.md) for maintainers.
+
+## Known limitations
+
+- Generated code, inferred schemas, authentication/RBAC, API routes, and tests
+  require project-specific review before production use.
+- WooCommerce catalog scaffolding includes a cart/checkout shell only; payment
+  and checkout integration are intentionally stubs.
+- Multisite analysis and generated pages are incomplete for real tenant
+  resolution. Complete tenant lookup, authorization, and data isolation before
+  deployment.
+- Unsupported, ambiguous, or composite-primary-key detail routes may return
+  HTTP 501 rather than guessing an unsafe implementation.
+- Verification can skip CRUD checks it cannot construct safely from the inferred
+  schema; treat a skipped check as work to complete, not as proof of coverage.
+- `analyze-php --config` supports its PHP source, schema, output, templates, and
+  AI settings; configuration for the WXR and REST analysis modes is not yet
+  exposed through their CLI command.
+
 ## Security
 
 - **SSRF defense** -- URL/protocol validation plus a guarded Undici socket lookup on every connection. Private, loopback, link-local, ULA, mapped, and reserved DNS answers are rejected at connect time; approved public addresses are pinned for the socket while the original Host and HTTPS certificate verification remain intact.
@@ -236,6 +293,9 @@ pnpm build             # build all packages and the bundled CLI
 pnpm test:package      # pack, install, and run the CLI outside the monorepo
 ```
 
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the contribution and quality-gate
+requirements, and [SECURITY.md](SECURITY.md) for private vulnerability reports.
+
 For an additional private denylist during local or CI checks, set a
 comma-separated `WP_TRANSFER_FORBIDDEN_TERMS` environment variable. Keep those
 terms in the environment rather than committing customer identifiers here.
@@ -246,4 +306,10 @@ MIT
 
 ## Status
 
-**Alpha.** The WXR analyzer, PHP analyzer, generators, and verification workflow are usable migration accelerators, not an automatic production migration. Generated authentication, commerce, multisite, API, and test scaffolds require review and project-specific completion. Validate output in an isolated environment, keep a source backup, and never run generated tests or schema operations against production data.
+**v0.4.1 pre-1.0 stabilization release.** The WXR analyzer, PHP analyzer,
+generators, and verification workflow are usable migration accelerators, not an
+automatic production migration. Generated authentication, commerce, multisite,
+API, and test scaffolds require review and project-specific completion. Validate
+output in an isolated environment, keep a source backup, and never run generated
+tests or schema operations against production data. See [the release
+notes](CHANGELOG.md) and [known limitations](#known-limitations).

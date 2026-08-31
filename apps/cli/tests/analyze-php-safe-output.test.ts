@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { writeSafeOutputFile } from "../src/commands/analyze-php.js";
+import { getExplicitAnalyzePhpOptions, writeSafeOutputFile } from "../src/commands/analyze-php.js";
 
 const temporaryDirectories: string[] = [];
 
@@ -58,5 +58,22 @@ describe("writeSafeOutputFile", () => {
 
     await expect(writeSafeOutputFile(output, "../outside.txt", "blocked")).rejects.toThrow("Unsafe output path");
     expect(existsSync(join(directory, "outside.txt"))).toBe(false);
+  });
+});
+
+describe("getExplicitAnalyzePhpOptions", () => {
+  it("recognizes explicit long options, equals syntax, and --no-ai-assist", () => {
+    expect(getExplicitAnalyzePhpOptions([
+      "source",
+      "--output=out",
+      "--schema", "schema.md",
+      "--templates", "templates",
+      "--no-ai-assist",
+      "--ai-model=model",
+    ])).toEqual({ output: true, schema: true, templates: true, aiAssist: true, aiModel: true });
+  });
+
+  it("does not treat options after -- as explicit options", () => {
+    expect(getExplicitAnalyzePhpOptions(["source", "--", "--output=literal"])).toEqual({});
   });
 });

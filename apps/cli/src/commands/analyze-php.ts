@@ -23,10 +23,41 @@ import {
   runPreflightChecks,
   formatPreflightReport,
   loadMigrationConfig,
+  mergeConfigWithArgs,
+  resolveMigrationConfigPaths,
   generateMigrationDashboard,
   generateVerifyScaffold,
 } from "@wp-transfer/analyzer";
 import type { PhpFileAnalysis, TableDefinition, AiRouteInput, AiRouteOutput } from "@wp-transfer/analyzer";
+
+export class AnalyzePhpCLIError extends Error {
+  override name = "CLIError";
+}
+
+type ExplicitAnalyzePhpOptions = {
+  output?: boolean;
+  schema?: boolean;
+  templates?: boolean;
+  aiAssist?: boolean;
+  aiModel?: boolean;
+};
+
+/**
+ * Citty materializes defaults, so use the original command line to distinguish
+ * an explicit CLI override from an omitted option. `--` ends option parsing.
+ */
+export function getExplicitAnalyzePhpOptions(rawArgs: string[]): ExplicitAnalyzePhpOptions {
+  const explicit: ExplicitAnalyzePhpOptions = {};
+  for (const argument of rawArgs) {
+    if (argument === "--") break;
+    if (argument === "--output" || argument.startsWith("--output=")) explicit.output = true;
+    if (argument === "--schema" || argument.startsWith("--schema=")) explicit.schema = true;
+    if (argument === "--templates" || argument.startsWith("--templates=")) explicit.templates = true;
+    if (argument === "--ai-assist" || argument === "--no-ai-assist" || argument.startsWith("--ai-assist=")) explicit.aiAssist = true;
+    if (argument === "--ai-model" || argument.startsWith("--ai-model=")) explicit.aiModel = true;
+  }
+  return explicit;
+}
 
 const AUTH_ONLY_PRISMA_SCHEMA = `generator client {
   provider = "prisma-client-js"
@@ -826,7 +857,7 @@ export const analyzePhpCommand = defineCommand({
   args: {
     dir: {
       type: "positional",
-      required: true,
+      required: false,
       description: "Directory containing PHP files to analyze",
     },
     schema: {
@@ -862,27 +893,51 @@ export const analyzePhpCommand = defineCommand({
       description: "Skip pre-flight checks",
     },
   },
-  async run({ args }) {
-    const dirPath = resolve(args.dir as string);
-    const outputDir = resolve(args.output as string);
-    const schemaPath = args.schema
-      ? resolve(args.schema as string)
-      : undefined;
-    const templateDir = args.templates as string | undefined;
-    const aiAssist = args["ai-assist"] as boolean;
-    const aiModel = (args["ai-model"] as string) || undefined;
+  async run({ args, rawArgs }) {
+    const explicit = getExplicitAnalyzePhpOptions(rawArgs);
+    let config = undefined;
 
     // ── Load config file if provided ──
     if (args.config) {
       try {
-        const config = loadMigrationConfig(resolve(args.config as string));
-        void config; // Config values are used as defaults; CLI args take precedence
+        const configPath = resolve(args.config as string);
+        config = resolveMigrationConfigPaths(loadMigrationConfig(configPath), configPath);
+        if (config.source.type !== "php") {
+          throw new AnalyzePhpCLIError("analyze-php requires config.source.type to be \"php\"");
+        }
         consola.success(`Loaded config: ${args.config}`);
       } catch (error) {
-        consola.error(`Invalid config file: ${(error as Error).message}`);
-        return;
+        if (error instanceof AnalyzePhpCLIError) throw error;
+        // Parser and schema errors can include input fragments. Do not echo a
+        // config file's contents because it can hold credential values.
+        throw new AnalyzePhpCLIError("Invalid config file");
       }
     }
+
+    const merged = mergeConfigWithArgs(config ?? {}, {
+      ...(explicit.output ? { output: args.output } : {}),
+      ...(explicit.schema ? { schema: resolve(args.schema as string) } : {}),
+      ...(explicit.templates ? { templates: resolve(args.templates as string) } : {}),
+      ...(explicit.aiAssist ? { aiAssist: args["ai-assist"] } : {}),
+      ...(explicit.aiModel ? { aiModel: args["ai-model"] } : {}),
+    });
+    const dirPath = args.dir
+      ? resolve(args.dir as string)
+      : merged.source?.path;
+    if (!dirPath) {
+      throw new AnalyzePhpCLIError("Provide a PHP directory or set config.source.path");
+    }
+    const outputDir = explicit.output
+      ? resolve(args.output as string)
+      : merged.output?.dir ?? resolve("./output/php-analysis");
+    const schemaPath = explicit.schema
+      ? resolve(args.schema as string)
+      : merged.source?.schema;
+    const templateDir = explicit.templates
+      ? resolve(args.templates as string)
+      : merged.templates;
+    const aiAssist = merged.features?.aiAssist ?? false;
+    const aiModel = merged.features?.aiModel || undefined;
 
     // Validate input directory
     if (!existsSync(dirPath)) {

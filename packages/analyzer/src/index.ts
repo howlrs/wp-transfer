@@ -292,6 +292,7 @@ export {
 export {
   MigrationConfigSchema,
   loadMigrationConfig,
+  resolveMigrationConfigPaths,
   mergeConfigWithArgs,
   type MigrationConfig,
 } from "./migration-config.js";
