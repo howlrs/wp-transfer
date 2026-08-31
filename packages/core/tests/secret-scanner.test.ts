@@ -3,7 +3,8 @@ import { scanForSecrets, type SecretMatch } from "../src/index.js";
 
 describe("scanForSecrets", () => {
   it("detects AWS access key", () => {
-    const content = `AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE`;
+    const accessKey = ["AK", "IA", "IOSFODNN7EXAMPLE"].join("");
+    const content = `AWS_ACCESS_KEY_ID=${accessKey}`;
     const matches = scanForSecrets(content);
     expect(matches.length).toBeGreaterThanOrEqual(1);
     expect(matches.some((m) => m.type === "aws-access-key")).toBe(true);
@@ -17,8 +18,21 @@ describe("scanForSecrets", () => {
     expect(matches.some((m) => m.type === "generic-secret")).toBe(true);
   });
 
+  it("detects quoted literal credentials but ignores password hashing and input plumbing", () => {
+    const literal = scanForSecrets('password = "literal-secret-value";');
+    const plumbing = scanForSecrets(`
+$password = password_hash($_POST["password"], PASSWORD_DEFAULT);
+$token = $_POST["token"];
+secret_key = getenv("APP_SECRET_KEY");
+`);
+
+    expect(literal.some((match) => match.type === "generic-secret")).toBe(true);
+    expect(plumbing.some((match) => match.type === "generic-secret")).toBe(false);
+  });
+
   it("detects private key blocks", () => {
-    const content = `-----BEGIN RSA PRIVATE KEY-----
+    const header = ["-----BEGIN RSA ", "PRIVATE KEY-----"].join("");
+    const content = `${header}
 MIIEpAIBAAKCAQEA0Z3VS5JJcds3xfn/ygWyF1PmMAuCK3gOaGGSfNW+Q
 -----END RSA PRIVATE KEY-----`;
     const matches = scanForSecrets(content);
@@ -36,8 +50,10 @@ MIIEpAIBAAKCAQEA0Z3VS5JJcds3xfn/ygWyF1PmMAuCK3gOaGGSfNW+Q
   });
 
   it("detects WP-specific secrets", () => {
-    const content = `define('AUTH_KEY', 'put your unique phrase here');
-define('DB_PASSWORD', 'mysecretpassword123');`;
+    const authKey = ["define(", "'AUTH_KEY'", ", 'put your unique phrase here');"].join("");
+    const dbPassword = ["define(", "'DB_PASSWORD'", ", 'mysecretpassword123');"].join("");
+    const content = `${authKey}
+${dbPassword}`;
     const matches = scanForSecrets(content);
     expect(matches.length).toBeGreaterThanOrEqual(2);
     expect(matches.some((m) => m.type === "wp-auth-key")).toBe(true);
@@ -45,7 +61,8 @@ define('DB_PASSWORD', 'mysecretpassword123');`;
   });
 
   it("detects GitHub tokens", () => {
-    const content = `GITHUB_TOKEN=ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefgh1234`;
+    const token = ["gh", "p_", "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefgh1234"].join("");
+    const content = `GITHUB_TOKEN=${token}`;
     const matches = scanForSecrets(content);
     expect(matches.length).toBeGreaterThanOrEqual(1);
     expect(matches.some((m) => m.type === "github-token")).toBe(true);
@@ -73,7 +90,8 @@ api_key=supersecretvalue123`;
   });
 
   it("includes snippet in matches", () => {
-    const content = `SOME_API_KEY=AKIAIOSFODNN7EXAMPLE`;
+    const accessKey = ["AK", "IA", "IOSFODNN7EXAMPLE"].join("");
+    const content = `SOME_API_KEY=${accessKey}`;
     const matches = scanForSecrets(content);
     expect(matches.length).toBeGreaterThanOrEqual(1);
     expect(matches[0]!.snippet).toBeTruthy();
@@ -81,7 +99,8 @@ api_key=supersecretvalue123`;
   });
 
   it("detects Google API keys", () => {
-    const content = `GOOGLE_API_KEY=AIzaSyA1B2C3D4E5F6G7H8I9J0KlMnOpQrStUvW`;
+    const apiKey = ["AIza", "SyA1B2C3D4E5F6G7H8I9J0KlMnOpQrStUvW"].join("");
+    const content = `GOOGLE_API_KEY=${apiKey}`;
     const matches = scanForSecrets(content);
     expect(matches.length).toBeGreaterThanOrEqual(1);
     expect(matches.some((m) => m.type === "google-api-key")).toBe(true);
@@ -106,8 +125,10 @@ api_key=supersecretvalue123`;
   });
 
   it("detects all WP salt/key constants", () => {
-    const content = `define('SECURE_AUTH_KEY', 'some-unique-phrase');
-define('NONCE_SALT', 'another-unique-phrase');`;
+    const secureAuthKey = ["define(", "'SECURE_AUTH_KEY'", ", 'some-unique-phrase');"].join("");
+    const nonceSalt = ["define(", "'NONCE_SALT'", ", 'another-unique-phrase');"].join("");
+    const content = `${secureAuthKey}
+${nonceSalt}`;
     const matches = scanForSecrets(content);
     expect(matches.filter((m) => m.type === "wp-auth-key")).toHaveLength(2);
   });

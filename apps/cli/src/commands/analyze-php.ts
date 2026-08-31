@@ -1,11 +1,14 @@
 import { defineCommand } from "citty";
 import { consola } from "consola";
 import { existsSync, statSync } from "node:fs";
-import { readFile, writeFile, mkdir, readdir } from "node:fs/promises";
-import { resolve, join, dirname, basename, relative, isAbsolute } from "node:path";
+import { readFile, writeFile, mkdir, readdir, lstat, realpath } from "node:fs/promises";
+import { resolve, join, dirname, basename, relative, isAbsolute, sep } from "node:path";
+import { scanForSecrets } from "@wp-transfer/core";
+import type { SecretMatch } from "@wp-transfer/core";
 import {
   analyzePhpFile,
   parseSchemaToPrisma,
+  generatePrismaSchema,
   generateApiStubs,
   generateAdminScaffold,
   generateAuthScaffold,
@@ -14,17 +17,283 @@ import {
   generateDockerScaffold,
   resolveTemplate,
   generateRoutesWithAi,
+  hasActiveAccessGuard,
+  inferRouteMapping,
+  routeResourcePath,
   runPreflightChecks,
   formatPreflightReport,
   loadMigrationConfig,
   generateMigrationDashboard,
   generateVerifyScaffold,
 } from "@wp-transfer/analyzer";
-import type { PhpFileAnalysis, TableDefinition, AiRouteInput } from "@wp-transfer/analyzer";
+import type { PhpFileAnalysis, TableDefinition, AiRouteInput, AiRouteOutput } from "@wp-transfer/analyzer";
 
-async function analyzePhpDirectory(dirPath: string): Promise<PhpFileAnalysis[]> {
+const AUTH_ONLY_PRISMA_SCHEMA = `generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}`;
+
+const ADMIN_USER_FIELD_TYPES: Record<string, string> = {
+  id: "Int",
+  username: "String",
+  password: "String",
+  name: "String?",
+  role: "String",
+  isActive: "Boolean",
+  expiresAt: "DateTime?",
+  createdAt: "DateTime",
+  updatedAt: "DateTime",
+};
+
+/** Reject incompatible existing auth models instead of generating code that fails later. */
+export function assertAdminUserSchemaCompatible(schema: string): void {
+  const model = schema.match(/\bmodel\s+AdminUser\s*\{([\s\S]*?)^\s*\}/m);
+  if (!model) return;
+
+  const fields = new Map<string, string>();
+  const fieldLines = new Map<string, string>();
+  for (const line of model[1].split("\n")) {
+    const field = line.match(/^\s*(\w+)\s+([A-Za-z]+\??)(?=\s|@|$)/);
+    if (field) {
+      fields.set(field[1], field[2]);
+      fieldLines.set(field[1], line);
+    }
+  }
+
+  const incompatible = Object.entries(ADMIN_USER_FIELD_TYPES)
+    .filter(([field, type]) => fields.get(field) !== type)
+    .map(([field, type]) => `${field}: expected ${type}, found ${fields.get(field) ?? "missing"}`);
+
+  const idLine = fieldLines.get("id") ?? "";
+  const usernameLine = fieldLines.get("username") ?? "";
+  const isActiveLine = fieldLines.get("isActive") ?? "";
+  const createdAtLine = fieldLines.get("createdAt") ?? "";
+  const updatedAtLine = fieldLines.get("updatedAt") ?? "";
+  if (!/@id\b/.test(idLine)) {
+    incompatible.push("id: expected @id");
+  }
+  if (!/@default\(autoincrement\(\)\)/.test(idLine)) {
+    incompatible.push("id: expected @default(autoincrement())");
+  }
+  if (!/@unique\b/.test(usernameLine)) {
+    incompatible.push("username: expected @unique");
+  }
+  if (!/@default\((?:true|1)\)/.test(isActiveLine)) {
+    incompatible.push("isActive: expected @default(true)");
+  }
+  if (!/@default\(now\(\)\)/.test(createdAtLine)) {
+    incompatible.push("createdAt: expected @default(now())");
+  }
+  if (!/@updatedAt\b|@default\(now\(\)\)/.test(updatedAtLine)) {
+    incompatible.push("updatedAt: expected @updatedAt or @default(now())");
+  }
+
+  if (incompatible.length > 0) {
+    throw new Error(
+      `Existing AdminUser model is incompatible with the auth scaffold (${incompatible.join("; ")}).`,
+    );
+  }
+}
+
+/** Ensure an auth-enabled project always has the Prisma model its scaffold imports. */
+export function ensureAuthPrismaSchema(
+  schema: string | undefined,
+  hasAuth: boolean,
+): string | undefined {
+  if (!hasAuth) return schema;
+
+  const base = schema?.trim() || AUTH_ONLY_PRISMA_SCHEMA;
+  if (/\bmodel\s+AdminUser\b/.test(base)) {
+    assertAdminUserSchemaCompatible(base);
+    return `${base}\n`;
+  }
+  return `${base}\n\n${ADMIN_USER_PRISMA_MODEL.trim()}\n`;
+}
+
+/** Any generated CRUD or admin surface gets the same baseline auth scaffold. */
+export function requiresGeneratedAuth(
+  detectedAuth: boolean,
+  custom: ReadonlyArray<unknown>,
+  tables: ReadonlyArray<unknown>,
+): boolean {
+  return detectedAuth || custom.length > 0 || tables.length > 0;
+}
+
+/** Keep CLI reporting tied to generation state, never to a content prefix. */
+export function summarizeAiGeneration(
+  results: ReadonlyArray<Pick<AiRouteOutput, "fallback">>,
+): { generated: number; fallback: number } {
+  const fallback = results.filter((result) => result.fallback).length;
+  return { generated: results.length - fallback, fallback };
+}
+
+/** A route file is an atomic AI unit: duplicate targets retain static output. */
+export function selectUniqueAiRouteInputs(inputs: ReadonlyArray<AiRouteInput>): {
+  inputs: AiRouteInput[];
+  skippedTargetRoutePaths: string[];
+} {
+  const counts = new Map<string, number>();
+  for (const input of inputs) {
+    counts.set(input.targetRoutePath, (counts.get(input.targetRoutePath) ?? 0) + 1);
+  }
+  const skippedTargetRoutePaths = [...counts.entries()]
+    .filter(([, count]) => count > 1)
+    .map(([path]) => path)
+    .sort();
+  return {
+    inputs: inputs.filter((input) => counts.get(input.targetRoutePath) === 1),
+    skippedTargetRoutePaths,
+  };
+}
+
+export interface PhpSecretFinding {
+  fileName: string;
+  type: SecretMatch["type"];
+  line: number;
+  severity: SecretMatch["severity"];
+}
+
+/** Returns only safe metadata; source snippets and secret values never leave this boundary. */
+export function findBlockingPhpSecrets(
+  sources: ReadonlyArray<{ fileName: string; content: string }>,
+): PhpSecretFinding[] {
+  return sources.flatMap(({ fileName, content }) =>
+    scanForSecrets(content)
+      .filter((match) => match.severity === "high" || match.severity === "medium")
+      .map(({ type, line, severity }) => ({ fileName, type, line, severity })),
+  );
+}
+
+export function formatPhpSecretFindings(findings: ReadonlyArray<PhpSecretFinding>): string {
+  return findings
+    .map((finding) => `${finding.fileName}: ${finding.type} (line ${finding.line}, ${finding.severity})`)
+    .join("\n");
+}
+
+/**
+ * Build a deliberately conservative schema when database documentation is not
+ * available.  It preserves discovered table and column names while keeping
+ * unknown columns nullable strings; users must review it before production use.
+ */
+export function inferTablesFromAnalyses(
+  analyses: ReadonlyArray<PhpFileAnalysis>,
+): TableDefinition[] {
+  const namesByTable = new Map<string, Set<string>>();
+  const validIdentifier = /^[A-Za-z][A-Za-z0-9_]*$/;
+
+  for (const analysis of analyses) {
+    const operationTables = new Set<string>();
+    for (const operation of analysis.dbOperations) {
+      if (!validIdentifier.test(operation.table)) continue;
+      operationTables.add(operation.table);
+      const names = namesByTable.get(operation.table) ?? new Set<string>();
+      for (const column of operation.columns) {
+        if (column !== "id" && column !== "*" && validIdentifier.test(column)) {
+          names.add(column);
+        }
+      }
+      namesByTable.set(operation.table, names);
+    }
+
+    for (const table of operationTables) {
+      const names = namesByTable.get(table)!;
+      for (const parameter of analysis.inputParams) {
+        if (parameter.name !== "id" && validIdentifier.test(parameter.name)) {
+          names.add(parameter.name);
+        }
+      }
+    }
+  }
+
+  return [...namesByTable.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([name, columns]) => ({
+      name,
+      columns: [
+        { name: "id", type: "Int", nullable: false, isPrimary: true, isAutoIncrement: true },
+        ...[...columns].sort().map(column => ({
+          name: column,
+          type: "String",
+          nullable: true,
+          isPrimary: false,
+          isAutoIncrement: false,
+        })),
+      ],
+      note: "Inferred from PHP database operations; review column types and constraints.",
+    }));
+}
+
+/** Accept only a PHP-root-relative path; never use analysis metadata as an absolute or traversing path. */
+export function resolvePhpSourcePath(dirPath: string, sourceRelativePath: string): string {
+  if (!sourceRelativePath || isAbsolute(sourceRelativePath) || sourceRelativePath.includes("\\")) {
+    throw new Error(`Unsafe PHP source path: ${sourceRelativePath}`);
+  }
+
+  const sourceParts = sourceRelativePath.split("/");
+  if (sourceParts.some((part) => part === "" || part === "." || part === "..")) {
+    throw new Error(`Unsafe PHP source path: ${sourceRelativePath}`);
+  }
+
+  const sourceRoot = resolve(dirPath);
+  const candidate = resolve(sourceRoot, sourceRelativePath);
+  const candidateRelative = relative(sourceRoot, candidate);
+  if (candidateRelative === "" || candidateRelative === ".." || candidateRelative.startsWith(`..${sep}`) || isAbsolute(candidateRelative)) {
+    throw new Error(`Unsafe PHP source path: ${sourceRelativePath}`);
+  }
+  return candidate;
+}
+
+function isContainedPath(rootPath: string, candidatePath: string): boolean {
+  const candidateRelative = relative(rootPath, candidatePath);
+  return candidateRelative !== ""
+    && candidateRelative !== ".."
+    && !candidateRelative.startsWith(`..${sep}`)
+    && !isAbsolute(candidateRelative);
+}
+
+/**
+ * Resolve a source only when it is a regular file whose real path remains
+ * inside the input root. This protects both directory scans and AI reads from
+ * symlink escapes even if a source path changes after enumeration.
+ */
+async function containedRegularPhpSourcePath(
+  dirPath: string,
+  sourceRelativePath: string,
+): Promise<string | undefined> {
+  const candidate = resolvePhpSourcePath(dirPath, sourceRelativePath);
+  const sourceStat = await lstat(candidate);
+  if (!sourceStat.isFile() || sourceStat.isSymbolicLink()) return undefined;
+
+  const [realRoot, realSource] = await Promise.all([realpath(dirPath), realpath(candidate)]);
+  return isContainedPath(realRoot, realSource) ? realSource : undefined;
+}
+
+/** Load the exact analyzed source that will be supplied to AI route generation. */
+export async function loadAiPhpSource(
+  dirPath: string,
+  analysis: Pick<PhpFileAnalysis, "fileName" | "sourceRelativePath">,
+): Promise<{ phpSource: string; phpFilePath: string }> {
+  const phpFilePath = analysis.sourceRelativePath ?? analysis.fileName;
+  const sourcePath = await containedRegularPhpSourcePath(dirPath, phpFilePath);
+  if (!sourcePath) {
+    throw new Error("PHP source must be a regular file within the input directory");
+  }
+  return {
+    phpSource: await readFile(sourcePath, "utf-8"),
+    phpFilePath,
+  };
+}
+
+export async function analyzePhpDirectory(dirPath: string): Promise<{
+  analyses: PhpFileAnalysis[];
+  secretFindings: PhpSecretFinding[];
+}> {
   const results: PhpFileAnalysis[] = [];
-  const seen = new Set<string>();
+  const phpSources: Array<{ fileName: string; content: string }> = [];
 
   async function scanDir(dir: string) {
     const entries = await readdir(dir, { withFileTypes: true });
@@ -45,28 +314,35 @@ async function analyzePhpDirectory(dirPath: string): Promise<PhpFileAnalysis[]> 
             e.isFile() && e.name.endsWith(".php") && (
               e.name.startsWith("page-") ||
               e.name.startsWith("insert") ||
+              e.name.startsWith("create") ||
               e.name.startsWith("update") ||
+              e.name.startsWith("edit") ||
               e.name.startsWith("delete") ||
-              e.name.includes("-stop") ||
-              e.name.includes("-restoration") ||
-              e.name.includes("blacklist") ||
-              e.name.includes("lottery")
+              e.name.startsWith("remove")
             )
           );
           if (!hasCustomFiles) continue;
         }
         await scanDir(fullPath);
-      } else if (entry.name.endsWith(".php") && !seen.has(entry.name)) {
-        seen.add(entry.name);
-        const content = await readFile(fullPath, "utf-8");
-        results.push(analyzePhpFile(content, entry.name));
+      } else if (entry.isFile() && entry.name.endsWith(".php")) {
+        const sourceRelativePath = relative(dirPath, fullPath).replaceAll("\\", "/");
+        // This is expected for a recursively enumerated child, but keep the
+        // invariant explicit so later source reads have one safe representation.
+        const sourcePath = await containedRegularPhpSourcePath(dirPath, sourceRelativePath);
+        if (!sourcePath) continue;
+        const content = await readFile(sourcePath, "utf-8");
+        phpSources.push({ fileName: sourceRelativePath, content });
+        results.push({
+          ...analyzePhpFile(content, entry.name),
+          sourceRelativePath,
+        });
       }
     }
   }
 
   await scanDir(dirPath);
-  results.sort((a, b) => a.fileName.localeCompare(b.fileName));
-  return results;
+  results.sort((a, b) => (a.sourceRelativePath ?? a.fileName).localeCompare(b.sourceRelativePath ?? b.fileName));
+  return { analyses: results, secretFindings: findBlockingPhpSecrets(phpSources) };
 }
 
 /** Detect plugins from PHP source (look for plugin-like requires/includes) */
@@ -77,12 +353,12 @@ function detectPluginsFromPhp(analyses: PhpFileAnalysis[]): string[] {
   // we look at file names and DB operations.
   for (const a of analyses) {
     if (a.fileName.includes("user") || a.fileName.includes("login")) {
-      plugins.push("wpfront-user-role-editor");
+      plugins.push("detected-auth-capability");
       break;
     }
     for (const op of a.dbOperations) {
       if (op.table.includes("user") || op.table.includes("admin")) {
-        plugins.push("wpfront-user-role-editor");
+        plugins.push("detected-auth-capability");
         break;
       }
     }
@@ -118,7 +394,7 @@ export function generatePackageJson(projectName: string): string {
         react: "^19.0.0",
         "react-dom": "^19.0.0",
         "@prisma/client": ">=6.19.0 <7.0.0",
-        "next-auth": "5.0.0-beta.30",
+        "next-auth": "5.0.0-beta.32",
         bcryptjs: "^2.4.3",
         zod: "^3.23.0",
       },
@@ -134,6 +410,11 @@ export function generatePackageJson(projectName: string): string {
       },
       prisma: {
         seed: "tsx prisma/seed.ts",
+      },
+      // Pin patched transitive dependencies until upstream ranges catch up.
+      overrides: {
+        postcss: "8.5.26",
+        "deepmerge-ts": "8.0.2",
       },
     },
     null,
@@ -171,19 +452,38 @@ function generateTsConfig(): string {
 }
 
 /** Generate next.config.ts */
-function generateNextConfig(): string {
+export function generateNextConfig(): string {
   return `import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: "standalone",
   outputFileTracingRoot: __dirname,
-  typescript: {
-    // Generated scaffold may have type errors — skip for build
-    ignoreBuildErrors: true,
-  },
 };
 
 export default nextConfig;
+`;
+}
+
+/** Generate the App Router root layout with a safely encoded project title. */
+export function generateRootLayout(projectName: string): string {
+  return `import type { Metadata } from "next";
+import "./globals.css";
+
+export const metadata: Metadata = {
+  title: ${JSON.stringify(projectName)},
+};
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <html lang="ja">
+      <body>{children}</body>
+    </html>
+  );
+}
 `;
 }
 
@@ -250,8 +550,17 @@ export function sortTablesByFkDependency(tables: TableDefinition[]): TableDefini
   return sorted;
 }
 
+export function collectAdminRouteResources(pages: ReadonlyArray<{ path: string }>): string[] {
+  const resources = pages.flatMap(({ path }) => {
+    const match = path.match(/^app\/\(admin\)\/([^/]+)\//);
+    return match?.[1] && /^[a-z0-9][a-z0-9_-]*$/i.test(match[1]) ? [match[1]] : [];
+  });
+
+  return [...new Set(resources)].sort();
+}
+
 /** Generate prisma/seed.ts */
-function generateSeedScript(
+export function generateSeedScript(
   tables: TableDefinition[],
   hasAuth: boolean,
 ): string {
@@ -270,12 +579,20 @@ function generateSeedScript(
 
   if (hasAuth) {
     lines.push("  // Create admin users");
-    lines.push("  const adminPassword = await bcrypt.hash(\"admin123\", 12);");
-    lines.push("  const editorPassword = await bcrypt.hash(\"editor123\", 12);");
+    lines.push("  const adminSeedPassword = process.env.SEED_ADMIN_PASSWORD;");
+    lines.push("  const editorSeedPassword = process.env.SEED_EDITOR_PASSWORD;");
+    lines.push("  if (!adminSeedPassword || !editorSeedPassword) {");
+    lines.push('    throw new Error("Set SEED_ADMIN_PASSWORD and SEED_EDITOR_PASSWORD before seeding auth users");');
+    lines.push("  }");
+    lines.push("  if (adminSeedPassword.length < 12 || editorSeedPassword.length < 12) {");
+    lines.push('    throw new Error("Seed passwords must be at least 12 characters");');
+    lines.push("  }");
+    lines.push("  const adminPassword = await bcrypt.hash(adminSeedPassword, 12);");
+    lines.push("  const editorPassword = await bcrypt.hash(editorSeedPassword, 12);");
     lines.push("");
     lines.push("  await prisma.adminUser.upsert({");
     lines.push('    where: { username: "admin" },');
-    lines.push("    update: {},");
+    lines.push("    update: { password: adminPassword, isActive: true },");
     lines.push("    create: {");
     lines.push('      username: "admin",');
     lines.push("      password: adminPassword,");
@@ -286,7 +603,7 @@ function generateSeedScript(
     lines.push("");
     lines.push("  await prisma.adminUser.upsert({");
     lines.push('    where: { username: "editor" },');
-    lines.push("    update: {},");
+    lines.push("    update: { password: editorPassword, isActive: true },");
     lines.push("    create: {");
     lines.push('      username: "editor",');
     lines.push("      password: editorPassword,");
@@ -295,7 +612,7 @@ function generateSeedScript(
     lines.push("    },");
     lines.push("  });");
     lines.push("");
-    lines.push('  console.log("  Admin users created: admin/admin123, editor/editor123");');
+    lines.push('  console.log("  Seeded local administrator and editor accounts");');
     lines.push("");
   }
 
@@ -357,7 +674,7 @@ function generateSeedScript(
           } else if (col.name === "url" || col.name.endsWith("_url") || col.name.includes("link")) {
             sampleData[col.name] = `"https://example.com"`;
           } else {
-            sampleData[col.name] = `"サンプル${col.comment ?? col.name}"`;
+            sampleData[col.name] = JSON.stringify(`サンプル${col.comment ?? col.name}`);
           }
           break;
         case "Int":
@@ -391,35 +708,35 @@ function generateSeedScript(
 
     // For String-PK non-auto-increment tables, set deterministic id for FK child lookup
     if (pk && pk.type === "String" && !pk.isAutoIncrement) {
-      sampleData[pk.name] = `"sample-${table.name}"`;
-      whereClause = `{ ${pk.name}: "sample-${table.name}" }`;
+      sampleData[pk.name] = JSON.stringify(`sample-${table.name}`);
+      whereClause = `{ ${JSON.stringify(pk.name)}: ${JSON.stringify(`sample-${table.name}`)} }`;
     } else if (pk && (pk.type === "BigInt" || pk.type === "Int") && pk.isAutoIncrement) {
-      whereClause = `{ ${pk.name}: ${pk.type === "BigInt" ? "1n" : "1"} }`;
+      whereClause = `{ ${JSON.stringify(pk.name)}: ${pk.type === "BigInt" ? "1n" : "1"} }`;
     }
 
     if (Object.keys(sampleData).length > 0) {
-      lines.push(`  // Sample ${table.name} data`);
+      lines.push("  // Sample table data");
       if (whereClause) {
         // Idempotent upsert
-        lines.push(`  await prisma.${modelName}.upsert({`);
+        lines.push(`  await prisma[${JSON.stringify(modelName)}].upsert({`);
         lines.push(`    where: ${whereClause},`);
         lines.push(`    update: {},`);
         lines.push(`    create: {`);
         for (const [key, value] of Object.entries(sampleData)) {
-          lines.push(`      ${key}: ${value},`);
+          lines.push(`      ${JSON.stringify(key)}: ${value},`);
         }
         lines.push("    },");
         lines.push("  });");
       } else {
-        lines.push(`  await prisma.${modelName}.create({`);
+        lines.push(`  await prisma[${JSON.stringify(modelName)}].create({`);
         lines.push("    data: {");
         for (const [key, value] of Object.entries(sampleData)) {
-          lines.push(`      ${key}: ${value},`);
+          lines.push(`      ${JSON.stringify(key)}: ${value},`);
         }
         lines.push("    },");
         lines.push("  });");
       }
-      lines.push(`  console.log("  Sample ${table.name} created");`);
+      lines.push(`  console.log(${JSON.stringify(`  Sample ${table.name} created`)});`);
       lines.push("");
     }
   }
@@ -440,19 +757,64 @@ function generateSeedScript(
   return lines.join("\n");
 }
 
-/** Write file with automatic directory creation and path traversal protection */
-async function writeFileWithDir(filePath: string, content: string, outputDir?: string): Promise<void> {
-  if (outputDir) {
-    const resolvedOut = resolve(outputDir);
-    const resolvedFile = resolve(filePath);
-    const rel = relative(resolvedOut, resolvedFile);
-    if (rel.startsWith("..") || isAbsolute(rel)) {
-      consola.warn(`Skipping file outside output directory: ${filePath}`);
-      return;
+function assertOutputRelativePath(relativePath: string): string[] {
+  if (!relativePath || isAbsolute(relativePath)) {
+    throw new Error(`Output path must be relative: ${relativePath}`);
+  }
+  const segments = relativePath.split(/[\\/]+/);
+  if (segments.some((segment) => !segment || segment === "." || segment === "..")) {
+    throw new Error(`Unsafe output path: ${relativePath}`);
+  }
+  return segments;
+}
+
+async function assertSafeDirectory(path: string): Promise<void> {
+  const stat = await lstat(path);
+  if (stat.isSymbolicLink() || !stat.isDirectory()) {
+    throw new Error(`Unsafe output directory component: ${path}`);
+  }
+}
+
+/** Safely write a generated file without following symlinks outside the output root. */
+export async function writeSafeOutputFile(
+  outputDir: string,
+  relativePath: string,
+  content: string,
+): Promise<void> {
+  const segments = assertOutputRelativePath(relativePath);
+  const outputRoot = resolve(outputDir);
+  await mkdir(outputRoot, { recursive: true });
+  await assertSafeDirectory(outputRoot);
+  const realOutputRoot = await realpath(outputRoot);
+
+  let current = outputRoot;
+  for (const segment of segments.slice(0, -1)) {
+    current = join(current, segment);
+    try {
+      await assertSafeDirectory(current);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      await mkdir(current);
+      await assertSafeDirectory(current);
     }
   }
-  await mkdir(dirname(filePath), { recursive: true });
-  await writeFile(filePath, content, "utf-8");
+
+  const realParent = await realpath(dirname(join(outputRoot, ...segments)));
+  const parentRelative = relative(realOutputRoot, realParent);
+  if (parentRelative === ".." || parentRelative.startsWith(`..${sep}`) || isAbsolute(parentRelative)) {
+    throw new Error(`Output path resolves outside output directory: ${relativePath}`);
+  }
+
+  const target = join(outputRoot, ...segments);
+  try {
+    const targetStat = await lstat(target);
+    if (targetStat.isSymbolicLink() || !targetStat.isFile()) {
+      throw new Error(`Unsafe output target: ${relativePath}`);
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+  await writeFile(target, content, "utf-8");
 }
 
 export const analyzePhpCommand = defineCommand({
@@ -557,7 +919,14 @@ export const analyzePhpCommand = defineCommand({
 
     // ── Step 1: Analyze PHP files ──
     consola.start(`Scanning PHP files in: ${dirPath}`);
-    const analyses = await analyzePhpDirectory(dirPath);
+    const { analyses, secretFindings } = await analyzePhpDirectory(dirPath);
+
+    if (secretFindings.length > 0) {
+      consola.error("Potential secrets detected in PHP input. No report, generated files, or AI input was created:");
+      consola.error(formatPhpSecretFindings(secretFindings));
+      consola.info("Remove or replace the detected values with safe placeholders, then rerun analyze-php.");
+      return;
+    }
 
     const custom = analyses.filter(
       (a) =>
@@ -586,6 +955,16 @@ export const analyzePhpCommand = defineCommand({
       }
     }
 
+    if (tables.length === 0) {
+      tables = inferTablesFromAnalyses(analyses);
+      if (tables.length > 0) {
+        prismaSchema = generatePrismaSchema(tables);
+        consola.warn(
+          `Inferred ${tables.length} database tables from PHP operations; review prisma/schema.prisma before production use`,
+        );
+      }
+    }
+
     // Filter dbOperations to only reference known schema tables (if schema provided)
     if (tables.length > 0) {
       const knownTables = new Set(tables.map(t => t.name));
@@ -596,19 +975,22 @@ export const analyzePhpCommand = defineCommand({
 
     // ── Step 3: Detect plugins from PHP analysis ──
     const detectedPlugins = detectPluginsFromPhp(analyses);
-    const hasAuth = isAuthPluginDetected(detectedPlugins);
-    if (hasAuth) {
+    const detectedAuth = isAuthPluginDetected(detectedPlugins);
+    // Generated database routes and admin pages must not be public merely
+    // because a legacy source tree did not expose its authentication plugin.
+    const hasAuth = requiresGeneratedAuth(detectedAuth, custom, tables);
+    if (detectedAuth) {
       consola.info("Auth/role plugins detected — generating auth scaffold");
+    } else if (hasAuth) {
+      consola.info("Generated database resources detected — generating baseline auth scaffold");
     }
 
-    // ── Step 4: Append AdminUser model to Prisma schema if auth detected ──
-    if (prismaSchema && hasAuth) {
-      prismaSchema += "\n" + ADMIN_USER_PRISMA_MODEL + "\n";
-    }
+    // ── Step 4: Ensure auth scaffolds always have their required Prisma model ──
+    prismaSchema = ensureAuthPrismaSchema(prismaSchema, hasAuth);
 
     // ── Step 5: Generate API route stubs ──
     consola.start("Generating Next.js API route stubs...");
-    const stubs = generateApiStubs(custom, tables);
+    const stubs = generateApiStubs(custom, tables, { requireAuth: hasAuth });
     consola.success(`Generated ${stubs.size} API route stubs`);
 
     // ── Step 5b: AI-assisted route generation ──
@@ -624,15 +1006,16 @@ export const analyzePhpCommand = defineCommand({
       if (filesWithOps.length > 0) {
         consola.start(`AI-generating routes for ${filesWithOps.length} PHP files...`);
 
-        const aiInputs: AiRouteInput[] = await Promise.all(
+        const candidateAiInputs: AiRouteInput[] = await Promise.all(
           filesWithOps.map(async (analysis) => {
-            const phpSource = await readFile(join(dirPath, analysis.fileName), "utf-8");
-            const matchingStubEntry = [...stubs.entries()].find(([path]) =>
-              path.includes(analysis.fileName.replace(/\.php$/, "")),
-            );
+            const { phpSource, phpFilePath } = await loadAiPhpSource(dirPath, analysis);
+            const mapping = inferRouteMapping(analysis);
+            const staticRoute = stubs.get(mapping.path);
             return {
               phpSource,
-              phpFilePath: analysis.fileName,
+              phpFilePath,
+              targetRoutePath: mapping.path,
+              accessPath: routeResourcePath(mapping.path),
               prismaSchema: prismaSchema ?? "",
               staticAnalysis: {
                 dbOperations: analysis.dbOperations.map((op) => ({
@@ -645,10 +1028,16 @@ export const analyzePhpCommand = defineCommand({
                   source: p.source,
                 })),
               },
-              existingRoute: matchingStubEntry?.[1],
+              existingRoute: staticRoute,
             };
           }),
         );
+
+        const uniqueAiInputs = selectUniqueAiRouteInputs(candidateAiInputs);
+        for (const routePath of uniqueAiInputs.skippedTargetRoutePaths) {
+          consola.warn(`Multiple PHP inputs map to ${routePath}; retaining the complete guarded static route`);
+        }
+        const aiInputs = uniqueAiInputs.inputs;
 
         const aiResult = await generateRoutesWithAi(aiInputs, {
           apiKey,
@@ -656,11 +1045,24 @@ export const analyzePhpCommand = defineCommand({
         });
 
         aiTotalTokens = aiResult.totalTokens;
-        aiFallbackCount = aiResult.failures.length;
-        aiGeneratedCount = aiResult.results.length - aiFallbackCount;
+        const initialAiSummary = summarizeAiGeneration(aiResult.results);
+        aiFallbackCount = initialAiSummary.fallback + uniqueAiInputs.skippedTargetRoutePaths.length;
+        aiGeneratedCount = initialAiSummary.generated;
 
-        // Replace static stubs with AI-generated routes
+        // AI output may refine business logic, but it must never remove the
+        // database-backed access guard from an authenticated scaffold.
         for (const result of aiResult.results) {
+          const matchingInput = aiInputs.find((input) => input.targetRoutePath === result.routePath);
+          if (hasAuth && (!matchingInput || !hasActiveAccessGuard(result.content, matchingInput.accessPath))) {
+            // A generator fallback is already counted above. This branch is a
+            // defense-in-depth check for a future generator implementation.
+            if (!result.fallback) {
+              aiGeneratedCount--;
+              aiFallbackCount++;
+            }
+            consola.warn(`AI route omitted requireActiveAccess; retaining guarded static route: ${result.routePath}`);
+            continue;
+          }
           stubs.set(result.routePath, result.content);
         }
 
@@ -672,11 +1074,14 @@ export const analyzePhpCommand = defineCommand({
 
     // ── Step 6: Generate admin pages ──
     consola.start("Generating admin page scaffolds...");
-    const adminPages = generateAdminScaffold(analyses, tables);
+    const adminPages = generateAdminScaffold(analyses, tables, { requireAuth: hasAuth });
     consola.success(`Generated ${adminPages.length} admin pages`);
 
     // ── Step 7: Generate auth scaffold ──
-    const authFiles = generateAuthScaffold(detectedPlugins);
+    const authFiles = generateAuthScaffold(detectedPlugins, {
+      routeResources: collectAdminRouteResources(adminPages),
+      force: hasAuth,
+    });
     if (authFiles.length > 0) {
       consola.success(`Generated ${authFiles.length} auth files`);
     }
@@ -688,51 +1093,43 @@ export const analyzePhpCommand = defineCommand({
     consola.success(`Generated ${dockerFiles.length} Docker files`);
 
     // ── Step 9: Write all outputs ──
-    await mkdir(outputDir, { recursive: true });
     let totalFiles = 0;
 
     // analysis.json
-    const analysisPath = join(outputDir, "analysis.json");
-    await writeFile(analysisPath, JSON.stringify(analyses, null, 2), "utf-8");
+    await writeSafeOutputFile(outputDir, "analysis.json", JSON.stringify(analyses, null, 2));
     totalFiles++;
 
     // schema.prisma
     if (prismaSchema) {
-      const prismaDir = join(outputDir, "prisma");
-      await mkdir(prismaDir, { recursive: true });
-      await writeFile(join(prismaDir, "schema.prisma"), prismaSchema, "utf-8");
+      await writeSafeOutputFile(outputDir, "prisma/schema.prisma", prismaSchema);
       totalFiles++;
     }
 
     // API route stubs
     for (const [routePath, content] of stubs) {
       const resolved = await resolveTemplate(templateDir, { path: routePath, content });
-      const fullPath = join(outputDir, routePath);
-      await writeFileWithDir(fullPath, resolved, outputDir);
+      await writeSafeOutputFile(outputDir, routePath, resolved);
       totalFiles++;
     }
 
     // Admin pages
     for (const page of adminPages) {
       const content = await resolveTemplate(templateDir, page);
-      const fullPath = join(outputDir, page.path);
-      await writeFileWithDir(fullPath, content, outputDir);
+      await writeSafeOutputFile(outputDir, page.path, content);
       totalFiles++;
     }
 
     // Auth files
     for (const file of authFiles) {
       const content = await resolveTemplate(templateDir, file);
-      const fullPath = join(outputDir, file.path);
-      await writeFileWithDir(fullPath, content, outputDir);
+      await writeSafeOutputFile(outputDir, file.path, content);
       totalFiles++;
     }
 
     // Docker files
     for (const file of dockerFiles) {
       const content = await resolveTemplate(templateDir, file);
-      const fullPath = join(outputDir, file.path);
-      await writeFileWithDir(fullPath, content, outputDir);
+      await writeSafeOutputFile(outputDir, file.path, content);
       totalFiles++;
     }
 
@@ -766,79 +1163,47 @@ export const analyzePhpCommand = defineCommand({
     };
     const verifyFiles = generateVerifyScaffold(verifyInput);
     for (const file of verifyFiles) {
-      const fullPath = join(outputDir, file.path);
-      await writeFileWithDir(fullPath, file.content, outputDir);
+      await writeSafeOutputFile(outputDir, file.path, file.content);
       totalFiles++;
     }
     consola.success(`Generated ${verifyFiles.length} test files (smoke + API + auth + admin + migration)`);
 
     // Project files
-    await writeFile(
-      join(outputDir, "package.json"),
-      generatePackageJson(projectName),
-      "utf-8",
-    );
+    await writeSafeOutputFile(outputDir, "package.json", generatePackageJson(projectName));
     totalFiles++;
 
-    await writeFile(
-      join(outputDir, "tsconfig.json"),
-      generateTsConfig(),
-      "utf-8",
-    );
+    await writeSafeOutputFile(outputDir, "tsconfig.json", generateTsConfig());
     totalFiles++;
 
-    await writeFile(
-      join(outputDir, "next.config.ts"),
-      generateNextConfig(),
-      "utf-8",
-    );
+    await writeSafeOutputFile(outputDir, "next.config.ts", generateNextConfig());
     totalFiles++;
 
     // Root layout (required by Next.js App Router)
-    await writeFileWithDir(
-      join(outputDir, "app/layout.tsx"),
-      `import type { Metadata } from "next";
-import "./globals.css";
-
-export const metadata: Metadata = {
-  title: "${projectName}",
-};
-
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  return (
-    <html lang="ja">
-      <body>{children}</body>
-    </html>
-  );
-}
-`,
+    await writeSafeOutputFile(
       outputDir,
+      "app/layout.tsx",
+      generateRootLayout(projectName),
     );
     totalFiles++;
 
-    await writeFileWithDir(
-      join(outputDir, "lib/db.ts"),
-      generateDbLib(),
+    await writeSafeOutputFile(
       outputDir,
+      "lib/db.ts",
+      generateDbLib(),
     );
     totalFiles++;
 
     // Seed script
-    await writeFileWithDir(
-      join(outputDir, "prisma/seed.ts"),
-      generateSeedScript(tables, hasAuth),
+    await writeSafeOutputFile(
       outputDir,
+      "prisma/seed.ts",
+      generateSeedScript(tables, hasAuth),
     );
     totalFiles++;
 
     // report.md
-    const reportPath = join(outputDir, "report.md");
     const report = generateMigrationReport(analyses, custom, stubs, prismaSchema, adminPages.length, authFiles.length, dockerFiles.length);
-    await writeFile(reportPath, report, "utf-8");
+    await writeSafeOutputFile(outputDir, "report.md", report);
     totalFiles++;
 
     // Migration dashboard HTML
@@ -863,7 +1228,7 @@ export default function RootLayout({
       generatedFiles: totalFiles,
     };
     const dashboard = generateMigrationDashboard(dashboardInput);
-    await writeFile(join(outputDir, dashboard.path), dashboard.html, "utf-8");
+    await writeSafeOutputFile(outputDir, dashboard.path, dashboard.html);
     totalFiles++;
 
     // Summary

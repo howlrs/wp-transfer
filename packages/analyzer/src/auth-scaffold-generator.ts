@@ -2,7 +2,7 @@
  * Auth Scaffold Generator
  *
  * Generates NextAuth v5 authentication files when auth/role plugins are detected.
- * Includes RBAC, login page, account management, and middleware.
+ * Includes RBAC, login page, user management, and middleware.
  */
 
 // ── Types ──
@@ -17,7 +17,6 @@ export interface AuthScaffoldFile {
 const AUTH_PLUGIN_SLUGS = new Set([
   "wpfront-user-role-editor",
   "adminimize",
-  "support-me",
   "user-role-editor",
   "members",
   "wp-user-avatar",
@@ -92,7 +91,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
     async session({ session, token }) {
       if (session.user) {
-        (session.user as { role: string }).role = token.role as string;
+        const sessionUser = session.user as { id?: string; role?: string };
+        sessionUser.id = token.sub;
+        sessionUser.role = token.role as string;
       }
       return session;
     },
@@ -102,35 +103,66 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   },
   session: {
     strategy: "jwt",
+    maxAge: 15 * 60,
   },
+  jwt: { maxAge: 15 * 60 },
 });
 `;
 }
 
-function generateRbac(): string {
+export interface AuthScaffoldOptions {
+  /** Routes generated from the application's detected resources. */
+  routeResources?: readonly string[];
+  /** Generate the neutral authentication baseline when source detection is inconclusive. */
+  force?: boolean;
+}
+
+function normalizedResourcePaths(resources: readonly string[]): string[] {
+  return [...new Set(resources
+    .map((resource) => resource.trim().replace(/^\/+|\/+$/g, ""))
+    .filter((resource) => /^[a-z0-9][a-z0-9_-]*$/i.test(resource))
+    .map((resource) => `/${resource}`))].sort();
+}
+
+/**
+ * Static analysis discovers route names, not an authoritative authorization
+ * policy. Every generated resource therefore defaults to administrator-only;
+ * a later reviewed configuration may deliberately lower a specific route.
+ */
+function resourcePermissionLevel(_path: string): 100 {
+  return 100;
+}
+
+function generateRbac(routeResources: readonly string[] = []): string {
+  const resourcePermissions = normalizedResourcePaths(routeResources)
+    .filter((path) => path !== "/admin-users")
+    .map((path) => {
+      const level = resourcePermissionLevel(path);
+      return `  ${JSON.stringify(path)}: ${level}, // Administrator only until explicitly reviewed`;
+    })
+    .join("\n");
+
   return `/**
  * Role-Based Access Control (RBAC)
  *
  * Roles mapped from WordPress user role plugins.
  */
 
-export type Role = "administrator" | "editor" | "contributor" | "support_admin";
+export type Role = "administrator" | "editor" | "author" | "contributor" | "subscriber";
 
 export const ROLES: Record<Role, { label: string; level: number }> = {
   administrator: { label: "管理者", level: 100 },
-  editor: { label: "編集者", level: 50 },
-  contributor: { label: "投稿者", level: 20 },
-  support_admin: { label: "サポート管理者", level: 30 },
+  editor: { label: "編集者", level: 70 },
+  author: { label: "投稿者", level: 40 },
+  contributor: { label: "寄稿者", level: 20 },
+  subscriber: { label: "購読者", level: 10 },
 };
 
 // IMPORTANT: Default deny — unregistered paths require administrator role
 const PATH_PERMISSIONS: Record<string, number> = {
-  "/": 0,                    // Dashboard — all roles
-  "/events": 50,             // Event management — editor+
-  "/information": 50,        // Information management — editor+
-  "/lottery": 50,            // Lottery — editor+
-  "/users": 100,             // User management — admin only
-  "/accounts": 100,          // Account management — admin only
+  "/": 0, // Dashboard — all authenticated users
+  "/admin-users": 100, // Authentication user management — administrator only
+${resourcePermissions}
 };
 
 export interface MenuItem {
@@ -154,7 +186,8 @@ export function filterMenuByRole(
  * Check if a role can access a given path.
  */
 export function canAccess(role: Role, path: string): boolean {
-  const level = ROLES[role]?.level ?? 0;
+  const level = ROLES[role]?.level;
+  if (level === undefined) return false;
 
   // Find the most specific matching path prefix
   let requiredLevel = 100; // Default: admin only (fail-safe)
@@ -185,6 +218,7 @@ export function Providers({ children }: { children: ReactNode }) {
 function generateMiddleware(): string {
   return `import { getToken } from "next-auth/jwt";
 import { NextRequest, NextResponse } from "next/server";
+import { canAccess, type Role } from "@/lib/rbac";
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
@@ -209,6 +243,19 @@ export async function middleware(req: NextRequest) {
     const loginUrl = new URL("/login", req.url);
     loginUrl.searchParams.set("callbackUrl", pathname);
     return NextResponse.redirect(loginUrl);
+  }
+
+  // API routes use the same permission path as their corresponding page.
+  const permissionPath = pathname.startsWith("/api/")
+    ? pathname.slice(4) || "/"
+    : pathname;
+  const role = token.role as Role;
+
+  if (!canAccess(role, permissionPath)) {
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+    return NextResponse.redirect(new URL("/unauthorized", req.url));
   }
 
   return NextResponse.next();
@@ -238,7 +285,12 @@ export default function LoginPage() {
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const callbackUrl = searchParams.get("callbackUrl") ?? "/";
+  const callbackParam = searchParams.get("callbackUrl");
+  const callbackUrl = callbackParam?.startsWith("/") &&
+    !callbackParam.startsWith("//") &&
+    !callbackParam.includes("\\\\")
+    ? callbackParam
+    : "/";
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -373,15 +425,80 @@ export const { GET, POST } = handlers;
 `;
 }
 
-function generateAccountsApiRoute(): string {
+function generateRequireActiveUser(): string {
+  return `import { auth } from "@/lib/auth";
+import { prisma } from "@/lib/db";
+import { canAccess, type Role } from "@/lib/rbac";
+
+/**
+ * Verify sessions against the database on every request. This rejects accounts
+ * that were deleted, disabled, or expired after JWT issuance.
+ */
+export async function requireActiveUser() {
+  const sessionUser = (await auth())?.user as { id?: string } | undefined;
+  const id = sessionUser?.id;
+  if (!id || !/^\\d+$/.test(id)) return null;
+
+  const userId = Number(id);
+  if (!Number.isSafeInteger(userId)) return null;
+
+  const user = await prisma.adminUser.findUnique({
+    where: { id: userId },
+    select: { id: true, role: true, isActive: true, expiresAt: true },
+  });
+
+  if (
+    !user ||
+    !user.isActive ||
+    (user.expiresAt && user.expiresAt <= new Date())
+  ) {
+    return null;
+  }
+
+  return user;
+}
+
+/** Verify the current user's current database role can access a route. */
+export async function requireActiveAccess(path: string) {
+  const user = await requireActiveUser();
+  if (!user || !canAccess(user.role as Role, path)) return null;
+  return user;
+}
+
+/** Verify the current user is an active administrator in the database. */
+export async function requireActiveAdministrator() {
+  const user = await requireActiveUser();
+  return user?.role === "administrator" ? user : null;
+}
+`;
+}
+
+function generateProtectedResourceLayout(path: string): string {
+  return `import type { ReactNode } from "react";
+import { redirect } from "next/navigation";
+import { requireActiveAccess } from "@/lib/require-active-user";
+
+export default async function ProtectedResourceLayout({
+  children,
+}: {
+  children: ReactNode;
+}) {
+  const user = await requireActiveAccess(${JSON.stringify(path)});
+  if (!user) redirect("/unauthorized");
+  return children;
+}
+`;
+}
+
+function generateUsersApiRoute(): string {
   return `import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { auth } from "@/lib/auth";
+import { requireActiveAdministrator } from "@/lib/require-active-user";
 import bcrypt from "bcryptjs";
 
 export async function GET() {
-  const session = await auth();
-  if (!session?.user || (session.user as { role?: string }).role !== "administrator") {
+  const administrator = await requireActiveAdministrator();
+  if (!administrator) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -402,19 +519,51 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const session = await auth();
-  if (!session?.user || (session.user as { role?: string }).role !== "administrator") {
+  const administrator = await requireActiveAdministrator();
+  if (!administrator) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const body = await request.json();
-  const { username, password, name, role } = body;
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "JSON形式が正しくありません" }, { status: 400 });
+  }
 
-  if (!username || !password) {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return NextResponse.json({ error: "入力形式が正しくありません" }, { status: 400 });
+  }
+
+  const { username, password, name, role } = body as Record<string, unknown>;
+  const allowedRoles = new Set([
+    "administrator",
+    "editor",
+    "author",
+    "contributor",
+    "subscriber",
+  ]);
+
+  if (typeof username !== "string" || !/^[A-Za-z0-9._-]{3,64}$/.test(username)) {
     return NextResponse.json(
-      { error: "ユーザー名とパスワードは必須です" },
+      { error: "ユーザー名は3〜64文字の英数字、ピリオド、ハイフン、アンダースコアで指定してください" },
       { status: 400 },
     );
+  }
+
+  if (typeof password !== "string" || password.length < 12 || password.length > 128) {
+    return NextResponse.json(
+      { error: "パスワードは12〜128文字で指定してください" },
+      { status: 400 },
+    );
+  }
+
+  if (role !== undefined && (typeof role !== "string" || !allowedRoles.has(role))) {
+    return NextResponse.json({ error: "無効なロールです" }, { status: 400 });
+  }
+
+  if (name !== undefined && name !== null && (typeof name !== "string" || name.length > 120)) {
+    return NextResponse.json({ error: "名前は120文字以内で指定してください" }, { status: 400 });
   }
 
   const existing = await prisma.adminUser.findUnique({
@@ -432,8 +581,8 @@ export async function POST(request: NextRequest) {
     data: {
       username,
       password: hashed,
-      name: name ?? null,
-      role: role ?? "editor",
+      name: typeof name === "string" ? name.trim() || null : null,
+      role: typeof role === "string" ? role : "editor",
     },
   });
 
@@ -445,26 +594,85 @@ export async function POST(request: NextRequest) {
 `;
 }
 
-function generateAccountIdApiRoute(): string {
+function generateUserIdApiRoute(): string {
   return `import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { auth } from "@/lib/auth";
+import { requireActiveAdministrator } from "@/lib/require-active-user";
+
+type DeleteResult = "deleted" | "not-found" | "last-active-administrator";
+
+function prismaErrorCode(error: unknown): string | undefined {
+  if (typeof error !== "object" || error === null || !("code" in error)) return undefined;
+  const code = (error as { code?: unknown }).code;
+  return typeof code === "string" ? code : undefined;
+}
+
+async function deleteUserAtomically(userId: number): Promise<DeleteResult> {
+  // Serializable transactions make the administrator-count invariant safe on
+  // both MySQL and PostgreSQL. Prisma reports serialization/deadlock conflicts
+  // as P2034, which must be retried before deciding whether deletion is allowed.
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return await prisma.$transaction(async (tx) => {
+        const target = await tx.adminUser.findUnique({
+          where: { id: userId },
+          select: { role: true, isActive: true },
+        });
+        if (!target) return "not-found";
+
+        if (target.role === "administrator" && target.isActive) {
+          const activeAdministrators = await tx.adminUser.count({
+            where: { role: "administrator", isActive: true },
+          });
+          if (activeAdministrators <= 1) return "last-active-administrator";
+        }
+
+        await tx.adminUser.delete({ where: { id: userId } });
+        return "deleted";
+      }, { isolationLevel: "Serializable" });
+    } catch (error) {
+      const code = prismaErrorCode(error);
+      if (code === "P2025") return "not-found";
+      if (code === "P2034" && attempt < 2) continue;
+      throw error;
+    }
+  }
+
+  throw new Error("Unreachable transaction retry state");
+}
 
 export async function DELETE(
   _request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const session = await auth();
-  if (!session?.user || (session.user as { role?: string }).role !== "administrator") {
+  const administrator = await requireActiveAdministrator();
+  if (!administrator) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const { id } = await params;
-  const userId = parseInt(id, 10);
+  if (!/^\\d+$/.test(id)) {
+    return NextResponse.json({ error: "無効なユーザーIDです" }, { status: 400 });
+  }
 
-  await prisma.adminUser.delete({
-    where: { id: userId },
-  });
+  const userId = Number(id);
+  if (!Number.isSafeInteger(userId)) {
+    return NextResponse.json({ error: "無効なユーザーIDです" }, { status: 400 });
+  }
+  if (administrator.id === userId) {
+    return NextResponse.json({ error: "自分自身は削除できません" }, { status: 409 });
+  }
+
+  const result = await deleteUserAtomically(userId);
+  if (result === "not-found") {
+    return NextResponse.json({ error: "ユーザーが見つかりません" }, { status: 404 });
+  }
+  if (result === "last-active-administrator") {
+    return NextResponse.json(
+      { error: "最後の有効な管理者は削除できません" },
+      { status: 409 },
+    );
+  }
 
   return NextResponse.json({ success: true });
 }
@@ -484,12 +692,12 @@ function generateUnauthorizedPage(): string {
 `;
 }
 
-function generateAccountsPage(): string {
+function generateUsersPage(): string {
   return `"use client";
 
 import { useState, useEffect } from "react";
 
-interface AdminUser {
+interface AppUser {
   id: number;
   username: string;
   name: string | null;
@@ -499,14 +707,14 @@ interface AdminUser {
   createdAt: string;
 }
 
-export default function AccountsPage() {
-  const [users, setUsers] = useState<AdminUser[]>([]);
+export default function UsersPage() {
+  const [users, setUsers] = useState<AppUser[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ username: "", password: "", name: "", role: "editor" });
   const [error, setError] = useState<string | null>(null);
 
   const loadUsers = async () => {
-    const res = await fetch("/api/accounts");
+    const res = await fetch("/api/admin-users");
     if (res.ok) {
       setUsers(await res.json());
     }
@@ -520,7 +728,7 @@ export default function AccountsPage() {
     e.preventDefault();
     setError(null);
 
-    const res = await fetch("/api/accounts", {
+    const res = await fetch("/api/admin-users", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(form),
@@ -537,9 +745,9 @@ export default function AccountsPage() {
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm("このアカウントを削除しますか？")) return;
+    if (!confirm("このユーザーを削除しますか？")) return;
 
-    const res = await fetch(\`/api/accounts/\${id}\`, { method: "DELETE" });
+    const res = await fetch(\`/api/admin-users/\${id}\`, { method: "DELETE" });
     if (res.ok) {
       loadUsers();
     }
@@ -548,7 +756,7 @@ export default function AccountsPage() {
   return (
     <div style={{ padding: "24px" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
-        <h1 style={{ fontSize: "24px", fontWeight: "bold" }}>アカウント管理</h1>
+        <h1 style={{ fontSize: "24px", fontWeight: "bold" }}>ユーザー管理</h1>
         <button
           onClick={() => setShowForm(!showForm)}
           style={{
@@ -611,8 +819,9 @@ export default function AccountsPage() {
               >
                 <option value="administrator">管理者</option>
                 <option value="editor">編集者</option>
-                <option value="contributor">投稿者</option>
-                <option value="support_admin">サポート管理者</option>
+                <option value="author">投稿者</option>
+                <option value="contributor">寄稿者</option>
+                <option value="subscriber">購読者</option>
               </select>
             </div>
           </div>
@@ -701,21 +910,34 @@ model AdminUser {
 
 // ── Public API ──
 
-export function generateAuthScaffold(plugins: string[]): AuthScaffoldFile[] {
-  if (!isAuthPluginDetected(plugins)) {
+export function generateAuthScaffold(
+  plugins: string[],
+  options: AuthScaffoldOptions = {},
+): AuthScaffoldFile[] {
+  if (!options.force && !isAuthPluginDetected(plugins)) {
     return [];
   }
 
+  const protectedResourcePaths = [...new Set([
+    "/admin-users",
+    ...normalizedResourcePaths(options.routeResources ?? []),
+  ])].sort();
+
   return [
     { path: "lib/auth.ts", content: generateAuthConfig() },
-    { path: "lib/rbac.ts", content: generateRbac() },
+    { path: "lib/rbac.ts", content: generateRbac(options.routeResources) },
     { path: "lib/providers.tsx", content: generateProviders() },
     { path: "middleware.ts", content: generateMiddleware() },
     { path: "app/login/page.tsx", content: generateLoginPage() },
     { path: "app/api/auth/[...nextauth]/route.ts", content: generateNextAuthRoute() },
-    { path: "app/api/accounts/route.ts", content: generateAccountsApiRoute() },
-    { path: "app/api/accounts/[id]/route.ts", content: generateAccountIdApiRoute() },
-    { path: "app/(admin)/accounts/page.tsx", content: generateAccountsPage() },
+    { path: "lib/require-active-user.ts", content: generateRequireActiveUser() },
+    { path: "app/api/admin-users/route.ts", content: generateUsersApiRoute() },
+    { path: "app/api/admin-users/[id]/route.ts", content: generateUserIdApiRoute() },
+    { path: "app/(admin)/admin-users/page.tsx", content: generateUsersPage() },
+    ...protectedResourcePaths.map((path) => ({
+      path: `app/(admin)${path}/layout.tsx`,
+      content: generateProtectedResourceLayout(path),
+    })),
     { path: "app/unauthorized/page.tsx", content: generateUnauthorizedPage() },
   ];
 }

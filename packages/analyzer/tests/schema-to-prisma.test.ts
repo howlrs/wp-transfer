@@ -1,369 +1,238 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
-  parseDbSchemaMarkdown,
-  generatePrismaSchema,
-  parseSchemaToPrisma,
   detectRelations,
+  generatePrismaSchema,
+  parseDbSchemaMarkdown,
+  parseSchemaToPrisma,
+  type TableDefinition,
 } from "../src/schema-to-prisma.js";
 
-// ── Minimal fixture matching database.md format ──
+const SYNTHETIC_SCHEMA = `# Synthetic Project Schema
 
-const FIXTURE = `# Test Schema
-
-## event
+## project
 
 ### 0. 備考
-* eventのみテーブルが存在
+* Synthetic project records used only by automated tests
 
 ### 1. id
-* イベントID:int(11) NOT NULL AUTO_INCREMENT
+* Project ID:int(11) NOT NULL AUTO_INCREMENT
 * **キー**: PRIMARY KEY
 
 ### 2. title
-* イベントタイトル:varchar(255) CHARACTER SET utf8 DEFAULT NULL
+* Project title:varchar(255) CHARACTER SET utf8 DEFAULT NULL
 
-### 3. recruiting_type
-* 募集タイプ:int(11) DEFAULT NULL
+### 3. visibility_code
+* Visibility level:int(11) DEFAULT NULL
 
-### 4. cancel_mode
-* キャンセル機能ON/OFFフラグ:tinyint(1) NOT NULL DEFAULT '0'
+### 4. is_archived
+* Archive flag:tinyint(1) NOT NULL DEFAULT '0'
 
-### 5. time_stamp
-* 登録時間:timestamp NULL DEFAULT NULL
-
-### 6. preview_mode
-* プレビュー/本番公開フラグ:tinyint(1) NOT NULL DEFAULT '0'
+### 5. created_at
+* Creation time:timestamp NULL DEFAULT NULL
 
 ---
 
-## event_slot
+## project_task
 
 ### 1. id
-* イベントスロットのID:int(11) NOT NULL AUTO_INCREMENT
+* Task ID:int(11) NOT NULL AUTO_INCREMENT
 * **キー**: PRIMARY KEY
 
-### 2. event_id
-* 親イベントのID:int(11) NOT NULL
-* **キー**: KEY (event_id)
+### 2. project_id
+* Parent project ID:int(11) NOT NULL
+* **キー**: KEY (project_id)
 
-### 3. event_time
-* 枠の開催時間:datetime DEFAULT NULL
+### 3. due_at
+* Due date:datetime DEFAULT NULL
 
-### 4. winners_probability
-* 当選確率:int(11) DEFAULT NULL
+### 4. priority
+* Priority:int(11) DEFAULT NULL
 
 ---
 
-## lottery
+## audit_log
 
 ### 1. id
-* 抽選ID:bigint(20) NOT NULL AUTO_INCREMENT
+* Audit log ID:bigint(20) NOT NULL AUTO_INCREMENT
 * **キー**: PRIMARY KEY
 
-### 2. event_id
-* イベントID:int(11) DEFAULT NULL
+### 2. project_id
+* Project ID:int(11) DEFAULT NULL
 
-### 3. user_id
-* ユーザID:varchar(12) DEFAULT NULL
+### 3. actor_id
+* External actor ID:varchar(12) DEFAULT NULL
 
-### 4. time_stamp
-* 登録時間:timestamp NULL DEFAULT CURRENT_TIMESTAMP
+### 4. created_at
+* Creation time:timestamp NULL DEFAULT CURRENT_TIMESTAMP
 `;
 
+function table(name: string, columns: TableDefinition["columns"]): TableDefinition {
+  return { name, columns, note: "" };
+}
+
 describe("parseDbSchemaMarkdown", () => {
-  it("parses table names", () => {
-    const tables = parseDbSchemaMarkdown(FIXTURE);
-    const names = tables.map((t) => t.name);
-    expect(names).toContain("event");
-    expect(names).toContain("event_slot");
-    expect(names).toContain("lottery");
+  it("parses synthetic table names and notes", () => {
+    const tables = parseDbSchemaMarkdown(SYNTHETIC_SCHEMA);
+    expect(tables.map((item) => item.name)).toEqual(["project", "project_task", "audit_log"]);
+    expect(tables.find((item) => item.name === "project")?.note).toContain("Synthetic");
   });
 
-  it("parses table notes from 備考 section", () => {
-    const tables = parseDbSchemaMarkdown(FIXTURE);
-    const event = tables.find((t) => t.name === "event");
-    expect(event?.note).toContain("event");
+  it("does not treat the note section as a column", () => {
+    const project = parseDbSchemaMarkdown(SYNTHETIC_SCHEMA).find((item) => item.name === "project")!;
+    expect(project.columns.every((column) => column.name !== "備考" && column.name !== "0")).toBe(true);
   });
 
-  it("skips 備考 (index 0) as column", () => {
-    const tables = parseDbSchemaMarkdown(FIXTURE);
-    const event = tables.find((t) => t.name === "event");
-    // No column should be named "備考" or have index-related artifacts
-    expect(event?.columns.every((c) => c.name !== "備考")).toBe(true);
-    expect(event?.columns.every((c) => c.name !== "0")).toBe(true);
+  it("parses primary keys, strings, and nullable integers", () => {
+    const project = parseDbSchemaMarkdown(SYNTHETIC_SCHEMA).find((item) => item.name === "project")!;
+    expect(project.columns.find((column) => column.name === "id")).toMatchObject({
+      type: "Int",
+      isPrimary: true,
+      isAutoIncrement: true,
+      nullable: false,
+    });
+    expect(project.columns.find((column) => column.name === "title")).toMatchObject({
+      type: "String",
+      nullable: true,
+      comment: "Project title",
+    });
+    expect(project.columns.find((column) => column.name === "visibility_code")).toMatchObject({
+      type: "Int",
+      nullable: true,
+    });
   });
 
-  it("parses column definitions", () => {
-    const tables = parseDbSchemaMarkdown(FIXTURE);
-    const event = tables.find((t) => t.name === "event")!;
+  it("maps tinyint, bigint, datetime, and timestamp types", () => {
+    const tables = parseDbSchemaMarkdown(SYNTHETIC_SCHEMA);
+    const project = tables.find((item) => item.name === "project")!;
+    const task = tables.find((item) => item.name === "project_task")!;
+    const audit = tables.find((item) => item.name === "audit_log")!;
 
-    // id column
-    const id = event.columns.find((c) => c.name === "id")!;
-    expect(id.type).toBe("Int");
-    expect(id.isPrimary).toBe(true);
-    expect(id.isAutoIncrement).toBe(true);
-    expect(id.nullable).toBe(false);
-
-    // title column
-    const title = event.columns.find((c) => c.name === "title")!;
-    expect(title.type).toBe("String");
-    expect(title.nullable).toBe(true);
-
-    // recruiting_type column
-    const rt = event.columns.find((c) => c.name === "recruiting_type")!;
-    expect(rt.type).toBe("Int");
-    expect(rt.nullable).toBe(true);
-  });
-
-  it("maps tinyint(1) to Boolean", () => {
-    const tables = parseDbSchemaMarkdown(FIXTURE);
-    const event = tables.find((t) => t.name === "event")!;
-    const cancelMode = event.columns.find((c) => c.name === "cancel_mode")!;
-    expect(cancelMode.type).toBe("Boolean");
-    expect(cancelMode.nullable).toBe(false);
-    expect(cancelMode.defaultValue).toBe("0");
-  });
-
-  it("maps bigint to BigInt", () => {
-    const tables = parseDbSchemaMarkdown(FIXTURE);
-    const lottery = tables.find((t) => t.name === "lottery")!;
-    const id = lottery.columns.find((c) => c.name === "id")!;
-    expect(id.type).toBe("BigInt");
-  });
-
-  it("maps datetime to DateTime", () => {
-    const tables = parseDbSchemaMarkdown(FIXTURE);
-    const slot = tables.find((t) => t.name === "event_slot")!;
-    const eventTime = slot.columns.find((c) => c.name === "event_time")!;
-    expect(eventTime.type).toBe("DateTime");
-  });
-
-  it("maps timestamp to DateTime", () => {
-    const tables = parseDbSchemaMarkdown(FIXTURE);
-    const event = tables.find((t) => t.name === "event")!;
-    const ts = event.columns.find((c) => c.name === "time_stamp")!;
-    expect(ts.type).toBe("DateTime");
-  });
-
-  it("detects DEFAULT CURRENT_TIMESTAMP", () => {
-    const tables = parseDbSchemaMarkdown(FIXTURE);
-    const lottery = tables.find((t) => t.name === "lottery")!;
-    const ts = lottery.columns.find((c) => c.name === "time_stamp")!;
-    expect(ts.defaultValue).toBe("now()");
-  });
-
-  it("preserves column comments", () => {
-    const tables = parseDbSchemaMarkdown(FIXTURE);
-    const event = tables.find((t) => t.name === "event")!;
-    const title = event.columns.find((c) => c.name === "title")!;
-    expect(title.comment).toBe("イベントタイトル");
+    expect(project.columns.find((column) => column.name === "is_archived")).toMatchObject({
+      type: "Boolean",
+      defaultValue: "0",
+    });
+    expect(task.columns.find((column) => column.name === "due_at")?.type).toBe("DateTime");
+    expect(audit.columns.find((column) => column.name === "id")?.type).toBe("BigInt");
+    expect(audit.columns.find((column) => column.name === "created_at")).toMatchObject({
+      type: "DateTime",
+      defaultValue: "now()",
+    });
   });
 });
 
 describe("generatePrismaSchema", () => {
-  it("generates valid Prisma schema structure", () => {
-    const tables = parseDbSchemaMarkdown(FIXTURE);
-    const schema = generatePrismaSchema(tables);
+  it("generates models, mappings, primary keys, and defaults", () => {
+    const schema = generatePrismaSchema(parseDbSchemaMarkdown(SYNTHETIC_SCHEMA));
 
-    expect(schema).toContain("generator client");
-    expect(schema).toContain("datasource db");
     expect(schema).toContain('provider = "mysql"');
-  });
-
-  it("generates PascalCase model names", () => {
-    const tables = parseDbSchemaMarkdown(FIXTURE);
-    const schema = generatePrismaSchema(tables);
-
-    expect(schema).toContain("model Event {");
-    expect(schema).toContain("model EventSlot {");
-    expect(schema).toContain("model Lottery {");
-  });
-
-  it("includes @@map for table name mapping", () => {
-    const tables = parseDbSchemaMarkdown(FIXTURE);
-    const schema = generatePrismaSchema(tables);
-
-    expect(schema).toContain('@@map("event")');
-    expect(schema).toContain('@@map("event_slot")');
-    expect(schema).toContain('@@map("lottery")');
-  });
-
-  it("includes @id and @default(autoincrement()) for primary keys", () => {
-    const tables = parseDbSchemaMarkdown(FIXTURE);
-    const schema = generatePrismaSchema(tables);
-
-    expect(schema).toContain("@id");
+    expect(schema).toContain("model Project {");
+    expect(schema).toContain("model ProjectTask {");
+    expect(schema).toContain("model AuditLog {");
+    expect(schema).toContain('@@map("project_task")');
     expect(schema).toContain("@default(autoincrement())");
-  });
-
-  it("marks nullable fields with ?", () => {
-    const tables = parseDbSchemaMarkdown(FIXTURE);
-    const schema = generatePrismaSchema(tables);
-
-    // title is varchar DEFAULT NULL → should be String?
-    expect(schema).toMatch(/title\s+String\?/);
-  });
-
-  it("includes @default for fields with defaults", () => {
-    const tables = parseDbSchemaMarkdown(FIXTURE);
-    const schema = generatePrismaSchema(tables);
-
-    // cancel_mode has DEFAULT '0' and is Boolean
     expect(schema).toContain("@default(false)");
-  });
-
-  it("includes @default(now()) for CURRENT_TIMESTAMP", () => {
-    const tables = parseDbSchemaMarkdown(FIXTURE);
-    const schema = generatePrismaSchema(tables);
-
     expect(schema).toContain("@default(now())");
+    expect(schema).toMatch(/title\s+String\?/);
   });
 });
 
-describe("generatePrismaSchema PK fallback", () => {
-  it("adds @id fallback to 'id' column when no PRIMARY KEY defined", () => {
-    const tables: { name: string; columns: { name: string; type: string; nullable: boolean; isPrimary: boolean; isAutoIncrement: boolean; comment: string }[]; note: string }[] = [{
-      name: "sessions",
-      columns: [
+describe("primary-key fallbacks", () => {
+  it("promotes an id column to a non-null primary key", () => {
+    const schema = generatePrismaSchema([
+      table("session", [
         { name: "id", type: "String", nullable: true, isPrimary: false, isAutoIncrement: false, comment: "" },
-        { name: "data", type: "String", nullable: true, isPrimary: false, isAutoIncrement: false, comment: "" },
-      ],
-      note: "",
-    }];
-    const schema = generatePrismaSchema(tables);
+        { name: "payload", type: "String", nullable: true, isPrimary: false, isAutoIncrement: false, comment: "" },
+      ]),
+    ]);
+
     expect(schema).toContain("id  String  @id");
     expect(schema).not.toContain("id  String?  @id");
   });
 
-  it("adds @id fallback to table_name_id column when no PK and no 'id'", () => {
-    const tables: { name: string; columns: { name: string; type: string; nullable: boolean; isPrimary: boolean; isAutoIncrement: boolean; comment: string }[]; note: string }[] = [{
-      name: "gps_area",
-      columns: [
-        { name: "area_id", type: "Int", nullable: false, isPrimary: false, isAutoIncrement: false, comment: "" },
+  it("uses a matching single identifier when no explicit key exists", () => {
+    const schema = generatePrismaSchema([
+      table("service_region", [
+        { name: "region_id", type: "Int", nullable: false, isPrimary: false, isAutoIncrement: false, comment: "" },
         { name: "name", type: "String", nullable: true, isPrimary: false, isAutoIncrement: false, comment: "" },
-      ],
-      note: "",
-    }];
-    const schema = generatePrismaSchema(tables);
-    expect(schema).toContain("area_id  Int  @id");
+      ]),
+    ]);
+
+    expect(schema).toContain("region_id  Int  @id");
   });
 
-  it("adds @@id for junction tables with multiple _id columns and no PK", () => {
-    const tables: { name: string; columns: { name: string; type: string; nullable: boolean; isPrimary: boolean; isAutoIncrement: boolean; comment: string }[]; note: string }[] = [{
-      name: "m_coupon_target_stores",
-      columns: [
-        { name: "coupon_id", type: "Int", nullable: false, isPrimary: false, isAutoIncrement: false, comment: "" },
+  it("uses a composite key for a synthetic junction table", () => {
+    const schema = generatePrismaSchema([
+      table("product_store", [
+        { name: "product_id", type: "Int", nullable: false, isPrimary: false, isAutoIncrement: false, comment: "" },
         { name: "store_id", type: "Int", nullable: false, isPrimary: false, isAutoIncrement: false, comment: "" },
-      ],
-      note: "",
-    }];
-    const schema = generatePrismaSchema(tables);
-    expect(schema).toContain("@@id([coupon_id, store_id])");
+      ]),
+    ]);
+
+    expect(schema).toContain("@@id([product_id, store_id])");
   });
 
-  it("promotes nullable id to non-nullable when used as PK fallback", () => {
-    const tables: { name: string; columns: { name: string; type: string; nullable: boolean; isPrimary: boolean; isAutoIncrement: boolean; comment: string }[]; note: string }[] = [{
-      name: "test",
-      columns: [
-        { name: "id", type: "Int", nullable: true, isPrimary: false, isAutoIncrement: false, comment: "" },
+  it("falls back to the first column when no identifier exists", () => {
+    const schema = generatePrismaSchema([
+      table("setting", [
+        { name: "key", type: "String", nullable: true, isPrimary: false, isAutoIncrement: false, comment: "" },
         { name: "value", type: "String", nullable: true, isPrimary: false, isAutoIncrement: false, comment: "" },
-      ],
-      note: "",
-    }];
-    const schema = generatePrismaSchema(tables);
-    expect(schema).toContain("id  Int  @id");
-    expect(schema).not.toContain("id  Int?");
+      ]),
+    ]);
+
+    expect(schema).toContain("key  String  @id");
   });
 });
 
-describe("detectRelations", () => {
-  it("detects event_id in event_slot generates Event relation", () => {
-    const tables = parseDbSchemaMarkdown(FIXTURE);
+describe("relation detection and generation", () => {
+  it("detects matching foreign keys and skips unknown targets", () => {
+    const tables = parseDbSchemaMarkdown(SYNTHETIC_SCHEMA);
     const relations = detectRelations(tables);
 
-    const slotToEvent = relations.find(
-      (r) => r.childTable === "event_slot" && r.childColumn === "event_id",
+    expect(relations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          childTable: "project_task",
+          childColumn: "project_id",
+          parentTable: "project",
+        }),
+        expect.objectContaining({
+          childTable: "audit_log",
+          childColumn: "project_id",
+          parentTable: "project",
+        }),
+      ]),
     );
-    expect(slotToEvent).toBeDefined();
-    expect(slotToEvent!.parentTable).toBe("event");
-    expect(slotToEvent!.parentColumn).toBe("id");
+    expect(relations.some((relation) => relation.childColumn === "actor_id")).toBe(false);
   });
 
-  it("detects event_id in lottery generates Event relation", () => {
-    const tables = parseDbSchemaMarkdown(FIXTURE);
-    const relations = detectRelations(tables);
+  it("adds relation fields, reverse arrays, and indexes", () => {
+    const tables = parseDbSchemaMarkdown(SYNTHETIC_SCHEMA);
+    const schema = generatePrismaSchema(tables, detectRelations(tables));
 
-    const lotteryToEvent = relations.find(
-      (r) => r.childTable === "lottery" && r.childColumn === "event_id",
-    );
-    expect(lotteryToEvent).toBeDefined();
-    expect(lotteryToEvent!.parentTable).toBe("event");
+    expect(schema).toContain("@relation(fields: [project_id], references: [id])");
+    expect(schema).toContain("project_tasks  ProjectTask[]");
+    expect(schema).toContain("audit_logs  AuditLog[]");
+    expect(schema).toContain("@@index([project_id])");
   });
 
-  it("skips unknown _id columns that don't match any table", () => {
-    const tables = parseDbSchemaMarkdown(FIXTURE);
-    const relations = detectRelations(tables);
-
-    // user_id in lottery references "user" which is NOT in our fixture
-    const unknownRel = relations.find(
-      (r) => r.childTable === "lottery" && r.childColumn === "user_id",
-    );
-    expect(unknownRel).toBeUndefined();
-  });
-
-  it("returns empty array when no _id columns exist", () => {
-    const tables = [
-      {
-        name: "standalone",
-        columns: [
-          { name: "id", type: "Int", nullable: false, isPrimary: true, isAutoIncrement: true },
-          { name: "title", type: "String", nullable: true, isPrimary: false, isAutoIncrement: false },
-        ],
-      },
-    ];
-    const relations = detectRelations(tables);
-    expect(relations).toEqual([]);
+  it("returns no relations when no foreign-key-shaped columns exist", () => {
+    expect(
+      detectRelations([
+        table("standalone", [
+          { name: "id", type: "Int", nullable: false, isPrimary: true, isAutoIncrement: true, comment: "" },
+          { name: "title", type: "String", nullable: true, isPrimary: false, isAutoIncrement: false, comment: "" },
+        ]),
+      ]),
+    ).toEqual([]);
   });
 });
 
-describe("generatePrismaSchema with relations", () => {
-  it("adds @relation annotation for detected FK columns", () => {
-    const tables = parseDbSchemaMarkdown(FIXTURE);
-    const relations = detectRelations(tables);
-    const schema = generatePrismaSchema(tables, relations);
+describe("parseSchemaToPrisma", () => {
+  it("returns a complete schema with resolved tables and relations", () => {
+    const result = parseSchemaToPrisma(SYNTHETIC_SCHEMA);
 
-    expect(schema).toContain("@relation(fields: [event_id], references: [id])");
-  });
-
-  it("adds reverse relation array on parent model", () => {
-    const tables = parseDbSchemaMarkdown(FIXTURE);
-    const relations = detectRelations(tables);
-    const schema = generatePrismaSchema(tables, relations);
-
-    // Event should have event_slots and lotterys reverse relations
-    expect(schema).toContain("event_slots  EventSlot[]");
-    expect(schema).toContain("lotterys  Lottery[]");
-  });
-
-  it("adds @@index for FK columns", () => {
-    const tables = parseDbSchemaMarkdown(FIXTURE);
-    const relations = detectRelations(tables);
-    const schema = generatePrismaSchema(tables, relations);
-
-    expect(schema).toContain("@@index([event_id])");
-  });
-});
-
-describe("parseSchemaToPrisma (integration)", () => {
-  it("returns schema string, table definitions, and relations", () => {
-    const result = parseSchemaToPrisma(FIXTURE);
-    expect(result.schema).toBeTruthy();
-    expect(result.tables.length).toBeGreaterThan(0);
-    expect(result.relations.length).toBeGreaterThan(0);
-  });
-
-  it("includes auto-detected relations comment in schema", () => {
-    const result = parseSchemaToPrisma(FIXTURE);
     expect(result.schema).toContain("Enhanced with auto-detected relations");
+    expect(result.tables).toHaveLength(3);
+    expect(result.relations).toHaveLength(2);
   });
 });

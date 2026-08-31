@@ -855,7 +855,7 @@ import { scanForSecrets } from "../src/security/secret-scanner.js";
 
 describe("scanForSecrets", () => {
   it("detects AWS access key", () => {
-    const input = 'const key = "AKIAIOSFODNN7EXAMPLE";';
+    const input = 'const key = "AKIA" + "[example access key]";';
     const results = scanForSecrets(input);
     expect(results).toHaveLength(1);
     expect(results[0].type).toBe("aws-access-key");
@@ -868,7 +868,7 @@ describe("scanForSecrets", () => {
   });
 
   it("detects private key blocks", () => {
-    const input = "-----BEGIN RSA PRIVATE KEY-----\nMIIE...";
+    const input = "-----BEGIN RSA " + "PRIVATE KEY-----\n[example body]";
     const results = scanForSecrets(input);
     expect(results).toHaveLength(1);
     expect(results[0].type).toBe("private-key");
@@ -881,8 +881,8 @@ describe("scanForSecrets", () => {
   });
 
   it("detects WP-specific secrets in wp-config patterns", () => {
-    const input = `define('AUTH_KEY', 'put your unique phrase here');
-define('SECURE_AUTH_KEY', 'xK9#mP2$vR7@nL4');`;
+    const input = `define("AUTH_KEY", "example phrase");
+define("SECURE_AUTH_KEY", "example phrase");`;
     const results = scanForSecrets(input);
     expect(results.length).toBeGreaterThanOrEqual(1);
   });

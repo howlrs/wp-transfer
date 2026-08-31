@@ -11,88 +11,62 @@
  */
 import type { PhpFileAnalysis, InputParam } from "./php-analyzer.js";
 import type { TableDefinition, ColumnDefinition } from "./schema-to-prisma.js";
-import { toPrismaModelName, toPascalModelName, toSchemaName } from "./generator-utils.js";
+import {
+  pluralizeResource,
+  toPascalModelName,
+  toPrismaModelName,
+  toSchemaName,
+} from "./generator-utils.js";
+import { toSafeIdentifier } from "./sanitize.js";
 
 // ── Route mapping ──
 
-interface RouteMapping {
+export interface RouteMapping {
   path: string;
   method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 }
 
-const PHP_TO_ROUTE: Record<string, RouteMapping> = {
-  "insert.php": { path: "app/api/events/route.ts", method: "POST" },
-  "update.php": { path: "app/api/events/[id]/route.ts", method: "PUT" },
-  "delete.php": { path: "app/api/events/[id]/route.ts", method: "DELETE" },
-  "event-copy.php": {
-    path: "app/api/events/[id]/copy/route.ts",
-    method: "POST",
-  },
-  "event-stop.php": {
-    path: "app/api/events/[id]/stop/route.ts",
-    method: "POST",
-  },
-  "event-restoration.php": {
-    path: "app/api/events/[id]/restore/route.ts",
-    method: "POST",
-  },
-  "insert_event_slot.php": {
-    path: "app/api/events/[id]/slots/route.ts",
-    method: "POST",
-  },
-  "event-slot-update.php": {
-    path: "app/api/events/[id]/slots/[slotId]/route.ts",
-    method: "PUT",
-  },
-  "event-slot-delete.php": {
-    path: "app/api/events/[id]/slots/[slotId]/route.ts",
-    method: "DELETE",
-  },
-  "lottery-update.php": {
-    path: "app/api/lottery/[id]/route.ts",
-    method: "PUT",
-  },
-  "insert_information.php": {
-    path: "app/api/information/route.ts",
-    method: "POST",
-  },
-  "information-update.php": {
-    path: "app/api/information/[id]/route.ts",
-    method: "PUT",
-  },
-  "information-text-update.php": {
-    path: "app/api/information/[id]/text/route.ts",
-    method: "PUT",
-  },
-  "information-banner-update.php": {
-    path: "app/api/information/[id]/banner/route.ts",
-    method: "PUT",
-  },
-  "information-banner-in.php": {
-    path: "app/api/information/[id]/banner/enable/route.ts",
-    method: "POST",
-  },
-  "information-banner-out.php": {
-    path: "app/api/information/[id]/banner/disable/route.ts",
-    method: "POST",
-  },
-  "information-text-in.php": {
-    path: "app/api/information/[id]/text/enable/route.ts",
-    method: "POST",
-  },
-  "information-text-out.php": {
-    path: "app/api/information/[id]/text/disable/route.ts",
-    method: "POST",
-  },
-  "user-blacklist.php": {
-    path: "app/api/users/[id]/blacklist/route.ts",
-    method: "POST",
-  },
-  "user-blacklist-out.php": {
-    path: "app/api/users/[id]/blacklist/route.ts",
-    method: "DELETE",
-  },
-};
+const CREATE_VERBS = new Set(["create", "insert", "add", "new", "save"]);
+const UPDATE_VERBS = new Set(["update", "edit", "patch", "modify"]);
+const DELETE_VERBS = new Set(["delete", "remove", "destroy"]);
+const READ_VERBS = new Set(["list", "index", "search", "browse", "detail", "show", "view", "read", "get"]);
+
+function toRouteSegment(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "") || "legacy";
+}
+
+function operationMethod(analysis: PhpFileAnalysis): RouteMapping["method"] {
+  switch (analysis.dbOperations[0]?.type) {
+    case "INSERT": return "POST";
+    case "UPDATE": return "PUT";
+    case "DELETE": return "DELETE";
+    default: return "GET";
+  }
+}
+
+/** Infer a stable API route from generic legacy source evidence only. */
+export function inferRouteMapping(analysis: PhpFileAnalysis): RouteMapping {
+  const baseName = analysis.fileName.replace(/\.[^.]+$/, "");
+  const tokens = baseName.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  const hasVerb = (verbs: Set<string>) => tokens.some((token) => verbs.has(token));
+  const method = hasVerb(DELETE_VERBS) ? "DELETE"
+    : hasVerb(UPDATE_VERBS) ? "PUT"
+      : hasVerb(CREATE_VERBS) ? "POST"
+        : hasVerb(READ_VERBS) ? "GET"
+          : operationMethod(analysis);
+  const table = analysis.dbOperations.find((operation) => operation.table && operation.table !== "unknown")?.table;
+  const resourceTokens = table ? [table] : tokens.filter((token) =>
+    !CREATE_VERBS.has(token) && !UPDATE_VERBS.has(token) && !DELETE_VERBS.has(token) && !READ_VERBS.has(token),
+  );
+  const resource = table
+    ? pluralizeResource(toRouteSegment(table))
+    : toRouteSegment(resourceTokens.join("-") || "legacy");
+  const detailVerbs = new Set(["detail", "show", "view", "read"]);
+  const hasId = method === "PUT" || method === "DELETE" ||
+    (method === "GET" && (hasVerb(detailVerbs) || analysis.inputParams.some((parameter) => parameter.name === "id")));
+  const prefix = table ? `app/api/${resource}` : `app/api/legacy/${resource}`;
+  return { path: `${prefix}${hasId ? "/[id]" : ""}/route.ts`, method };
+}
 
 // ── Zod type inference context ──
 
@@ -105,27 +79,30 @@ interface ZodTypeContext {
 
 /**
  * Check if a param name matches a boolean-like pattern:
- * cancel_mode, preview_mode, *_flg, blacklist
+ * is_*, has_*, can_*, *_flag, *_flg, *_enabled
  */
 function isBooleanLikeParam(name: string): boolean {
   const lower = name.toLowerCase();
   return (
-    lower === "cancel_mode" ||
-    lower === "preview_mode" ||
+    lower.startsWith("is_") ||
+    lower.startsWith("has_") ||
+    lower.startsWith("can_") ||
+    lower.endsWith("_flag") ||
     lower.endsWith("_flg") ||
-    lower === "blacklist"
+    lower.endsWith("_enabled")
   );
 }
 
 /**
  * Check if a param name matches a non-negative numeric pattern:
- * *_limit, *_probability, *_current, *_counter
+ * *_limit, *_count, *_quantity, *_current, *_counter
  */
 function isNonNegativeNumericParam(name: string): boolean {
   const lower = name.toLowerCase();
   return (
     lower.endsWith("_limit") ||
-    lower.endsWith("_probability") ||
+    lower.endsWith("_count") ||
+    lower.endsWith("_quantity") ||
     lower.endsWith("_current") ||
     lower.endsWith("_counter")
   );
@@ -133,7 +110,7 @@ function isNonNegativeNumericParam(name: string): boolean {
 
 /**
  * Check if a param name matches an enum-like numeric pattern:
- * *_type, *_mode, *_status (but NOT cancel_mode or preview_mode)
+ * *_type, *_mode, *_status (except names already classified as booleans)
  */
 function isEnumLikeParam(name: string): boolean {
   const lower = name.toLowerCase();
@@ -203,14 +180,15 @@ function inferZodType(param: InputParam, ctx: ZodTypeContext): string {
     return "z.array(z.string())";
   }
 
-  // 2. Boolean-like names (cancel_mode, preview_mode, *_flg, blacklist)
-  if (isBooleanLikeParam(baseName)) {
-    return 'z.preprocess((v) => v === "1" || v === 1 || v === true, z.boolean())';
-  }
-
-  // 3. DB schema Boolean type (from tinyint(1))
   const colDef = findColumnDef(baseName, ctx);
-  if (colDef?.type === "Boolean") {
+
+  // Prefer the documented database scalar over a name heuristic. In
+  // particular, IDs backed by BigInt must never pass through JavaScript's
+  // number type, which would silently lose precision.
+  if (colDef) return zodTypeForColumn(colDef);
+
+  // 2. Boolean-like names (is_*, has_*, *_flag, *_flg)
+  if (isBooleanLikeParam(baseName)) {
     return 'z.preprocess((v) => v === "1" || v === 1 || v === true, z.boolean())';
   }
 
@@ -240,18 +218,11 @@ function inferZodType(param: InputParam, ctx: ZodTypeContext): string {
     return "z.string()";
   }
 
-  // 7. DB schema nullable String → empty string to undefined preprocess
-  if (colDef?.type === "String" && colDef.nullable) {
-    return 'z.preprocess((v) => v === "" ? undefined : v, z.string().optional())';
-  }
-
-  // Other numeric-like names (disp, number, information, banner, invalid, etc.)
+  // Other numeric-like names
   if (
     baseName.includes("number") ||
-    baseName.includes("disp") ||
-    baseName === "information" ||
-    baseName === "banner" ||
-    baseName === "invalid"
+    baseName.endsWith("_order") ||
+    baseName.endsWith("_index")
   ) {
     return "z.coerce.number().int()";
   }
@@ -263,6 +234,45 @@ function inferZodType(param: InputParam, ctx: ZodTypeContext): string {
 
   // Text fields (default)
   return "z.string()";
+}
+
+/** Return an exact, Prisma-compatible input validator for a documented scalar. */
+function zodTypeForColumn(column: ColumnDefinition): string {
+  let schema: string;
+  switch (column.type) {
+    case "Boolean":
+      schema = 'z.preprocess((v) => v === "1" || v === 1 || v === true, z.boolean())';
+      break;
+    case "Int":
+      schema = "z.coerce.number().int().finite().min(-2147483648).max(2147483647)";
+      break;
+    case "BigInt":
+      // JSON cannot transport bigint values. Canonical decimal strings retain
+      // the full value and are converted only after validation.
+      schema = 'z.string().regex(/^(?:0|-?[1-9]\\d*)$/, "Expected a canonical integer string").transform((value) => BigInt(value))';
+      break;
+    case "Float":
+      schema = "z.coerce.number().finite()";
+      break;
+    case "Decimal":
+      // Prisma accepts decimal strings natively; retaining the string avoids
+      // rounding before Prisma constructs its Decimal instance.
+      schema = 'z.string().regex(/^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$/, "Expected a decimal string")';
+      break;
+    case "DateTime":
+      schema = "z.coerce.date()";
+      break;
+    case "Bytes":
+      schema = 'z.string().regex(/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/, "Expected base64 data").transform((value) => Buffer.from(value, "base64"))';
+      break;
+    case "Json":
+      schema = "z.unknown()";
+      break;
+    default:
+      schema = "z.string()";
+  }
+
+  return column.nullable ? `${schema}.nullable()` : schema;
 }
 
 /**
@@ -303,7 +313,7 @@ function generateZodSchema(
     .map((p) => {
       // Strip [] from field name for the schema key
       const fieldName = p.name.replace(/\[\]$/, "");
-      return `  ${fieldName}: ${inferZodType(p, ctx)}${optionalSuffix},`;
+      return `  ${JSON.stringify(fieldName)}: ${inferZodType(p, ctx)}${optionalSuffix},`;
     })
     .join("\n");
 
@@ -315,6 +325,22 @@ function generateZodSchema(
   }
 
   return schema;
+}
+
+/**
+ * Generate an allowlist for schema-driven routes. Only writable scalar
+ * columns are admitted: generated, default-managed, and primary-key columns must not be
+ * overposted, and `.strict()` rejects relation/nested-operation payloads.
+ */
+function generateTableWriteSchema(table: TableDefinition, partial: boolean): string {
+  const writable = table.columns.filter(
+    (column) => !column.isPrimary && !column.isAutoIncrement && column.defaultValue === undefined,
+  );
+  const fields = writable.map((column) => {
+    const optional = partial ? ".optional()" : "";
+    return `  ${JSON.stringify(column.name)}: ${zodTypeForColumn(column)}${optional},`;
+  }).join("\n");
+  return `z.object({${fields ? `\n${fields}\n` : ""}}).strict()`;
 }
 
 /**
@@ -364,7 +390,7 @@ function detectTransaction(analysis: PhpFileAnalysis): TransactionInfo {
       // Two different tables: try to detect parent-child via FK column naming
       const [tableA, tableB] = [inserts[0]!, inserts[1]!];
 
-      // Check if tableB has a column referencing tableA (e.g., event_id in event_slot)
+      // Check if tableB has a column referencing tableA (e.g., parent_id in child_record)
       const fkInB = tableB.columns.find(
         (col) => col === `${tableA.table}_id`,
       );
@@ -428,6 +454,32 @@ function detectFileUploads(params: InputParam[]): FileUploadInfo {
   };
 }
 
+/**
+ * Files are persisted only when their request fields map unambiguously to a
+ * writable column on the model this route mutates. This prevents orphaned
+ * files when a PHP upload field has no Prisma destination.
+ */
+function mappedUploadFieldNames(
+  fileParams: InputParam[],
+  operation: { type: string; table: string; columns: string[] } | null,
+  tables?: TableDefinition[],
+): Set<string> {
+  if (!operation || !["INSERT", "UPDATE"].includes(operation.type)) {
+    return new Set();
+  }
+
+  const table = tables?.find((candidate) => candidate.name === operation.table);
+  const schemaColumns = table ? new Set(table.columns.map((column) => column.name)) : null;
+  return new Set(
+    fileParams
+      .map((parameter) => parameter.name.replace(/\[\]$/, ""))
+      .filter((fieldName) =>
+        operation.columns.includes(fieldName) &&
+        (schemaColumns === null || schemaColumns.has(fieldName)),
+      ),
+  );
+}
+
 // ── Delete pattern detection ──
 
 interface DeletePattern {
@@ -446,7 +498,7 @@ function detectDeletePattern(analysis: PhpFileAnalysis): DeletePattern {
   }
 
   // Check for soft-delete patterns: UPDATE with status/flag columns
-  const softDeleteColumns = ["status", "is_active", "is_deleted", "deleted_at", "blacklist", "invalid"];
+  const softDeleteColumns = ["is_active", "is_deleted", "deleted_at", "is_archived", "archived_at"];
   for (const op of analysis.dbOperations) {
     if (op.type === "UPDATE") {
       for (const col of op.columns) {
@@ -464,10 +516,121 @@ function detectDeletePattern(analysis: PhpFileAnalysis): DeletePattern {
 
 // ── Route handler generation ──
 
+function generateJsonSafeHelper(): string {
+  return `function jsonSafe(value: unknown): unknown {
+  if (typeof value === "bigint") return value.toString();
+  if (Array.isArray(value)) return value.map(jsonSafe);
+  if (value === null || value instanceof Date || typeof value !== "object") return value;
+  const serializable = value as { toJSON?: () => unknown };
+  if (typeof serializable.toJSON === "function") return jsonSafe(serializable.toJSON());
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) return value;
+  return Object.fromEntries(Object.entries(value).map(([key, nested]) => [key, jsonSafe(nested)]));
+}`;
+}
+
+function generateBigIntPathParser(): string {
+  return `function parseBigIntPath(value: string): bigint {
+  if (!/^(?:0|-?[1-9]\\d*)$/.test(value)) throw new Error("Expected a canonical integer path parameter");
+  return BigInt(value);
+}`;
+}
+
+function generateRoutePreamble(hasFiles: boolean, requireAuth = false): string {
+  const lines = [
+    'import { NextRequest, NextResponse } from "next/server";',
+    'import { z } from "zod";',
+    'import { prisma } from "@/lib/db";',
+  ];
+  if (requireAuth) lines.push('import { requireActiveAccess } from "@/lib/require-active-user";');
+  lines.push("");
+  lines.push(generateJsonSafeHelper());
+  lines.push("");
+  lines.push(generateBigIntPathParser());
+  if (hasFiles) {
+    lines.push('import { writeFile, mkdir, unlink } from "node:fs/promises";');
+    lines.push('import { randomUUID } from "node:crypto";');
+    lines.push('import path from "node:path";');
+    lines.push("");
+    lines.push("function hasSignature(bytes: Uint8Array, signature: readonly number[], offset = 0): boolean {");
+    lines.push("  return signature.every((value, index) => bytes[offset + index] === value);");
+    lines.push("}");
+    lines.push("");
+    lines.push("function detectImageExtension(bytes: Uint8Array): string | null {");
+    lines.push('  if (hasSignature(bytes, [0xff, 0xd8, 0xff])) return ".jpg";');
+    lines.push('  if (hasSignature(bytes, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) return ".png";');
+    lines.push('  if (hasSignature(bytes, [0x47, 0x49, 0x46, 0x38, 0x37, 0x61])) return ".gif";');
+    lines.push('  if (hasSignature(bytes, [0x47, 0x49, 0x46, 0x38, 0x39, 0x61])) return ".gif";');
+    lines.push('  if (hasSignature(bytes, [0x52, 0x49, 0x46, 0x46]) && hasSignature(bytes, [0x57, 0x45, 0x42, 0x50], 8)) return ".webp";');
+    lines.push("  return null;");
+    lines.push("}");
+  }
+  return lines.join("\n");
+}
+
+/** Convert a generated route file path into its canonical authorization scope. */
+export function routeResourcePath(routePath: string): string {
+  return routePath
+    .replace(/^app\/api/, "")
+    .replace(/\/\[[^/]+\]/g, "")
+    .replace(/\/route\.ts$/, "") || "/";
+}
+
+function authorizationLines(resourcePath: string, requireAuth: boolean): string[] {
+  if (!requireAuth) return [];
+  return [
+    `  const activeUser = await requireActiveAccess("${resourcePath}");`,
+    '  if (!activeUser) return NextResponse.json({ error: "Forbidden" }, { status: 403 });',
+    "",
+  ];
+}
+
+function authorizationBlock(resourcePath: string, requireAuth: boolean): string {
+  return authorizationLines(resourcePath, requireAuth).join("\n");
+}
+
+interface PrimaryKeyInfo {
+  name: string;
+  type: string;
+}
+
+/**
+ * Resolve the single Prisma key that can safely identify a PHP-derived detail
+ * route. When no schema is available, retain the legacy id:Int fallback; when
+ * a schema is available but ambiguous, do not manufacture a detail mutation.
+ */
+function resolvePrimaryKey(tableName: string, tables?: TableDefinition[]): PrimaryKeyInfo | null {
+  if (!tables || tables.length === 0) return { name: "id", type: "Int" };
+
+  const table = tables.find((candidate) => candidate.name === tableName);
+  if (!table) return null;
+  const primaryColumns = table.columns.filter((column) => column.isPrimary);
+  return primaryColumns.length === 1
+    ? { name: primaryColumns[0]!.name, type: primaryColumns[0]!.type }
+    : null;
+}
+
+function parsePrimaryKeyExpression(rawValue: string, type: string): string {
+  if (type === "Int") return `parseInt(${rawValue}, 10)`;
+  if (type === "BigInt") return `parseBigIntPath(${rawValue})`;
+  return rawValue;
+}
+
+function primaryKeyWhere(primaryKey: PrimaryKeyInfo, value: string): string {
+  return `{ ${JSON.stringify(primaryKey.name)}: ${value} }`;
+}
+
+function uploadVariableName(fieldName: string, index: number): string {
+  const safe = toSafeIdentifier(fieldName);
+  return safe === fieldName ? safe : `${safe}_${index}`;
+}
+
 function generateRouteHandler(
   analysis: PhpFileAnalysis,
   mapping: RouteMapping,
   tables?: TableDefinition[],
+  includePreamble = true,
+  requireAuth = false,
 ): string {
   const schemaName = toSchemaName(analysis.fileName);
   const params = analysis.inputParams;
@@ -488,6 +651,7 @@ function generateRouteHandler(
       ? analysis.dbOperations[0]!.table
       : "unknown";
   const modelName = toPrismaModelName(primaryTable);
+  const primaryKey = resolvePrimaryKey(primaryTable, tables);
 
   // Detect loop array parameters from foreach analysis
   const loopArrayParams = new Set<string>();
@@ -505,25 +669,17 @@ function generateRouteHandler(
   const primaryOpType = analysis.dbOperations.length > 0 ? analysis.dbOperations[0]!.type : null;
   const isDeleteOp = primaryOpType === "DELETE";
   const bodyParams = isDeleteOp ? [] : params.filter((p) => p.source !== "$_FILES");
-  const hasBody = bodyParams.length > 0;
 
   // File upload detection
   const fileUpload = detectFileUploads(params);
+  const op = analysis.dbOperations.length > 0 ? analysis.dbOperations[0]! : null;
+  const mappedUploadFields = mappedUploadFieldNames(fileUpload.fileParams, op, tables);
+  const hasBody = bodyParams.length > 0 || fileUpload.hasFiles;
 
   // Transaction detection
   const txInfo = detectTransaction(analysis);
 
-  const lines: string[] = [];
-
-  // Imports
-  lines.push('import { NextRequest, NextResponse } from "next/server";');
-  lines.push('import { z } from "zod";');
-  lines.push('import { prisma } from "@/lib/db";');
-  if (fileUpload.hasFiles) {
-    lines.push('import { writeFile, mkdir } from "node:fs/promises";');
-    lines.push('import path from "node:path";');
-  }
-  lines.push("");
+  const lines: string[] = includePreamble ? [generateRoutePreamble(fileUpload.hasFiles, requireAuth), ""] : [];
 
   // Zod schema
   if (hasBody) {
@@ -541,6 +697,18 @@ function generateRouteHandler(
   lines.push(
     `export async function ${mapping.method}(${fnArgs.join(", ")}) {`,
   );
+  lines.push(...authorizationLines(routeResourcePath(mapping.path), requireAuth));
+  if (hasPathParams && !primaryKey) {
+    lines.push("  // TODO: Add a single-column primary key before enabling this PHP-derived detail route.");
+    lines.push('  return NextResponse.json({ error: "Detail routes require a single-column primary key" }, { status: 501 });');
+    lines.push("}");
+    return lines.join("\n");
+  }
+  if (fileUpload.hasFiles) {
+    lines.push("  const pendingUploads: Array<{ filePath: string; bytes: Uint8Array }> = [];");
+    lines.push("  const uploadedFilePaths: string[] = [];");
+    lines.push("  const uploadData: Record<string, string> = {};");
+  }
   lines.push("  try {");
 
   // Parse path params
@@ -548,7 +716,7 @@ function generateRouteHandler(
     lines.push("    const resolvedParams = await params;");
     for (const p of pathParams) {
       lines.push(
-        `    const ${p} = parseInt(resolvedParams.${p}, 10);`,
+        `    const ${p} = ${parsePrimaryKeyExpression(`resolvedParams.${p}`, primaryKey!.type)};`,
       );
     }
     lines.push("");
@@ -561,29 +729,71 @@ function generateRouteHandler(
       lines.push("");
 
       // File handling for each file param
-      for (const fp of fileUpload.fileParams) {
+      for (const [fileIndex, fp] of fileUpload.fileParams.entries()) {
+        const variableName = uploadVariableName(fp.name, fileIndex);
         lines.push(
-          `    const ${fp.name} = formData.get("${fp.name}") as File | null;`,
+          `    const ${variableName} = formData.get(${JSON.stringify(fp.name)}) as File | null;`,
         );
+      }
+
+      for (const [fileIndex, fp] of fileUpload.fileParams.entries()) {
+        const fieldName = fp.name.replace(/\[\]$/, "");
+        const variableName = uploadVariableName(fp.name, fileIndex);
+        if (!mappedUploadFields.has(fieldName)) {
+          lines.push(`    if (${variableName}) {`);
+          lines.push(`      // TODO: Map upload field ${JSON.stringify(fieldName)} to a writable ${modelName} column before accepting files.`);
+          lines.push(`      return NextResponse.json({ error: ${JSON.stringify(`Upload field ${fieldName} is not mapped to a writable database column`)} }, { status: 400 });`);
+          lines.push("    }");
+        }
       }
 
       // Generate file save logic
       lines.push("");
-      lines.push('    const uploadDir = path.join(process.cwd(), "public/uploads");');
+      lines.push('    const uploadDir = path.resolve(process.cwd(), "public/uploads");');
       lines.push("    await mkdir(uploadDir, { recursive: true });");
+      lines.push("    const allowedImageTypes: Record<string, { extensions: readonly string[]; storedExtension: string }> = {");
+      lines.push('      "image/jpeg": { extensions: [".jpg", ".jpeg"], storedExtension: ".jpg" },');
+      lines.push('      "image/png": { extensions: [".png"], storedExtension: ".png" },');
+      lines.push('      "image/gif": { extensions: [".gif"], storedExtension: ".gif" },');
+      lines.push('      "image/webp": { extensions: [".webp"], storedExtension: ".webp" },');
+      lines.push("    };");
+      lines.push("    const maxFileSize = 5 * 1024 * 1024;");
       lines.push("");
-      for (const fp of fileUpload.fileParams) {
-        lines.push(`    let ${fp.name}Path: string | null = null;`);
-        lines.push(`    if (${fp.name}) {`);
+      for (const [fileIndex, fp] of fileUpload.fileParams.entries()) {
+        const fieldName = fp.name.replace(/\[\]$/, "");
+        const variableName = uploadVariableName(fp.name, fileIndex);
+        if (!mappedUploadFields.has(fieldName)) continue;
+        const pathVariableName = `${variableName}Path`;
+        lines.push(`    let ${pathVariableName}: string | null = null;`);
+        lines.push(`    if (${variableName}) {`);
+        lines.push(`      const imageType = allowedImageTypes[${variableName}.type];`);
+        lines.push(`      const clientExtension = path.extname(${variableName}.name).toLowerCase();`);
+        lines.push("      if (!imageType || !imageType.extensions.includes(clientExtension)) {");
+        lines.push('        return NextResponse.json({ error: "Unsupported image type" }, { status: 400 });');
+        lines.push("      }");
+        lines.push(`      if (${variableName}.size > maxFileSize) {`);
+        lines.push('        return NextResponse.json({ error: "Image exceeds 5 MB limit" }, { status: 400 });');
+        lines.push("      }");
         lines.push(
-          `      const bytes = new Uint8Array(await ${fp.name}.arrayBuffer());`,
+          `      const bytes = new Uint8Array(await ${variableName}.arrayBuffer());`,
+        );
+        lines.push("      const detectedExtension = detectImageExtension(bytes);");
+        lines.push("      if (!detectedExtension || detectedExtension !== imageType.storedExtension) {");
+        lines.push('        return NextResponse.json({ error: "Image content does not match its declared type" }, { status: 400 });');
+        lines.push("      }");
+        lines.push("      const extension = detectedExtension;");
+        lines.push(
+          `      ${pathVariableName} = path.resolve(uploadDir, \`${"${randomUUID()}${extension}"}\`);`,
         );
         lines.push(
-          `      ${fp.name}Path = path.join(uploadDir, ${fp.name}.name);`,
+          `      if (!${pathVariableName}.startsWith(\`${"${uploadDir}${path.sep}"}\`)) {`,
         );
         lines.push(
-          `      await writeFile(${fp.name}Path, bytes);`,
+          '        return NextResponse.json({ error: "Invalid upload path" }, { status: 400 });',
         );
+        lines.push("      }");
+        lines.push(`      pendingUploads.push({ filePath: ${pathVariableName}, bytes });`);
+        lines.push(`      uploadData[${JSON.stringify(fieldName)}] = \`/uploads/\${path.basename(${pathVariableName})}\`;`);
         lines.push("    }");
         lines.push("");
       }
@@ -600,13 +810,17 @@ function generateRouteHandler(
       lines.push("    const body = await request.json();");
     }
     lines.push(`    const data = ${schemaName}.parse(body);`);
+    if (fileUpload.hasFiles) {
+      lines.push("    const dataWithUploads = { ...data, ...uploadData };");
+      lines.push("    for (const upload of pendingUploads) {");
+      lines.push("      uploadedFilePaths.push(upload.filePath);");
+      lines.push("      await writeFile(upload.filePath, upload.bytes);");
+      lines.push("    }");
+    }
     lines.push("");
   }
 
   // Business logic placeholder based on operation type
-  const op =
-    analysis.dbOperations.length > 0 ? analysis.dbOperations[0] : null;
-
   lines.push(
     `    // TODO: Implement business logic (migrated from ${analysis.fileName})`,
   );
@@ -620,9 +834,9 @@ function generateRouteHandler(
       : op;
 
   if (txInfo.needed) {
-    generateTransactionBody(lines, analysis, txInfo, modelName, hasBody, hasPathParams, pathParams);
+    generateTransactionBody(lines, analysis, txInfo, modelName, hasBody, hasPathParams, pathParams, fileUpload.hasFiles ? "dataWithUploads" : "data", primaryKey);
   } else if (effectiveOp) {
-    generateDirectBody(lines, effectiveOp, analysis, modelName, hasBody, hasPathParams, pathParams);
+    generateDirectBody(lines, effectiveOp, analysis, modelName, hasBody, hasPathParams, pathParams, fileUpload.hasFiles ? "dataWithUploads" : "data", primaryKey);
   } else {
     lines.push("");
     lines.push(
@@ -632,6 +846,9 @@ function generateRouteHandler(
 
   // Error handling
   lines.push("  } catch (error) {");
+  if (fileUpload.hasFiles) {
+    lines.push("    await Promise.all(uploadedFilePaths.map((filePath) => unlink(filePath).catch(() => undefined)));");
+  }
   lines.push("    if (error instanceof z.ZodError) {");
   lines.push(
     "      return NextResponse.json({ errors: error.errors }, { status: 400 });",
@@ -657,6 +874,8 @@ function generateTransactionBody(
   hasBody: boolean,
   hasPathParams: boolean,
   pathParams: string[],
+  dataVariable: string,
+  primaryKey: PrimaryKeyInfo | null,
 ): void {
   if (txInfo.pattern === "parent-child" && txInfo.parentTable && txInfo.childTable) {
     const parentModel = toPrismaModelName(txInfo.parentTable);
@@ -667,7 +886,7 @@ function generateTransactionBody(
     lines.push(`      const parent = await tx.${parentModel}.create({`);
     lines.push("        data: {");
     if (hasBody) {
-      lines.push("          ...data,");
+      lines.push(`          ...${dataVariable},`);
     }
     lines.push("        },");
     lines.push("      });");
@@ -677,9 +896,9 @@ function generateTransactionBody(
       (op) => op.type === "INSERT" && op.table === txInfo.childTable && op.inLoop,
     );
     if (childOpsInLoop) {
-      lines.push("      if (Array.isArray(data.items) && data.items.length > 0) {");
+      lines.push(`      if (Array.isArray(${dataVariable}.items) && ${dataVariable}.items.length > 0) {`);
       lines.push(`        await tx.${childModel}.createMany({`);
-      lines.push(`          data: data.items.map((item: Record<string, unknown>) => ({ ...item, ${txInfo.childFkColumn ?? txInfo.parentTable + "_id"}: parent.id })),`);
+      lines.push(`          data: ${dataVariable}.items.map((item: Record<string, unknown>) => ({ ...item, ${txInfo.childFkColumn ?? txInfo.parentTable + "_id"}: parent.id })),`);
       lines.push("        });");
       lines.push("      }");
     } else {
@@ -694,21 +913,21 @@ function generateTransactionBody(
     lines.push("    });");
     lines.push("");
     lines.push(
-      "    return NextResponse.json(result, { status: 201 });",
+      "    return NextResponse.json(jsonSafe(result), { status: 201 });",
     );
   } else if (txInfo.pattern === "check-then-insert") {
     lines.push("");
     lines.push("    const result = await prisma.$transaction(async (tx) => {");
     lines.push(`      const existing = await tx.${modelName}.findFirst({`);
     if (hasPathParams) {
-      lines.push(`        where: { id: ${pathParams[0]} },`);
+      lines.push(`        where: ${primaryKeyWhere(primaryKey!, pathParams[0]!)},`);
     }
     lines.push("      });");
     lines.push("");
     lines.push(`      const created = await tx.${modelName}.create({`);
     lines.push("        data: {");
     if (hasBody) {
-      lines.push("          ...data,");
+      lines.push(`          ...${dataVariable},`);
     }
     lines.push("        },");
     lines.push("      });");
@@ -717,7 +936,7 @@ function generateTransactionBody(
     lines.push("    });");
     lines.push("");
     lines.push(
-      "    return NextResponse.json(result, { status: 201 });",
+      "    return NextResponse.json(jsonSafe(result), { status: 201 });",
     );
   } else {
     // Ambiguous pattern
@@ -737,7 +956,7 @@ function generateTransactionBody(
       lines.push(`      await tx.${iModelName}.create({`);
       lines.push("        data: {");
       if (hasBody) {
-        lines.push("          ...data,");
+        lines.push(`          ...${dataVariable},`);
       }
       lines.push("        },");
       lines.push("      });");
@@ -748,7 +967,7 @@ function generateTransactionBody(
     lines.push("    });");
     lines.push("");
     lines.push(
-      "    return NextResponse.json(result, { status: 201 });",
+      "    return NextResponse.json(jsonSafe(result), { status: 201 });",
     );
   }
 }
@@ -761,37 +980,39 @@ function generateDirectBody(
   hasBody: boolean,
   hasPathParams: boolean,
   pathParams: string[],
+  dataVariable: string,
+  primaryKey: PrimaryKeyInfo | null,
 ): void {
   switch (op.type) {
     case "INSERT":
       lines.push(`    const result = await prisma.${modelName}.create({`);
       lines.push("      data: {");
       if (hasBody) {
-        lines.push("        ...data,");
+        lines.push(`        ...${dataVariable},`);
       }
       lines.push("      },");
       lines.push("    });");
       lines.push("");
       lines.push(
-        "    return NextResponse.json(result, { status: 201 });",
+        "    return NextResponse.json(jsonSafe(result), { status: 201 });",
       );
       break;
 
     case "UPDATE":
       lines.push(`    const result = await prisma.${modelName}.update({`);
       if (hasPathParams) {
-        lines.push(`      where: { id: ${pathParams[0]} },`);
+        lines.push(`      where: ${primaryKeyWhere(primaryKey!, pathParams[0]!)},`);
       } else {
-        lines.push("      where: { id: data.update ?? data.id },");
+        lines.push(`      where: ${primaryKeyWhere(primaryKey!, `${dataVariable}.update ?? ${dataVariable}[${JSON.stringify(primaryKey!.name)}]`)},`);
       }
       lines.push("      data: {");
       if (hasBody) {
-        lines.push("        ...data,");
+        lines.push(`        ...${dataVariable},`);
       }
       lines.push("      },");
       lines.push("    });");
       lines.push("");
-      lines.push("    return NextResponse.json(result);");
+      lines.push("    return NextResponse.json(jsonSafe(result));");
       break;
 
     case "DELETE": {
@@ -800,23 +1021,23 @@ function generateDirectBody(
         lines.push(`    // Soft-delete: updating ${deletePattern.column} instead of removing record`);
         lines.push(`    const result = await prisma.${modelName}.update({`);
         if (hasPathParams) {
-          lines.push(`      where: { id: ${pathParams[0]} },`);
+          lines.push(`      where: ${primaryKeyWhere(primaryKey!, pathParams[0]!)},`);
         } else {
-          lines.push("      where: { id: parseInt(request.nextUrl.searchParams.get('id') ?? '0') },");
+          lines.push(`      where: ${primaryKeyWhere(primaryKey!, parsePrimaryKeyExpression(`request.nextUrl.searchParams.get(${JSON.stringify(primaryKey!.name)}) ?? ""`, primaryKey!.type))},`);
         }
         lines.push("      data: {");
         lines.push(`        ${deletePattern.column}: ${deletePattern.value},`);
         lines.push("      },");
         lines.push("    });");
         lines.push("");
-        lines.push("    return NextResponse.json(result);");
+        lines.push("    return NextResponse.json(jsonSafe(result));");
       } else {
         // Hard-delete (existing behavior)
         lines.push(`    await prisma.${modelName}.delete({`);
         if (hasPathParams) {
-          lines.push(`      where: { id: ${pathParams[0]} },`);
+          lines.push(`      where: ${primaryKeyWhere(primaryKey!, pathParams[0]!)},`);
         } else {
-          lines.push("      where: { id: parseInt(request.nextUrl.searchParams.get('id') ?? '0') },");
+          lines.push(`      where: ${primaryKeyWhere(primaryKey!, parsePrimaryKeyExpression(`request.nextUrl.searchParams.get(${JSON.stringify(primaryKey!.name)}) ?? ""`, primaryKey!.type))},`);
         }
         lines.push("    });");
         lines.push("");
@@ -826,13 +1047,20 @@ function generateDirectBody(
     }
 
     case "SELECT":
-      lines.push(`    const result = await prisma.${modelName}.findUnique({`);
       if (hasPathParams) {
-        lines.push(`      where: { id: ${pathParams[0]} },`);
+        lines.push(`    const result = await prisma.${modelName}.findUnique({`);
+        lines.push(`      where: ${primaryKeyWhere(primaryKey!, pathParams[0]!)},`);
+        lines.push("    });");
+        lines.push("");
+        lines.push("    return NextResponse.json(jsonSafe(result));");
+      } else {
+        lines.push("    const [items, total] = await Promise.all([");
+        lines.push(`      prisma.${modelName}.findMany(),`);
+        lines.push(`      prisma.${modelName}.count(),`);
+        lines.push("    ]);");
+        lines.push("");
+        lines.push("    return NextResponse.json(jsonSafe({ items, total }));");
       }
-      lines.push("    });");
-      lines.push("");
-      lines.push("    return NextResponse.json(result);");
       break;
   }
 }
@@ -842,13 +1070,20 @@ function generateDirectBody(
 /**
  * Generate a list (GET /api/{resource}) handler from a DB table definition.
  */
-function generateListHandler(modelName: string, pkColumn: string): string {
+function generateListHandler(table: TableDefinition, resourcePath: string, requireAuth: boolean): string {
+  const modelName = toPrismaModelName(table.name);
+  const pkColumn = table.columns.find((column) => column.isPrimary)!.name;
   return `import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import { prisma } from "@/lib/db";
+${requireAuth ? 'import { requireActiveAccess } from "@/lib/require-active-user";\n' : ""}
+${generateJsonSafeHelper()}
+
+${generateBigIntPathParser()}
 
 // TODO: Auto-generated from DB schema — verify business logic
 export async function GET(request: NextRequest) {
-  const { searchParams } = request.nextUrl;
+${authorizationBlock(resourcePath, requireAuth)}  const { searchParams } = request.nextUrl;
   const skip = parseInt(searchParams.get("skip") ?? "0", 10);
   const take = parseInt(searchParams.get("take") ?? "20", 10);
 
@@ -857,15 +1092,15 @@ export async function GET(request: NextRequest) {
     prisma.${modelName}.count(),
   ]);
 
-  return NextResponse.json({ items, total, skip, take });
+  return NextResponse.json(jsonSafe({ items, total, skip, take }));
 }
 
 // Schema-driven POST — admin form scaffold posts here. Customize validation.
 export async function POST(request: NextRequest) {
-  try {
-    const data = await request.json();
+${authorizationBlock(resourcePath, requireAuth)}  try {
+    const data = ${generateTableWriteSchema(table, false)}.parse(await request.json());
     const created = await prisma.${modelName}.create({ data });
-    return NextResponse.json(created, { status: 201 });
+    return NextResponse.json(jsonSafe(created), { status: 201 });
   } catch (error) {
     console.error("[POST /${modelName}]", error);
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
@@ -875,13 +1110,15 @@ export async function POST(request: NextRequest) {
 }
 
 /** List handler for composite-key tables (no orderBy — no single PK column). */
-function generateListHandlerNoOrder(modelName: string): string {
+function generateListHandlerNoOrder(modelName: string, resourcePath: string, requireAuth: boolean): string {
   return `import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+${requireAuth ? 'import { requireActiveAccess } from "@/lib/require-active-user";\n' : ""}
+${generateJsonSafeHelper()}
 
 // TODO: Composite-key table — add explicit orderBy if ordering matters
 export async function GET(request: NextRequest) {
-  const { searchParams } = request.nextUrl;
+${authorizationBlock(resourcePath, requireAuth)}  const { searchParams } = request.nextUrl;
   const skip = parseInt(searchParams.get("skip") ?? "0", 10);
   const take = parseInt(searchParams.get("take") ?? "20", 10);
 
@@ -890,7 +1127,7 @@ export async function GET(request: NextRequest) {
     prisma.${modelName}.count(),
   ]);
 
-  return NextResponse.json({ items, total, skip, take });
+  return NextResponse.json(jsonSafe({ items, total, skip, take }));
 }
 `;
 }
@@ -898,20 +1135,29 @@ export async function GET(request: NextRequest) {
 /**
  * Generate a detail (GET /api/{resource}/[id]) handler from a DB table definition.
  */
-function generateDetailHandler(modelName: string, pkColumn: string, pkType: string): string {
+function generateDetailHandler(table: TableDefinition, resourcePath: string, requireAuth: boolean): string {
+  const modelName = toPrismaModelName(table.name);
+  const primaryKey = table.columns.find((column) => column.isPrimary)!;
+  const pkColumn = primaryKey.name;
+  const pkType = primaryKey.type;
   const parseExpr =
     pkType === "Int" ? "parseInt(id, 10)"
-    : pkType === "BigInt" ? "BigInt(id)"
+    : pkType === "BigInt" ? "parseBigIntPath(id)"
     : "id";
   return `import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import { prisma } from "@/lib/db";
+${requireAuth ? 'import { requireActiveAccess } from "@/lib/require-active-user";\n' : ""}
+${generateJsonSafeHelper()}
+
+${generateBigIntPathParser()}
 
 // TODO: Auto-generated from DB schema — verify business logic
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const { id } = await params;
+${authorizationBlock(resourcePath, requireAuth)}  const { id } = await params;
   const item = await prisma.${modelName}.findUnique({
     where: { ${pkColumn}: ${parseExpr} },
   });
@@ -920,21 +1166,21 @@ export async function GET(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  return NextResponse.json(item);
+  return NextResponse.json(jsonSafe(item));
 }
 
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  try {
+${authorizationBlock(resourcePath, requireAuth)}  try {
     const { id } = await params;
-    const data = await request.json();
+    const data = ${generateTableWriteSchema(table, true)}.parse(await request.json());
     const updated = await prisma.${modelName}.update({
       where: { ${pkColumn}: ${parseExpr} },
       data,
     });
-    return NextResponse.json(updated);
+    return NextResponse.json(jsonSafe(updated));
   } catch (error) {
     console.error("[PUT /${modelName}/:id]", error);
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
@@ -945,7 +1191,7 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  try {
+${authorizationBlock(resourcePath, requireAuth)}  try {
     const { id } = await params;
     await prisma.${modelName}.delete({ where: { ${pkColumn}: ${parseExpr} } });
     return NextResponse.json({ success: true });
@@ -967,37 +1213,13 @@ export async function DELETE(
 function generateGetEndpoints(
   tables: TableDefinition[],
   existingPaths: Set<string>,
+  requireAuth: boolean,
 ): Map<string, string> {
   const getStubs = new Map<string, string>();
 
-  // Collect top-level resource segments already present in existingPaths
-  // (e.g. app/api/users/[id]/blacklist/route.ts → "users").
-  // This lets us co-locate schema-driven GETs under plural PHP routes even
-  // when the table name is singular (user).
-  const existingResources = new Set<string>();
-  for (const p of existingPaths) {
-    const m = p.match(/^app\/api\/([^/[]+)/);
-    if (m) existingResources.add(m[1]!);
-  }
-
-  const pluralize = (n: string): string => {
-    if (n.endsWith("s")) return n;
-    if (n.endsWith("y") && !["a","e","i","o","u"].includes(n[n.length - 2] ?? "")) {
-      return n.slice(0, -1) + "ies";
-    }
-    return n + "s";
-  };
-
   for (const table of tables) {
-    // Pick the resource segment: prefer exact table name, else its plural if
-    // that plural already exists as a PHP-mapped route.
-    let resource = table.name;
-    if (!existingResources.has(resource)) {
-      const plural = pluralize(resource);
-      if (existingResources.has(plural)) resource = plural;
-    }
+    const resource = pluralizeResource(table.name);
     const modelName = toPrismaModelName(table.name);
-
     const pkCol = table.columns.find(c => c.isPrimary);
     // Composite PK tables (@@id([a, b])) have no single isPrimary column.
     // We cannot generate a safe detail GET (requires compound where clause),
@@ -1014,15 +1236,14 @@ function generateGetEndpoints(
 
     const listPath = existingListPath ?? `app/api/${resource}/route.ts`;
     const detailPath = existingDetailPath ?? `app/api/${resource}/[id]/route.ts`;
+    const resourcePath = `/${resource}`;
 
     if (isCompositeOnly) {
-      getStubs.set(listPath, generateListHandlerNoOrder(modelName));
+      getStubs.set(listPath, generateListHandlerNoOrder(modelName, resourcePath, requireAuth));
       // Skip detail generation for composite-key tables
     } else {
-      const pkColumn = pkCol!.name;
-      const pkType = pkCol!.type;
-      getStubs.set(listPath, generateListHandler(modelName, pkColumn));
-      getStubs.set(detailPath, generateDetailHandler(modelName, pkColumn, pkType));
+      getStubs.set(listPath, generateListHandler(table, resourcePath, requireAuth));
+      getStubs.set(detailPath, generateDetailHandler(table, resourcePath, requireAuth));
     }
   }
 
@@ -1031,38 +1252,74 @@ function generateGetEndpoints(
 
 // ── Public API ──
 
+function safeAnalysisSourcePath(analysis: PhpFileAnalysis): string {
+  const sourcePath = analysis.sourceRelativePath;
+  if (sourcePath && !sourcePath.startsWith("/") && !sourcePath.includes("\\") && sourcePath.split("/").every(part => part && part !== "." && part !== "..")) {
+    return sourcePath.replace(/[^a-zA-Z0-9._/-]/g, "_");
+  }
+  const baseName = analysis.fileName.replace(/\\/g, "/").split("/").pop() || "unknown.php";
+  return baseName.replace(/[^a-zA-Z0-9._-]/g, "_");
+}
+
+function routeConflictError(
+  mapping: RouteMapping,
+  analyses: PhpFileAnalysis[],
+): Error {
+  const fileNames = [...new Set(analyses.map(safeAnalysisSourcePath))].sort();
+  return new Error(
+    `Conflicting PHP route analyses for ${mapping.method} ${mapping.path}: ${fileNames.join(", ")}. ` +
+    "Split the routes or resolve the source mappings before generation.",
+  );
+}
+
+export interface GenerateApiStubsOptions {
+  requireAuth?: boolean;
+}
+
 export function generateApiStubs(
   analyses: PhpFileAnalysis[],
   tables?: TableDefinition[],
+  options: GenerateApiStubsOptions = {},
 ): Map<string, string> {
+  const requireAuth = options.requireAuth === true;
   const stubs = new Map<string, string>();
+  const selected = new Map<string, Array<{ analysis: PhpFileAnalysis; mapping: RouteMapping }>>();
 
   for (const analysis of analyses) {
-    const mapping = PHP_TO_ROUTE[analysis.fileName];
-    if (!mapping) continue;
+    const mapping = inferRouteMapping(analysis);
+    const key = `${mapping.path}:${mapping.method}`;
+    const entries = selected.get(key) ?? [];
+    entries.push({ analysis, mapping });
+    selected.set(key, entries);
+  }
 
-    const existing = stubs.get(mapping.path);
-    const stub = generateRouteHandler(analysis, mapping, tables);
-
-    if (existing) {
-      // Merge multiple handlers into the same route file:
-      // Capture the schema definition (if present) AND the export function,
-      // skipping only the duplicate import lines at the top.
-      const schemaAndFuncMatch = stub.match(/((?:const \w+Schema\s*=[\s\S]*?\n\n)?export async function \w+[\s\S]*$)/);
-      if (schemaAndFuncMatch) {
-        stubs.set(mapping.path, existing + "\n\n" + schemaAndFuncMatch[1]);
-      } else {
-        stubs.set(mapping.path, existing + "\n\n" + stub);
-      }
-    } else {
-      stubs.set(mapping.path, stub);
+  for (const entries of selected.values()) {
+    if (entries.length > 1) {
+      throw routeConflictError(entries[0]!.mapping, entries.map((entry) => entry.analysis));
     }
+  }
+
+  const byPath = new Map<string, Array<{ analysis: PhpFileAnalysis; mapping: RouteMapping }>>();
+  for (const entriesForMethod of selected.values()) {
+    const entry = entriesForMethod[0]!;
+    const entries = byPath.get(entry.mapping.path) ?? [];
+    entries.push(entry);
+    byPath.set(entry.mapping.path, entries);
+  }
+
+  const methodOrder: Record<RouteMapping["method"], number> = { GET: 0, POST: 1, PUT: 2, PATCH: 3, DELETE: 4 };
+  for (const path of [...byPath.keys()].sort()) {
+    const entries = byPath.get(path)!;
+    entries.sort((a, b) => methodOrder[a.mapping.method] - methodOrder[b.mapping.method]);
+    const hasFiles = entries.some(({ analysis }) => detectFileUploads(analysis.inputParams).hasFiles);
+    const handlers = entries.map(({ analysis, mapping }) => generateRouteHandler(analysis, mapping, tables, false, requireAuth));
+    stubs.set(path, [generateRoutePreamble(hasFiles, requireAuth), ...handlers].join("\n\n"));
   }
 
   // Add schema-driven GET endpoints
   if (tables && tables.length > 0) {
     const existingPaths = new Set(stubs.keys());
-    const getStubs = generateGetEndpoints(tables, existingPaths);
+    const getStubs = generateGetEndpoints(tables, existingPaths, requireAuth);
 
     for (const [path, code] of getStubs) {
       const existing = stubs.get(path);

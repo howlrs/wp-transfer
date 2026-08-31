@@ -33,4 +33,38 @@ describe("estimateCost — edge cases", () => {
 
     expect(result.totalHours).toBe(sum);
   });
+
+  it("accounts for active plugins and reports all high-volume migration risks", () => {
+    const result = estimateCost(10_001, 1_001, [
+      {
+        slug: "storefront", name: "Storefront", active: true, category: "ecommerce",
+        migrationStrategy: "manual", difficulty: 4, estimatedHours: 12,
+      },
+      {
+        slug: "layout-builder", name: "Layout Builder", active: true, category: "page-builder",
+        migrationStrategy: "template", difficulty: 3, estimatedHours: 8,
+      },
+      {
+        slug: "inactive", name: "Inactive", active: false, category: "other",
+        migrationStrategy: "manual", difficulty: 1, estimatedHours: 99,
+      },
+      {
+        slug: "unneeded", name: "Unneeded", active: true, category: "other",
+        migrationStrategy: "not-needed", difficulty: 1, estimatedHours: 99,
+      },
+    ], true);
+
+    expect(result.breakdown.pluginMigration).toBe(20);
+    expect(result.breakdown.contentMigration).toBe(50);
+    expect(result.risks.map((risk) => risk.area)).toEqual([
+      "E-commerce", "Page Builder", "Custom Post Types", "Large Site",
+    ]);
+    expect(result.totalHours).toBe(
+      result.breakdown.contentMigration
+      + result.breakdown.pluginMigration
+      + result.breakdown.themeMigration
+      + result.breakdown.testing
+      + result.breakdown.deployment,
+    );
+  });
 });

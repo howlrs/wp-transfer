@@ -1,10 +1,13 @@
 export {
   createWpRestClient,
+  validateUrl,
   type WpRestAuth,
   type WpSiteInfo,
   type WpRestPlugin,
   type WpRestPostType,
   type WpRestClient,
+  type WpRestClientOptions,
+  type HostnameResolver,
 } from "./rest-client.js";
 
 export {
@@ -55,6 +58,10 @@ export {
 
 export {
   generateApiStubs,
+  inferRouteMapping,
+  routeResourcePath,
+  type RouteMapping,
+  type GenerateApiStubsOptions,
 } from "./nextjs-stub-generator.js";
 
 export {
@@ -63,6 +70,7 @@ export {
   toPrismaModelName,
   toPascalModelName,
   toSchemaName,
+  pluralizeResource,
   fieldTypeToInputType,
 } from "./generator-utils.js";
 
@@ -78,6 +86,7 @@ export {
   isAuthPluginDetected,
   ADMIN_USER_PRISMA_MODEL,
   type AuthScaffoldFile,
+  type AuthScaffoldOptions,
 } from "./auth-scaffold-generator.js";
 
 export {
@@ -248,6 +257,9 @@ export {
   maskCredentials,
   stripMarkdown,
   validateRouteOutput,
+  preservesExportedHttpMethods,
+  hasNoTopLevelSideEffects,
+  hasActiveAccessGuard,
   buildPrompt,
   type AiRouteGeneratorOptions,
   type AiRouteInput,

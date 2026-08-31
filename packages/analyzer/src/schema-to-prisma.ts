@@ -450,7 +450,7 @@ export function generatePrismaSchema(
       for (const rel of myChildRels) {
         const parentModel = toPrismaModelName(rel.parentTable);
         // Determine relation field name from the FK column (strip _id)
-        const relationField = rel.childColumn.slice(0, -3); // e.g. "event_id" -> "event"
+        const relationField = rel.childColumn.slice(0, -3); // e.g. "project_id" -> "project"
         const col = resolvedColumns.find((c) => c.name === rel.childColumn);
         const nullable = col?.nullable ?? false;
         const typeStr = nullable ? `${parentModel}?` : parentModel;

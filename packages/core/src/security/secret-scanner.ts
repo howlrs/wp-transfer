@@ -60,7 +60,9 @@ const PATTERNS: PatternDef[] = [
   },
   {
     type: "generic-secret",
-    pattern: /(?:api_key|secret_key|password|token)\s*=\s*[^\s]{8,}/gi,
+    // Only flag literal credentials. This deliberately excludes PHP variables,
+    // function calls, and constants used in normal password/input plumbing.
+    pattern: /(?:^|[^$A-Za-z0-9_])(?:api_key|secret_key|password|token)\s*=\s*(?:"[^"\r\n]{8,}"|'[^'\r\n]{8,}'|(?=[A-Za-z0-9_-]{16,}(?:\s|;|$))(?=[A-Za-z0-9_-]*[A-Za-z])(?=[A-Za-z0-9_-]*\d)[A-Za-z0-9_-]{16,}(?=\s|;|$))/gim,
     severity: "medium",
   },
 ];

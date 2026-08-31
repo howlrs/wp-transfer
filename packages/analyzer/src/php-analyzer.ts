@@ -39,6 +39,12 @@ export interface FormSpec {
 
 export interface PhpFileAnalysis {
   fileName: string;
+  /**
+   * Source location relative to the analyzed PHP root. This is metadata for
+   * diagnostics and source reads only; fileName deliberately remains a
+   * basename so route and schema inference keep their established behavior.
+   */
+  sourceRelativePath?: string;
   purpose: string;
   dbOperations: DbOperation[];
   inputParams: InputParam[];
@@ -346,35 +352,6 @@ function inferPurpose(fileName: string, content: string): string {
   const jpComment = content.match(/\/\/\s*(.*[ぁ-んァ-ヶ亜-熙].*)$/m);
   if (jpComment) return jpComment[1]!.trim();
 
-  // Infer from file name patterns
-  const patterns: Record<string, string> = {
-    insert: "Create new record",
-    update: "Update existing record",
-    delete: "Delete record",
-    "event-copy": "Copy event with its slots",
-    "event-stop": "Stop/cancel event",
-    "event-restoration": "Restore cancelled event",
-    "event-slot-update": "Update event slot",
-    "event-slot-delete": "Delete event slot",
-    insert_event_slot: "Create new event slot",
-    insert_information: "Create new information entry",
-    "information-update": "Update information entry",
-    "information-text-update": "Update information text fields",
-    "information-banner-update": "Update information banner",
-    "information-banner-in": "Enable information banner display",
-    "information-banner-out": "Disable information banner display",
-    "information-text-in": "Enable information text display",
-    "information-text-out": "Disable information text display",
-    "lottery-update": "Invalidate lottery entry",
-    "user-blacklist": "Add user to blacklist",
-    "user-blacklist-out": "Remove user from blacklist",
-    "db-connect": "Database connection helper",
-    "page-event-copy": "Event copy page template",
-    "another-copy": "Alternative event copy",
-  };
-
-  if (patterns[base]) return patterns[base];
-
   // Infer from DB operations
   const hasInsert = /INSERT\s+INTO/i.test(content);
   const hasUpdate = /UPDATE\s+\w+\s+SET/i.test(content);
@@ -387,12 +364,29 @@ function inferPurpose(fileName: string, content: string): string {
   if (hasDelete) ops.push("delete");
   if (hasSelect) ops.push("read");
 
-  if (ops.length > 0) return `${ops.join("/")} operation (${base})`;
+  const displayName = base
+    .split(/[-_]+/)
+    .filter(Boolean)
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join(" ");
 
-  return `PHP script: ${base}`;
+  if (ops.length > 0) return `${ops.join("/")} operation (${displayName})`;
+
+  return `PHP script: ${displayName || "Untitled"}`;
 }
 
 // ── Form extraction from HTML templates ──
+
+/**
+ * Preserve explicit, portable disabled-state metadata when a template provides
+ * it. Legacy PHP variables are intentionally not interpreted: their meaning is
+ * application-specific and cannot be inferred safely from an attribute name.
+ */
+function extractDisabledWhen(attributes: string): FormField["disabledWhen"] {
+  const field = attributes.match(/\bdata-disabled-when-field=["']([^"']+)["']/i)?.[1];
+  const value = attributes.match(/\bdata-disabled-when-value=["']([^"']+)["']/i)?.[1];
+  return field && value ? { field, value } : undefined;
+}
 
 function extractFormSpec(content: string): FormSpec | undefined {
   // Only extract from template files (contain <form>)
@@ -426,13 +420,7 @@ function extractFormSpec(content: string): FormSpec | undefined {
       options.push({ value: om[1], label: om[2].trim() });
     }
 
-    // Detect disabled condition from PHP code before this select
-    let disabledWhen: FormField["disabledWhen"];
-    const disabledAttr = m[0].match(/\$dis\b/);
-    if (disabledAttr) {
-      // $dis is set when recruiting_type==1
-      disabledWhen = { field: "recruiting_type", value: "1" };
-    }
+    const disabledWhen = extractDisabledWhen(m[0]);
 
     fields.push({ name, type: "select", label, required: false, options, disabledWhen });
   }
@@ -474,13 +462,7 @@ function extractFormSpec(content: string): FormSpec | undefined {
     const placeholder = attrs.match(/placeholder="([^"]+)"/)?.[1];
     const accept = attrs.match(/accept="([^"]+)"/)?.[1];
 
-    // Detect disabled conditions
-    let disabledWhen: FormField["disabledWhen"];
-    if (/\$dis2/.test(attrs)) {
-      disabledWhen = { field: "recruiting_type", value: "1,2" };
-    } else if (/\$dis\b/.test(attrs)) {
-      disabledWhen = { field: "recruiting_type", value: "1" };
-    }
+    const disabledWhen = extractDisabledWhen(attrs);
 
     fields.push({
       name: cleanName,
@@ -506,7 +488,7 @@ function extractFormSpec(content: string): FormSpec | undefined {
 
   // Detect submit button label
   const submitMatch = content.match(/<input\s+type="submit"\s+value="([^"]+)"/i);
-  const submitLabel = submitMatch?.[1] ?? "送信";
+  const submitLabel = submitMatch?.[1] ?? "Submit";
 
   if (fields.length === 0) return undefined;
 

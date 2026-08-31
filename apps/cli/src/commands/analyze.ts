@@ -11,6 +11,7 @@ import {
   generateReport,
   reportToMarkdown,
   createWpRestClient,
+  validateUrl,
   classifyPlugin,
   parseGutenbergBlocks,
   convertBlocksToPortableText,
@@ -33,6 +34,17 @@ import {
   generateWooOrderPrismaSchema,
 } from "@wp-transfer/analyzer";
 import type { PluginEntry } from "@wp-transfer/core";
+import {
+  fetchRestPostTypeCounts,
+  summarizeRestContent,
+} from "./rest-content-summary.js";
+
+function reportCliFailure(message: string): void {
+  consola.error(message);
+  // citty command handlers otherwise resolve successfully after an early
+  // return, causing shell callers to mistake rejected input for success.
+  process.exitCode = 1;
+}
 
 export const analyzeCommand = defineCommand({
   meta: {
@@ -148,13 +160,13 @@ export const analyzeCommand = defineCommand({
 
     const validFormats = ["json", "markdown", "both"];
     if (!validFormats.includes(format)) {
-      consola.error(`Invalid format "${format}". Must be one of: ${validFormats.join(", ")}`);
+      reportCliFailure(`Invalid format "${format}". Must be one of: ${validFormats.join(", ")}`);
       return;
     }
 
     // Validate template directory if specified
     if (templateDir && (!existsSync(templateDir) || !statSync(templateDir).isDirectory())) {
-      consola.error(`Template directory not found: ${templateDir}`);
+      reportCliFailure(`Template directory not found: ${templateDir}`);
       return;
     }
 
@@ -163,7 +175,7 @@ export const analyzeCommand = defineCommand({
     // Multisite: directory input
     if (multisite) {
       if (!existsSync(resolvedSource) || !statSync(resolvedSource).isDirectory()) {
-        consola.error("--multisite requires a directory path containing WXR files.");
+        reportCliFailure("--multisite requires a directory path containing WXR files.");
         return;
       }
       const resolvedDir = resolve(resolvedSource);
@@ -173,7 +185,7 @@ export const analyzeCommand = defineCommand({
         .filter((f) => f.startsWith(resolvedDir));
 
       if (xmlFiles.length === 0) {
-        consola.error("No XML files found in the directory.");
+        reportCliFailure("No XML files found in the directory.");
         return;
       }
 
@@ -443,7 +455,18 @@ async function analyzeFromWxr(
   );
 }
 
-async function analyzeFromUrl(
+/** Validate before any CLI output and omit userinfo, query, and fragments from logs. */
+export function prepareSiteUrlForConnection(siteUrl: string): string {
+  validateUrl(siteUrl);
+  const parsed = new URL(siteUrl);
+  parsed.username = "";
+  parsed.password = "";
+  parsed.search = "";
+  parsed.hash = "";
+  return parsed.toString();
+}
+
+export async function analyzeFromUrl(
   siteUrl: string,
   output: string,
   format: string,
@@ -452,21 +475,29 @@ async function analyzeFromUrl(
   wooKey?: string,
   wooSecret?: string,
 ): Promise<void> {
-  consola.start(`Connecting to: ${siteUrl}`);
+  let safeSiteUrl: string;
+  try {
+    safeSiteUrl = prepareSiteUrlForConnection(siteUrl);
+  } catch {
+    reportCliFailure("Invalid or unsafe WordPress site URL. Use a public HTTP(S) URL without embedded credentials.");
+    return;
+  }
+  consola.start(`Connecting to: ${safeSiteUrl}`);
 
   const auth =
     username && password
       ? { username, applicationPassword: password }
       : undefined;
 
-  const client = createWpRestClient(siteUrl, auth);
+  const client = createWpRestClient(safeSiteUrl, auth);
 
+  try {
   // Probe site info
   let siteInfo: Awaited<ReturnType<typeof client.probeSiteInfo>>;
   try {
     siteInfo = await client.probeSiteInfo();
   } catch {
-    consola.error("Failed to connect to the WordPress site. Check the URL and ensure the REST API is accessible.");
+    reportCliFailure("Failed to connect to the WordPress site. Check the URL and ensure the REST API is accessible.");
     return;
   }
   consola.success(`Connected: ${siteInfo.name}`);
@@ -492,21 +523,36 @@ async function analyzeFromUrl(
   try {
     postTypes = await client.fetchPostTypes();
   } catch {
-    consola.error("Failed to fetch post types from the WordPress REST API.");
+    reportCliFailure("Failed to fetch post types from the WordPress REST API.");
     return;
   }
   consola.success(`Post types: ${postTypes.map((pt) => pt.slug).join(", ")}`);
 
-  // Build minimal schema analysis from REST data
-  const schema = analyzeSchema([], [], [], 0);
-
-  // Override content summary with REST data
-  const hasCustomPostTypes = postTypes.some(
-    (pt) =>
-      !["post", "page", "attachment", "revision", "nav_menu_item", "wp_block", "wp_template", "wp_template_part", "wp_navigation", "wp_font_family", "wp_font_face"].includes(pt.slug),
+  const postTypeCounts = await fetchRestPostTypeCounts(
+    postTypes,
+    (restBase, restNamespace) => client.fetchPostCount(restBase, restNamespace),
+    (message) => consola.warn(message),
   );
+  const restContent = summarizeRestContent(postTypes, postTypeCounts);
 
-  const cost = estimateCost(0, 0, plugins, hasCustomPostTypes);
+  // Build minimal schema analysis from REST data, retaining the fields that cannot
+  // be discovered from public REST post-type endpoints.
+  const emptySchema = analyzeSchema([], [], [], 0);
+  const schema = {
+    ...emptySchema,
+    contentSummary: {
+      ...emptySchema.contentSummary,
+      ...restContent.contentSummary,
+    },
+    customPostTypes: restContent.customPostTypes,
+  };
+
+  const cost = estimateCost(
+    restContent.postCountForEstimate,
+    restContent.contentSummary.media,
+    plugins,
+    restContent.customPostTypes.length > 0,
+  );
 
   const report = generateReport({
     siteUrl: siteInfo.url,
@@ -526,7 +572,7 @@ async function analyzeFromUrl(
     consola.start("Fetching WooCommerce orders and customers...");
     try {
       const wooClient = createWooRestClient({
-        siteUrl: siteUrl,
+        siteUrl: safeSiteUrl,
         consumerKey: wooKey,
         consumerSecret: wooSecret,
       });
@@ -562,6 +608,9 @@ async function analyzeFromUrl(
   }
 
   consola.box(boxLines.join("\n"));
+  } finally {
+    await client.close();
+  }
 }
 
 async function writeOutput(

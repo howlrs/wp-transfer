@@ -5,54 +5,55 @@ import {
   toPrismaModelName,
   toPascalModelName,
   toSchemaName,
+  pluralizeResource,
   fieldTypeToInputType,
 } from "../src/generator-utils.js";
 
 describe("toCamelCase", () => {
   it("converts snake_case to camelCase", () => {
-    expect(toCamelCase("event_slot")).toBe("eventSlot");
+    expect(toCamelCase("order_item")).toBe("orderItem");
   });
 
   it("handles multi-segment snake_case", () => {
-    expect(toCamelCase("m_coupon_target_stores")).toBe("mCouponTargetStores");
+    expect(toCamelCase("legacy_product_categories")).toBe("legacyProductCategories");
   });
 
   it("handles kebab-case", () => {
-    expect(toCamelCase("event-slot")).toBe("eventSlot");
+    expect(toCamelCase("order-item")).toBe("orderItem");
   });
 
   it("handles single word", () => {
-    expect(toCamelCase("event")).toBe("event");
+    expect(toCamelCase("article")).toBe("article");
   });
 });
 
 describe("toPascalCase", () => {
   it("converts snake_case to PascalCase", () => {
-    expect(toPascalCase("event_slot")).toBe("EventSlot");
+    expect(toPascalCase("order_item")).toBe("OrderItem");
   });
 
   it("converts kebab-case to PascalCase", () => {
-    expect(toPascalCase("event-slot")).toBe("EventSlot");
+    expect(toPascalCase("order-item")).toBe("OrderItem");
   });
 
   it("handles single word", () => {
-    expect(toPascalCase("event")).toBe("Event");
+    expect(toPascalCase("article")).toBe("Article");
   });
 });
 
 describe("toPrismaModelName", () => {
   it("converts table name to camelCase model name", () => {
-    expect(toPrismaModelName("event_slot")).toBe("eventSlot");
+    expect(toPrismaModelName("order_item")).toBe("orderItem");
   });
 
   it("handles single word", () => {
-    expect(toPrismaModelName("event")).toBe("event");
+    expect(toPrismaModelName("article")).toBe("article");
   });
 });
 
 describe("toPascalModelName", () => {
   it("converts table name to PascalCase model name", () => {
-    expect(toPascalModelName("event_slot")).toBe("EventSlot");
+    expect(toPascalModelName("order_item")).toBe("OrderItem");
   });
 });
 
@@ -62,15 +63,44 @@ describe("toSchemaName", () => {
   });
 
   it("converts kebab-case PHP filename to schema name", () => {
-    expect(toSchemaName("event-slot-update.php")).toBe("EventSlotUpdateSchema");
+    expect(toSchemaName("order-item-update.php")).toBe("OrderItemUpdateSchema");
   });
 
   it("converts snake_case PHP filename to schema name", () => {
-    expect(toSchemaName("insert_event_slot.php")).toBe("InsertEventSlotSchema");
+    expect(toSchemaName("insert_order_item.php")).toBe("InsertOrderItemSchema");
   });
 
   it("handles filename without .php extension", () => {
     expect(toSchemaName("update")).toBe("UpdateSchema");
+  });
+
+  it("creates valid, deterministic identifiers for arbitrary filenames", () => {
+    expect(toSchemaName("create product.php")).toBe("CreateProductSchema");
+    expect(toSchemaName("9.config.php")).toBe("Php9ConfigSchema");
+    expect(toSchemaName("日本語.php")).toBe("U65e5U672cU8a9eSchema");
+    expect(toSchemaName("...php")).toBe("PhpFileSchema");
+    expect(toSchemaName("class.php")).toBe("ClassSchema");
+
+    for (const fileName of ["create product.php", "9.config.php", "日本語.php", "...php", "class.php"]) {
+      expect(toSchemaName(fileName)).toMatch(/^[A-Za-z_$][A-Za-z0-9_$]*$/);
+    }
+  });
+});
+
+describe("pluralizeResource", () => {
+  it("pluralizes regular collection names", () => {
+    expect(pluralizeResource("product")).toBe("products");
+    expect(pluralizeResource("catalog_item")).toBe("catalog_items");
+  });
+
+  it("handles common English endings and stable uncountable names", () => {
+    expect(pluralizeResource("category")).toBe("categories");
+    expect(pluralizeResource("box")).toBe("boxes");
+    expect(pluralizeResource("media")).toBe("media");
+  });
+
+  it("does not pluralize an existing collection name twice", () => {
+    expect(pluralizeResource("products")).toBe("products");
   });
 });
 

@@ -9,11 +9,11 @@ describe("generateCoverageReport", () => {
       testsPassed: 15,
       testsFailed: 3,
       domains: [
-        { name: "Event", scripts: 7, tested: 7, passed: 5 },
-        { name: "Slot", scripts: 3, tested: 3, passed: 3 },
-        { name: "Information", scripts: 8, tested: 6, passed: 5 },
-        { name: "Lottery", scripts: 1, tested: 1, passed: 1 },
-        { name: "User", scripts: 2, tested: 1, passed: 1 },
+        { name: "Product", scripts: 7, tested: 7, passed: 5 },
+        { name: "Variant", scripts: 3, tested: 3, passed: 3 },
+        { name: "Article", scripts: 8, tested: 6, passed: 5 },
+        { name: "Category", scripts: 1, tested: 1, passed: 1 },
+        { name: "Account", scripts: 2, tested: 1, passed: 1 },
       ],
     });
 
@@ -21,7 +21,7 @@ describe("generateCoverageReport", () => {
     expect(report).toContain("22");
     expect(report).toContain("82%"); // 18/22
     expect(report).toContain("INCOMPLETE");
-    expect(report).toContain("Event");
+    expect(report).toContain("Product");
   });
 
   it("reports COMPLETE when all tests pass", () => {

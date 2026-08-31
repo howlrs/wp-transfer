@@ -1,4 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   runPreflightChecks,
   formatPreflightReport,
@@ -6,8 +9,13 @@ import {
 import type { PreflightReport } from "../src/preflight.js";
 
 describe("runPreflightChecks", () => {
+  const temporaryDirectories: string[] = [];
+
   afterEach(() => {
     vi.restoreAllMocks();
+    for (const directory of temporaryDirectories.splice(0)) {
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 
   it("Node version check passes on Node 20+", () => {
@@ -54,6 +62,20 @@ describe("runPreflightChecks", () => {
     expect(outCheck.message).toContain("writable");
   });
 
+  it("Output directory check passes when nested parents do not exist yet", () => {
+    const directory = mkdtempSync(join(tmpdir(), "wp-transfer-preflight-"));
+    temporaryDirectories.push(directory);
+
+    const report = runPreflightChecks({
+      sourcePath: import.meta.dirname,
+      outputPath: join(directory, "new", "nested", "project"),
+    });
+    const outCheck = report.checks.find(c => c.name === "Output directory")!;
+
+    expect(outCheck.status).toBe("pass");
+    expect(outCheck.message).toContain(directory);
+  });
+
   it("Output directory check fails for non-writable parent", () => {
     const report = runPreflightChecks({
       sourcePath: import.meta.dirname,
@@ -64,11 +86,49 @@ describe("runPreflightChecks", () => {
     expect(outCheck.message).toContain("not writable");
   });
 
+  it("Output directory check fails when the nearest existing ancestor is a file", () => {
+    const directory = mkdtempSync(join(tmpdir(), "wp-transfer-preflight-"));
+    temporaryDirectories.push(directory);
+    const blocker = join(directory, "blocker");
+    writeFileSync(blocker, "not a directory");
+
+    const report = runPreflightChecks({
+      sourcePath: import.meta.dirname,
+      outputPath: join(blocker, "nested", "project"),
+    });
+    const outCheck = report.checks.find(c => c.name === "Output directory")!;
+
+    expect(outCheck.status).toBe("fail");
+    expect(outCheck.message).toContain("not a directory");
+  });
+
+  if (process.platform !== "win32") {
+    it("Output directory check requires search permission on the writable ancestor", () => {
+      const directory = mkdtempSync(join(tmpdir(), "wp-transfer-preflight-"));
+      temporaryDirectories.push(directory);
+      chmodSync(directory, 0o200);
+
+      let report: ReturnType<typeof runPreflightChecks>;
+      try {
+        report = runPreflightChecks({
+          sourcePath: import.meta.dirname,
+          outputPath: join(directory, "nested", "project"),
+        });
+      } finally {
+        chmodSync(directory, 0o700);
+      }
+      const outCheck = report.checks.find(c => c.name === "Output directory")!;
+
+      expect(outCheck.status).toBe("fail");
+      expect(outCheck.message).toContain("not writable");
+    });
+  }
+
   it("Schema file check warns when no path given", () => {
     const report = runPreflightChecks({ outputPath: "/tmp/out" });
     const schemaCheck = report.checks.find(c => c.name === "Schema file")!;
     expect(schemaCheck.status).toBe("warn");
-    expect(schemaCheck.message).toContain("Prisma generation will be skipped");
+    expect(schemaCheck.message).toContain("conservatively inferred");
   });
 
   it("Schema file check fails for non-existent path", () => {

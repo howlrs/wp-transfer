@@ -6,7 +6,12 @@
  */
 import type { PhpFileAnalysis, InputParam } from "./php-analyzer.js";
 import type { TableDefinition } from "./schema-to-prisma.js";
-import { toPascalCase, toCamelCase, fieldTypeToInputType } from "./generator-utils.js";
+import {
+  fieldTypeToInputType,
+  pluralizeResource,
+  toCamelCase,
+  toPascalCase,
+} from "./generator-utils.js";
 
 // ── Types ──
 
@@ -14,6 +19,8 @@ export type UiFramework = "plain" | "tailwind";
 
 export interface AdminScaffoldOptions {
   uiFramework?: UiFramework;
+  /** Add a server-side active-session guard to the shared admin layout. */
+  requireAuth?: boolean;
 }
 
 export interface AdminPage {
@@ -83,25 +90,8 @@ const ROUTE_RULES: RouteRule[] = [
 
 // ── Helpers ──
 
-const IRREGULARS: Record<string, string> = {
-  person: 'people',
-  child: 'children',
-  category: 'categories',
-  information: 'information',
-  status: 'statuses',
-  lottery: 'lotteries',
-  entry: 'entries',
-  analysis: 'analyses',
-};
-
 export function pluralize(word: string): string {
-  const lower = word.toLowerCase();
-  if (IRREGULARS[lower]) return IRREGULARS[lower];
-  // Already plural (ends in s) — leave as-is.
-  if (lower.endsWith('s')) return word;
-  if (lower.endsWith('sh') || lower.endsWith('ch') || lower.endsWith('x') || lower.endsWith('z')) return word + 'es';
-  if (lower.endsWith('y') && !['a','e','i','o','u'].includes(lower[lower.length - 2] ?? '')) return word.slice(0, -1) + 'ies';
-  return word + 's';
+  return pluralizeResource(word);
 }
 
 function findTableForResource(
@@ -141,6 +131,22 @@ function mapPhpToRoute(
 function fieldLabel(name: string): string {
   // Convert snake_case to readable Japanese-friendly label
   return name.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function codeKey(name: string): string {
+  return JSON.stringify(name);
+}
+
+function recordAccess(record: string, key: string): string {
+  return `${record}[${codeKey(key)}]`;
+}
+
+function recordUpdate(key: string, value: string): string {
+  return `[${codeKey(key)}]: ${value}`;
+}
+
+function jsxText(value: string): string {
+  return `{${JSON.stringify(value)}}`;
 }
 
 // ── CSS generator ──
@@ -623,14 +629,14 @@ export default async function ${modelName}ListPage() {
         <table className="w-full">
           <thead>
             <tr className="bg-gray-100">
-${displayColumns.map((c) => `              <th className="px-4 py-3 text-left border-b-2 border-gray-200 text-sm">${c.comment ?? fieldLabel(c.name)}</th>`).join("\n")}
+${displayColumns.map((c) => `              <th className="px-4 py-3 text-left border-b-2 border-gray-200 text-sm">${jsxText(c.comment ?? fieldLabel(c.name))}</th>`).join("\n")}
               <th className="px-4 py-3 text-left border-b-2 border-gray-200 text-sm">操作</th>
             </tr>
           </thead>
           <tbody>
             {items.map((item) => (
               <tr key={item.id} className="border-b border-gray-200">
-${displayColumns.map((c) => `                <td className="px-4 py-3 text-sm">{String(item.${c.name} ?? "")}</td>`).join("\n")}
+${displayColumns.map((c) => `                <td className="px-4 py-3 text-sm">{String(${recordAccess("item", c.name)} ?? "")}</td>`).join("\n")}
                 <td className="px-4 py-3">
                   <Link
                     href={\`/${pluralize(resource)}/\${item.id}\`}
@@ -689,14 +695,14 @@ export default async function ${modelName}ListPage() {
       <table className="wp-list-table">
         <thead>
           <tr>
-${displayColumns.map((c) => `            <th>${c.comment ?? fieldLabel(c.name)}</th>`).join("\n")}
+${displayColumns.map((c) => `            <th>${jsxText(c.comment ?? fieldLabel(c.name))}</th>`).join("\n")}
             <th>操作</th>
           </tr>
         </thead>
         <tbody>
           {items.map((item) => (
             <tr key={item.id}>
-${displayColumns.map((c) => `              <td>{String(item.${c.name} ?? "")}</td>`).join("\n")}
+${displayColumns.map((c) => `              <td>{String(${recordAccess("item", c.name)} ?? "")}</td>`).join("\n")}
               <td>
                 <Link href={\`/${pluralize(resource)}/\${item.id}\`} className="wp-row-action">
                   詳細
@@ -735,8 +741,8 @@ function generateFormFieldJsx(f: import("./php-analyzer.js").FormField, index: n
           </label>
           <select
             className="wp-form-select"
-            value={String(form.${f.name} ?? "")}
-            onChange={(e) => setForm({ ...form, ${f.name}: e.target.value })}
+            value={String(${recordAccess("form", f.name)} ?? "")}
+            onChange={(e) => setForm({ ...form, ${recordUpdate(f.name, "e.target.value")} })}
           >
             <option value="">選択してください</option>
 ${opts}
@@ -752,8 +758,8 @@ ${opts}
           <textarea
             className="wp-form-textarea"
             rows={5}
-            value={String(form.${f.name} ?? "")}
-            onChange={(e) => setForm({ ...form, ${f.name}: e.target.value })}
+            value={String(${recordAccess("form", f.name)} ?? "")}
+            onChange={(e) => setForm({ ...form, ${recordUpdate(f.name, "e.target.value")} })}
           />
         </div>`;
   }
@@ -785,8 +791,8 @@ ${opts}
           <input
             className="wp-form-input"
             type="${inputType}"
-            value={String(form.${f.name} ?? "")}
-            onChange={(e) => setForm({ ...form, ${f.name}: ${valueCoerce} })}${f.required ? '\n            required' : ""}${f.placeholder ? `\n            placeholder="${f.placeholder}"` : ""}
+            value={String(${recordAccess("form", f.name)} ?? "")}
+            onChange={(e) => setForm({ ...form, ${recordUpdate(f.name, valueCoerce)} })}${f.required ? '\n            required' : ""}${f.placeholder ? `\n            placeholder="${f.placeholder}"` : ""}
           />
         </div>`;
 }
@@ -820,10 +826,10 @@ function generateFormFromSpec(
       .map((f) => `              <input
                 type="${f.type === "number" ? "number" : f.type === "datetime-local" ? "datetime-local" : "text"}"
                 placeholder="${f.label}"
-                value={String(slot.${f.name} ?? "")}
+                value={String(${recordAccess("slot", f.name)} ?? "")}
                 onChange={(e) => {
                   const updated = [...slots];
-                  updated[i] = { ...updated[i]!, ${f.name}: e.target.value };
+                  updated[i] = { ...updated[i]!, ${recordUpdate(f.name, "e.target.value")} };
                   setSlots(updated);
                 }}
               />`)
@@ -975,7 +981,7 @@ function generateFormPage(
       const col = table?.columns.find((c) => c.name === param.name);
       formFields.push({
         name: param.name.replace(/\[\]$/, ""),
-        type: col ? fieldTypeToInputType(col.type) : "text",
+        type: col ? tableInputType(col.type) : "text",
         label: col?.comment ?? fieldLabel(param.name),
       });
     }
@@ -987,7 +993,7 @@ function generateFormPage(
       if (col.isPrimary && col.isAutoIncrement) continue;
       formFields.push({
         name: col.name,
-        type: fieldTypeToInputType(col.type),
+        type: tableInputType(col.type),
         label: col.comment ?? fieldLabel(col.name),
       });
     }
@@ -1080,8 +1086,8 @@ ${formFields
             </label>
             <input
               type="${f.type}"
-              value={String(form.${f.name} ?? "")}
-              onChange={(e) => setForm({ ...form, ${f.name}: ${f.type === "number" ? "Number(e.target.value)" : f.type === "checkbox" ? "e.target.checked" : "e.target.value"} })}
+              value={String(${recordAccess("form", f.name)} ?? "")}
+              onChange={(e) => setForm({ ...form, ${recordUpdate(f.name, f.type === "number" ? "Number(e.target.value)" : f.type === "checkbox" ? "e.target.checked" : "e.target.value")} })}
               className="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
           </div>`,
@@ -1132,8 +1138,8 @@ ${formFields
           <input
             className="wp-form-input"
             type="${f.type}"
-            value={String(form.${f.name} ?? "")}
-            onChange={(e) => setForm({ ...form, ${f.name}: ${f.type === "number" ? "Number(e.target.value)" : f.type === "checkbox" ? "e.target.checked" : "e.target.value"} })}
+            value={String(${recordAccess("form", f.name)} ?? "")}
+            onChange={(e) => setForm({ ...form, ${recordUpdate(f.name, f.type === "number" ? "Number(e.target.value)" : f.type === "checkbox" ? "e.target.checked" : "e.target.value")} })}
           />
         </div>`,
   )
@@ -1197,13 +1203,13 @@ export default async function ${modelName}SummaryPage() {
         <table className="w-full">
           <thead>
             <tr className="bg-gray-100">
-${columns.slice(0, 6).map((c) => `              <th className="px-4 py-3 text-left border-b-2 border-gray-200 text-sm">${c.comment ?? fieldLabel(c.name)}</th>`).join("\n")}
+${columns.slice(0, 6).map((c) => `              <th className="px-4 py-3 text-left border-b-2 border-gray-200 text-sm">${jsxText(c.comment ?? fieldLabel(c.name))}</th>`).join("\n")}
             </tr>
           </thead>
           <tbody>
             {items.map((item) => (
               <tr key={item.id} className="border-b border-gray-200">
-${columns.slice(0, 6).map((c) => `                <td className="px-4 py-3 text-sm">{String(item.${c.name} ?? "")}</td>`).join("\n")}
+${columns.slice(0, 6).map((c) => `                <td className="px-4 py-3 text-sm">{String(${recordAccess("item", c.name)} ?? "")}</td>`).join("\n")}
               </tr>
             ))}
           </tbody>
@@ -1241,13 +1247,13 @@ export default async function ${modelName}SummaryPage() {
       <table className="wp-list-table">
         <thead>
           <tr>
-${columns.slice(0, 6).map((c) => `            <th>${c.comment ?? fieldLabel(c.name)}</th>`).join("\n")}
+${columns.slice(0, 6).map((c) => `            <th>${jsxText(c.comment ?? fieldLabel(c.name))}</th>`).join("\n")}
           </tr>
         </thead>
         <tbody>
           {items.map((item) => (
             <tr key={item.id}>
-${columns.slice(0, 6).map((c) => `              <td>{String(item.${c.name} ?? "")}</td>`).join("\n")}
+${columns.slice(0, 6).map((c) => `              <td>{String(${recordAccess("item", c.name)} ?? "")}</td>`).join("\n")}
             </tr>
           ))}
         </tbody>
@@ -1271,7 +1277,7 @@ function generateDashboardPage(tables: TableDefinition[], fw: UiFramework): stri
   if (fw === "tailwind") {
     const twCards = tables
       .map(
-        (t, i) => `        <a key="${t.name}" href="/${t.name}" className="block p-6 bg-white rounded-lg shadow-sm no-underline text-inherit">
+        (t, i) => `        <a key="${t.name}" href="/${pluralize(t.name)}" className="block p-6 bg-white rounded-lg shadow-sm no-underline text-inherit">
           <p className="text-sm text-gray-500">${toPascalCase(t.name)}</p>
           <p className="text-3xl font-bold text-blue-800">{count${i}}</p>
         </a>`,
@@ -1302,7 +1308,7 @@ ${twCards}
 
   const cards = tables
     .map(
-      (t, i) => `        <a key="${t.name}" href="/${t.name}" className="wp-dashboard-card">
+      (t, i) => `        <a key="${t.name}" href="/${pluralize(t.name)}" className="wp-dashboard-card">
           <div className="wp-dashboard-card-header">${toPascalCase(t.name)}</div>
           <div className="wp-dashboard-card-body">
             <span className="wp-dashboard-card-count">{count${i}}</span>
@@ -1333,7 +1339,12 @@ ${cards}
 `;
 }
 
-function generateAdminLayout(pages: AdminPage[], tables: TableDefinition[], fw: UiFramework): string {
+function generateAdminLayout(
+  pages: AdminPage[],
+  tables: TableDefinition[],
+  fw: UiFramework,
+  requireAuth: boolean,
+): string {
   // Derive menu items from list pages
   const menuItems: Array<{ label: string; href: string }> = [];
 
@@ -1344,7 +1355,7 @@ function generateAdminLayout(pages: AdminPage[], tables: TableDefinition[], fw: 
   const seen = new Set<string>();
   for (const page of pages) {
     if (page.type !== "list") continue;
-    // Extract resource path from page path: app/(admin)/events/page.tsx -> /events
+    // Extract resource path from page path: app/(admin)/articles/page.tsx -> /articles
     const match = page.path.match(/app\/\(admin\)\/([^/]+)\/page\.tsx$/);
     if (match && !seen.has(match[1]!)) {
       seen.add(match[1]!);
@@ -1367,6 +1378,20 @@ function generateAdminLayout(pages: AdminPage[], tables: TableDefinition[], fw: 
     }
   }
 
+  const authImports = requireAuth
+    ? 'import { redirect } from "next/navigation";\nimport { requireActiveAccess } from "@/lib/require-active-user";\n'
+    : "";
+  const layoutDeclaration = requireAuth
+    ? "export default async function AdminLayout"
+    : "export default function AdminLayout";
+  const authCheck = requireAuth
+    ? `  if (!(await requireActiveAccess("/"))) {
+    redirect("/unauthorized");
+  }
+
+`
+    : "";
+
   if (fw === "tailwind") {
     const twMenuItems = menuItems
       .map(
@@ -1380,9 +1405,10 @@ function generateAdminLayout(pages: AdminPage[], tables: TableDefinition[], fw: 
       .join("\n");
 
     return `import type { ReactNode } from "react";
+${authImports}
 
-export default function AdminLayout({ children }: { children: ReactNode }) {
-  return (
+${layoutDeclaration}({ children }: { children: ReactNode }) {
+${authCheck}  return (
     <div className="flex min-h-screen">
       {/* Sidebar */}
       <nav className="w-60 bg-gray-800 text-white py-6 shrink-0">
@@ -1414,9 +1440,10 @@ ${twMenuItems}
 
   return `import type { ReactNode } from "react";
 import "@/app/globals.css";
+${authImports}
 
-export default function AdminLayout({ children }: { children: ReactNode }) {
-  return (
+${layoutDeclaration}({ children }: { children: ReactNode }) {
+${authCheck}  return (
     <div style={{ display: "flex", minHeight: "100vh" }}>
       {/* Sidebar */}
       <nav className="wp-admin-sidebar">
@@ -1449,9 +1476,16 @@ function getPrimaryKey(table: TableDefinition): { name: string; type: string } {
 }
 
 function pkCoerce(pkType: string, expr: string): string {
-  return pkType === "Int" || pkType === "BigInt" || pkType === "Float"
+  if (pkType === "BigInt") return `BigInt(${expr})`;
+  return pkType === "Int" || pkType === "Float"
     ? `Number(${expr})`
     : expr;
+}
+
+function tableInputType(columnType: string): string {
+  // BigInt values arrive from JSON as decimal strings. Keep them strings in
+  // client forms and URLs so values above Number.MAX_SAFE_INTEGER are exact.
+  return columnType === "BigInt" ? "text" : fieldTypeToInputType(columnType);
 }
 
 // ── Table-driven CRUD page generators ──
@@ -1475,7 +1509,7 @@ export const dynamic = "force-dynamic";
 
 export default async function ${modelName}ListPage() {
   const items = await prisma.${camelModel}.findMany({
-    orderBy: { ${pk.name}: "desc" },
+    orderBy: { ${codeKey(pk.name)}: "desc" },
     take: 100,
   });
 
@@ -1488,19 +1522,19 @@ export default async function ${modelName}ListPage() {
         <table className="w-full">
           <thead>
             <tr className="bg-gray-100">
-${columns.map((c) => `              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">${c.comment ?? c.name}</th>`).join("\n")}
+${columns.map((c) => `              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">${jsxText(c.comment ?? c.name)}</th>`).join("\n")}
               <th className="px-4 py-3"></th>
             </tr>
           </thead>
           <tbody>
             {items.map((item: Record<string, unknown>) => (
-              <tr key={String(item.${pk.name})} className="border-t border-gray-200">
-${columns.map((c) => `                <td className="px-4 py-3 text-sm">{String(item.${c.name} ?? "")}</td>`).join("\n")}
+              <tr key={String(${recordAccess("item", pk.name)})} className="border-t border-gray-200">
+${columns.map((c) => `                <td className="px-4 py-3 text-sm">{String(${recordAccess("item", c.name)} ?? "")}</td>`).join("\n")}
                 ${hasSinglePk ? `<td className="px-4 py-3">
-                  <Link href={\`/${pluralize(table.name)}/\${item.${pk.name}}\`} className="text-blue-600 underline mr-2">
+                  <Link href={\`/${pluralize(table.name)}/\${String(${recordAccess("item", pk.name)})}\`} className="text-blue-600 underline mr-2">
                     詳細
                   </Link>
-                  <Link href={\`/${pluralize(table.name)}/\${item.${pk.name}}/edit\`} className="text-blue-600 underline">
+                  <Link href={\`/${pluralize(table.name)}/\${String(${recordAccess("item", pk.name)})}/edit\`} className="text-blue-600 underline">
                     編集
                   </Link>
                 </td>` : `<td className="px-4 py-3 text-xs text-gray-400">{/* composite-key table — no single-record routes */}</td>`}
@@ -1526,7 +1560,7 @@ export const dynamic = "force-dynamic";
 
 export default async function ${modelName}ListPage() {
   const items = await prisma.${camelModel}.findMany({
-    orderBy: { ${pk.name}: "desc" },
+    orderBy: { ${codeKey(pk.name)}: "desc" },
     take: 100,
   });
 
@@ -1541,20 +1575,20 @@ export default async function ${modelName}ListPage() {
       <table className="wp-list-table">
         <thead>
           <tr>
-${columns.map((c) => `            <th>${c.comment ?? c.name}</th>`).join("\n")}
+${columns.map((c) => `            <th>${jsxText(c.comment ?? c.name)}</th>`).join("\n")}
             <th></th>
           </tr>
         </thead>
         <tbody>
           {items.map((item: Record<string, unknown>) => (
-            <tr key={String(item.${pk.name})}>
-${columns.map((c) => `              <td>{String(item.${c.name} ?? "")}</td>`).join("\n")}
+            <tr key={String(${recordAccess("item", pk.name)})}>
+${columns.map((c) => `              <td>{String(${recordAccess("item", c.name)} ?? "")}</td>`).join("\n")}
               ${hasSinglePk ? `<td className="wp-row-action">
-                <Link href={\`/${pluralize(table.name)}/\${item.${pk.name}}\`} className="wp-row-action">
+                <Link href={\`/${pluralize(table.name)}/\${String(${recordAccess("item", pk.name)})}\`} className="wp-row-action">
                   詳細
                 </Link>
                 {" / "}
-                <Link href={\`/${pluralize(table.name)}/\${item.${pk.name}}/edit\`} className="wp-row-action">
+                <Link href={\`/${pluralize(table.name)}/\${String(${recordAccess("item", pk.name)})}/edit\`} className="wp-row-action">
                   編集
                 </Link>
               </td>` : `<td className="wp-row-action">{/* composite-key table — no single-record routes */}</td>`}
@@ -1599,7 +1633,7 @@ export const dynamic = "force-dynamic";
 
 export default async function ${modelName}DetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const item = await prisma.${camelModel}.findUnique({ where: { ${pk.name}: ${pkCoerce(pk.type, "id")} } });
+  const item = await prisma.${camelModel}.findUnique({ where: { ${codeKey(pk.name)}: ${pkCoerce(pk.type, "id")} } });
   if (!item) return notFound();
 
   async function handleDelete() {
@@ -1624,8 +1658,8 @@ export default async function ${modelName}DetailPage({ params }: { params: Promi
       </div>
 
       <dl className="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-3">
-${columns.map((c) => `        <dt className="text-sm font-medium text-gray-500">${c.comment ?? c.name}</dt>
-        <dd className="text-sm">{String((item as Record<string, unknown>).${c.name} ?? "")}</dd>`).join("\n")}
+${columns.map((c) => `        <dt className="text-sm font-medium text-gray-500">${jsxText(c.comment ?? c.name)}</dt>
+        <dd className="text-sm">{String(${recordAccess("(item as Record<string, unknown>)", c.name)} ?? "")}</dd>`).join("\n")}
       </dl>
     </div>
   );
@@ -1640,7 +1674,7 @@ export const dynamic = "force-dynamic";
 
 export default async function ${modelName}DetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const item = await prisma.${camelModel}.findUnique({ where: { ${pk.name}: ${pkCoerce(pk.type, "id")} } });
+  const item = await prisma.${camelModel}.findUnique({ where: { ${codeKey(pk.name)}: ${pkCoerce(pk.type, "id")} } });
   if (!item) return notFound();
 
   async function handleDelete() {
@@ -1665,8 +1699,8 @@ export default async function ${modelName}DetailPage({ params }: { params: Promi
       </div>
 
       <dl style={{ display: "grid", gridTemplateColumns: "max-content 1fr", columnGap: "24px", rowGap: "12px" }}>
-${columns.map((c) => `        <dt style={{ fontSize: "14px", fontWeight: "500", color: "#6b7280" }}>${c.comment ?? c.name}</dt>
-        <dd style={{ fontSize: "14px" }}>{String((item as Record<string, unknown>).${c.name} ?? "")}</dd>`).join("\n")}
+${columns.map((c) => `        <dt style={{ fontSize: "14px", fontWeight: "500", color: "#6b7280" }}>${jsxText(c.comment ?? c.name)}</dt>
+        <dd style={{ fontSize: "14px" }}>{String(${recordAccess("(item as Record<string, unknown>)", c.name)} ?? "")}</dd>`).join("\n")}
       </dl>
     </div>
   );
@@ -1694,7 +1728,7 @@ function generateTableFormPage(
     if (col.isPrimary && col.isAutoIncrement) continue;
     formFields.push({
       name: col.name,
-      type: fieldTypeToInputType(col.type),
+      type: tableInputType(col.type),
       label: col.comment ?? fieldLabel(col.name),
     });
   }
@@ -1790,8 +1824,8 @@ ${formFields
             </label>
             <input
               type="${f.type}"
-              value={String(form.${f.name} ?? "")}
-              onChange={(e) => setForm({ ...form, ${f.name}: ${f.type === "number" ? "Number(e.target.value)" : f.type === "checkbox" ? "e.target.checked" : "e.target.value"} })}
+              value={String(${recordAccess("form", f.name)} ?? "")}
+              onChange={(e) => setForm({ ...form, ${recordUpdate(f.name, f.type === "number" ? "Number(e.target.value)" : f.type === "checkbox" ? "e.target.checked" : "e.target.value")} })}
               className="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
           </div>`,
@@ -1841,8 +1875,8 @@ ${formFields
           <input
             className="wp-form-input"
             type="${f.type}"
-            value={String(form.${f.name} ?? "")}
-            onChange={(e) => setForm({ ...form, ${f.name}: ${f.type === "number" ? "Number(e.target.value)" : f.type === "checkbox" ? "e.target.checked" : "e.target.value"} })}
+            value={String(${recordAccess("form", f.name)} ?? "")}
+            onChange={(e) => setForm({ ...form, ${recordUpdate(f.name, f.type === "number" ? "Number(e.target.value)" : f.type === "checkbox" ? "e.target.checked" : "e.target.value")} })}
           />
         </div>`,
   )
@@ -1989,7 +2023,7 @@ export function generateAdminScaffold(
   // Generate admin layout
   pages.push({
     path: "app/(admin)/layout.tsx",
-    content: generateAdminLayout(pages, tables, fw),
+    content: generateAdminLayout(pages, tables, fw, options?.requireAuth ?? false),
     type: "dashboard",
   });
 

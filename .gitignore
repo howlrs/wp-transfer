@@ -1,10 +1,31 @@
 node_modules/
+package-lock.json
 dist/
 .env
 .env.*
+!.env.example
+!**/.env.example
 *.log
 .DS_Store
 .turbo/
 coverage/
 output/
 .claude/
+
+# Local migration inputs and generated runtime data
+migration-input/
+private-fixtures/
+*.local.sql
+*.local.wxr
+**/.auth/
+**/.wp-transfer/
+**/playwright-report/
+**/test-results/
+**/public/uploads/*
+!**/public/uploads/.gitkeep
+
+# Keep customer-specific working directories local.
+**/client-*/
+**/client_*/
+**/customer-*/
+**/customer_*/

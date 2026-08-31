@@ -13,20 +13,20 @@ describe("analyzePhpFile", () => {
     it("extracts $_POST params with double quotes", () => {
       const content = phpWrap(`
         $title = $_POST["title"];
-        $mode = $_POST["recruiting_mode"];
+        $category = $_POST["category"];
       `);
       const result = analyzePhpFile(content, "test.php");
       expect(result.inputParams).toHaveLength(2);
       expect(result.inputParams[0]!.name).toBe("title");
       expect(result.inputParams[0]!.source).toBe("$_POST");
-      expect(result.inputParams[1]!.name).toBe("recruiting_mode");
+      expect(result.inputParams[1]!.name).toBe("category");
     });
 
     it("extracts $_POST params with single quotes", () => {
-      const content = phpWrap(`$id = $_POST['event_id'];`);
+      const content = phpWrap(`$id = $_POST['product_id'];`);
       const result = analyzePhpFile(content, "test.php");
       expect(result.inputParams).toHaveLength(1);
-      expect(result.inputParams[0]!.name).toBe("event_id");
+      expect(result.inputParams[0]!.name).toBe("product_id");
       expect(result.inputParams[0]!.source).toBe("$_POST");
     });
 
@@ -60,59 +60,59 @@ describe("analyzePhpFile", () => {
   describe("database operation extraction", () => {
     it("extracts INSERT with columns", () => {
       const content = phpWrap(`
-        $sql = "INSERT INTO event(title, status, start_time) VALUES ('$t','$s','$st');";
+        $sql = "INSERT INTO product(title, status, published_at) VALUES ('$t','$s','$at');";
       `);
       const result = analyzePhpFile(content, "test.php");
       expect(result.dbOperations).toHaveLength(1);
       expect(result.dbOperations[0]!.type).toBe("INSERT");
-      expect(result.dbOperations[0]!.table).toBe("event");
+      expect(result.dbOperations[0]!.table).toBe("product");
       expect(result.dbOperations[0]!.columns).toEqual([
         "title",
         "status",
-        "start_time",
+        "published_at",
       ]);
     });
 
     it("extracts UPDATE with columns", () => {
       const content = phpWrap(`
-        $sql = "UPDATE event SET title='$t', status='1' WHERE id = '$id';";
+        $sql = "UPDATE product SET title='$t', status='1' WHERE id = '$id';";
       `);
       const result = analyzePhpFile(content, "test.php");
       expect(result.dbOperations).toHaveLength(1);
       expect(result.dbOperations[0]!.type).toBe("UPDATE");
-      expect(result.dbOperations[0]!.table).toBe("event");
+      expect(result.dbOperations[0]!.table).toBe("product");
       expect(result.dbOperations[0]!.columns).toContain("title");
       expect(result.dbOperations[0]!.columns).toContain("status");
     });
 
     it("extracts DELETE", () => {
       const content = phpWrap(`
-        $sql = "DELETE FROM event WHERE id='$id';";
+        $sql = "DELETE FROM product WHERE id='$id';";
       `);
       const result = analyzePhpFile(content, "test.php");
       expect(result.dbOperations).toHaveLength(1);
       expect(result.dbOperations[0]!.type).toBe("DELETE");
-      expect(result.dbOperations[0]!.table).toBe("event");
+      expect(result.dbOperations[0]!.table).toBe("product");
       expect(result.dbOperations[0]!.columns).toEqual([]);
     });
 
     it("extracts SELECT", () => {
       const content = phpWrap(`
-        $sql = "SELECT * FROM event WHERE id='$id';";
+        $sql = "SELECT * FROM product WHERE id='$id';";
       `);
       const result = analyzePhpFile(content, "test.php");
       expect(result.dbOperations).toHaveLength(1);
       expect(result.dbOperations[0]!.type).toBe("SELECT");
-      expect(result.dbOperations[0]!.table).toBe("event");
+      expect(result.dbOperations[0]!.table).toBe("product");
       expect(result.dbOperations[0]!.columns).toEqual(["*"]);
     });
 
     it("extracts multiple operations from a single file", () => {
       const content = phpWrap(`
-        $sql = "SELECT * FROM event WHERE id='$id';";
-        $sql = "INSERT INTO event_slot(event_id, time_stamp) VALUES ('$eid','$ts');";
+        $sql = "SELECT * FROM product WHERE id='$id';";
+        $sql = "INSERT INTO article_tag(article_id, tag_id) VALUES ('$articleId','$tagId');";
       `);
-      const result = analyzePhpFile(content, "event-copy.php");
+      const result = analyzePhpFile(content, "sync-catalog.php");
       expect(result.dbOperations.length).toBeGreaterThanOrEqual(2);
       const types = result.dbOperations.map((o) => o.type);
       expect(types).toContain("SELECT");
@@ -157,7 +157,7 @@ describe("analyzePhpFile", () => {
     it("detects SQL injection via direct variable interpolation", () => {
       const content = phpWrap(`
         $title = $_POST["title"];
-        $sql = "INSERT INTO event(title) VALUES ('$title');";
+        $sql = "INSERT INTO product(title) VALUES ('$title');";
       `);
       const result = analyzePhpFile(content, "test.php");
       expect(result.securityIssues.length).toBeGreaterThan(0);
@@ -179,7 +179,7 @@ describe("analyzePhpFile", () => {
     it("detects missing CSRF protection", () => {
       const content = phpWrap(`
         $id = $_POST["delete"];
-        $sql = "DELETE FROM event WHERE id='$id';";
+        $sql = "DELETE FROM product WHERE id='$id';";
       `);
       const result = analyzePhpFile(content, "test.php");
       expect(
@@ -189,10 +189,10 @@ describe("analyzePhpFile", () => {
   });
 
   describe("purpose inference", () => {
-    it("infers purpose from known file names", () => {
-      const content = phpWrap(`$id = $_POST["update"];`);
-      const result = analyzePhpFile(content, "event-stop.php");
-      expect(result.purpose).toBe("Stop/cancel event");
+    it("humanizes filenames without application-specific labels", () => {
+      const content = phpWrap(`$id = $_POST["product_id"];`);
+      const result = analyzePhpFile(content, "archive-product.php");
+      expect(result.purpose).toBe("PHP script: Archive Product");
     });
 
     it("infers purpose from DB operations for unknown files", () => {
@@ -257,7 +257,7 @@ describe("analyzePhpFile", () => {
     it("returns empty hints for legacy PHP code", () => {
       const content = phpWrap(`
         $title = $_POST["title"];
-        $sql = "INSERT INTO event(title) VALUES ('$title');";
+        $sql = "INSERT INTO product(title) VALUES ('$title');";
       `);
       const result = analyzePhpFile(content, "test.php");
       expect(result.phpVersionHints).toEqual([]);
@@ -304,17 +304,17 @@ $wp_db_version = 58975;
     });
   });
 
-  describe("real-world insert.php pattern", () => {
-    it("correctly analyzes the insert.php file pattern", () => {
+  describe("synthetic create.php pattern", () => {
+    it("correctly analyzes a generic create handler", () => {
       const content = `
 <?php
 
 $title = $_POST["title"];
-$recruiting_type = $_POST["recruiting_type"];
+$category = $_POST["category"];
 $status = 0;
 
-$start_time = str_replace(array("T"), " ", $_POST["start_time"]);
-$start_time = $start_time.":00";
+$published_at = str_replace(array("T"), " ", $_POST["published_at"]);
+$published_at = $published_at.":00";
 
 $dbh = NULL;
 try{
@@ -324,22 +324,22 @@ try{
     exit;
 }
 
-$sql = "INSERT INTO event(
+$sql = "INSERT INTO product(
     title,
-    recruiting_type,
+    category,
     status,
-    start_time
+    published_at
 )
 VALUES (
     '$title',
-    '$recruiting_type',
+    '$category',
     '$status',
-    '$start_time'
+    '$published_at'
     );";
 try{
     $sth = $dbh->prepare($sql);
     $sth->execute();
-    $event_id = $dbh->lastInsertId();
+    $product_id = $dbh->lastInsertId();
 }catch(PDOException $e){
     exit;
 }
@@ -347,10 +347,10 @@ try{
 header('Location: https://example.com/area/');
 ?>`;
 
-      const result = analyzePhpFile(content, "insert.php");
+      const result = analyzePhpFile(content, "create-product.php");
 
-      expect(result.fileName).toBe("insert.php");
-      expect(result.purpose).toBe("Create new record");
+      expect(result.fileName).toBe("create-product.php");
+      expect(result.purpose).toBe("create operation (Create Product)");
       expect(result.outputType).toBe("redirect");
       expect(result.redirectTarget).toBe("https://example.com/area/");
 
@@ -360,13 +360,13 @@ header('Location: https://example.com/area/');
       );
       expect(postParams.length).toBeGreaterThanOrEqual(3);
       expect(postParams.map((p) => p.name)).toContain("title");
-      expect(postParams.map((p) => p.name)).toContain("recruiting_type");
-      expect(postParams.map((p) => p.name)).toContain("start_time");
+      expect(postParams.map((p) => p.name)).toContain("category");
+      expect(postParams.map((p) => p.name)).toContain("published_at");
 
       // Should find INSERT operation
       const inserts = result.dbOperations.filter((o) => o.type === "INSERT");
       expect(inserts.length).toBeGreaterThanOrEqual(1);
-      expect(inserts[0]!.table).toBe("event");
+      expect(inserts[0]!.table).toBe("product");
       expect(inserts[0]!.columns).toContain("title");
 
       // Should flag security issues
@@ -378,18 +378,18 @@ header('Location: https://example.com/area/');
     it("marks INSERT inside foreach as inLoop", () => {
       const php = `<?php
 foreach ($slots as $slot) {
-  $sql = "INSERT INTO event_slot (event_id, slot_date) VALUES (?, ?)";
+  $sql = "INSERT INTO article_tag (article_id, tag_id) VALUES (?, ?)";
   $stmt->execute();
 }`;
       const result = analyzePhpFile(php, "test.php");
-      const insert = result.dbOperations.find(op => op.table === "event_slot");
+      const insert = result.dbOperations.find(op => op.table === "article_tag");
       expect(insert).toBeDefined();
       expect(insert!.inLoop).toBe(true);
     });
 
     it("marks INSERT outside loop as not inLoop", () => {
       const php = `<?php
-$sql = "INSERT INTO event (title) VALUES (?)";
+$sql = "INSERT INTO product (title) VALUES (?)";
 $stmt->execute();`;
       const result = analyzePhpFile(php, "test.php");
       expect(result.dbOperations[0]!.inLoop).toBe(false);
@@ -421,31 +421,31 @@ for ($i = 0; $i < count($arr); $i++) {
 describe("form spec extraction", () => {
   it("extracts select elements with options", () => {
     const html = `<?php get_header(); ?>
-<form action="/insert.php" method="post">
-  <h4>【募集タイプ】</h4>
-  <select name="recruiting_type">
-    <option value="1">先着順</option>
-    <option value="2">抽選</option>
-    <option value="3">定時抽選</option>
+<form action="/create-product.php" method="post">
+  <h4>【カテゴリ】</h4>
+  <select name="category">
+    <option value="book">書籍</option>
+    <option value="tool">ツール</option>
+    <option value="other">その他</option>
   </select>
-  <input type="submit" value="登録する" />
+  <input type="submit" value="保存" />
 </form>`;
-    const result = analyzePhpFile(html, "page-event.php");
+    const result = analyzePhpFile(html, "page-product.php");
     expect(result.formSpec).toBeDefined();
     expect(result.formSpec!.fields).toHaveLength(1);
     expect(result.formSpec!.fields[0]!.type).toBe("select");
-    expect(result.formSpec!.fields[0]!.name).toBe("recruiting_type");
+    expect(result.formSpec!.fields[0]!.name).toBe("category");
     expect(result.formSpec!.fields[0]!.options).toHaveLength(3);
-    expect(result.formSpec!.fields[0]!.options![0]!.label).toBe("先着順");
+    expect(result.formSpec!.fields[0]!.options![0]!.label).toBe("書籍");
   });
 
   it("extracts textarea elements", () => {
-    const html = `<form action="/insert.php" method="post">
+    const html = `<form action="/create-article.php" method="post">
   <h4>【概要】</h4>
   <textarea rows="5" name="description"></textarea>
   <input type="submit" value="登録" />
 </form>`;
-    const result = analyzePhpFile(html, "page-event.php");
+    const result = analyzePhpFile(html, "page-article.php");
     expect(result.formSpec).toBeDefined();
     const desc = result.formSpec!.fields.find(f => f.name === "description");
     expect(desc).toBeDefined();
@@ -454,16 +454,16 @@ describe("form spec extraction", () => {
   });
 
   it("extracts input elements with types", () => {
-    const html = `<form action="/insert.php" method="post">
-  <h4>【イベントタイトル】</h4>
+    const html = `<form action="/create-product.php" method="post">
+  <h4>【商品名】</h4>
   <input type="text" name="title" required="required" />
-  <h4>【当選人数】</h4>
-  <input type="number" name="winners_limit" required="required" />
-  <h4>【開始日時】</h4>
-  <input type="datetime-local" name="start_time" required="required" />
-  <input type="submit" value="作成" />
+  <h4>【在庫数】</h4>
+  <input type="number" name="stock" required="required" />
+  <h4>【公開日時】</h4>
+  <input type="datetime-local" name="published_at" required="required" />
+  <input type="submit" value="保存" />
 </form>`;
-    const result = analyzePhpFile(html, "page-event.php");
+    const result = analyzePhpFile(html, "page-product.php");
     expect(result.formSpec).toBeDefined();
     expect(result.formSpec!.fields).toHaveLength(3);
     expect(result.formSpec!.fields[0]!.type).toBe("text");
@@ -473,14 +473,14 @@ describe("form spec extraction", () => {
   });
 
   it("extracts array fields (isArray=true)", () => {
-    const html = `<form action="/insert.php" method="post">
-  <h4>【イベント枠名称】</h4>
-  <input type="text" name="event_time_text[]" required="required" />
-  <input type="submit" value="作成" />
+    const html = `<form action="/create-product.php" method="post">
+  <h4>【タグ】</h4>
+  <input type="text" name="tags[]" required="required" />
+  <input type="submit" value="保存" />
 </form>`;
-    const result = analyzePhpFile(html, "page-event.php");
+    const result = analyzePhpFile(html, "page-product.php");
     expect(result.formSpec).toBeDefined();
-    const field = result.formSpec!.fields.find(f => f.name === "event_time_text");
+    const field = result.formSpec!.fields.find(f => f.name === "tags");
     expect(field).toBeDefined();
     expect(field!.isArray).toBe(true);
   });
@@ -489,7 +489,7 @@ describe("form spec extraction", () => {
     const html = `<form action="/upload.php" method="post" enctype="multipart/form-data">
   <h4>【バナー画像】</h4>
   <input type="file" name="banner_img" accept="image/*" />
-  <input type="submit" value="登録する" />
+  <input type="submit" value="アップロード" />
 </form>`;
     const result = analyzePhpFile(html, "page-info.php");
     expect(result.formSpec).toBeDefined();
@@ -501,81 +501,104 @@ describe("form spec extraction", () => {
   });
 
   it("extracts submit button label", () => {
-    const html = `<form action="/insert.php" method="post">
+    const html = `<form action="/create-product.php" method="post">
   <h4>【タイトル】</h4>
   <input type="text" name="title" />
-  <input type="submit" value="コピーする" />
+  <input type="submit" value="保存する" />
 </form>`;
-    const result = analyzePhpFile(html, "page-copy.php");
+    const result = analyzePhpFile(html, "page-product.php");
     expect(result.formSpec).toBeDefined();
-    expect(result.formSpec!.submitLabel).toBe("コピーする");
+    expect(result.formSpec!.submitLabel).toBe("保存する");
+  });
+
+  it("uses a portable default submit label", () => {
+    const html = `<form action="/create-product.php" method="post">
+  <h4>【タイトル】</h4>
+  <input type="text" name="title" />
+</form>`;
+    const result = analyzePhpFile(html, "page-product.php");
+    expect(result.formSpec!.submitLabel).toBe("Submit");
+  });
+
+  it("extracts explicit disabled-state metadata without interpreting PHP variables", () => {
+    const html = `<form action="/create-product.php" method="post">
+  <h4>【公開状態】</h4>
+  <select name="visibility" data-disabled-when-field="status" data-disabled-when-value="archived">
+    <option value="public">公開</option>
+  </select>
+</form>`;
+    const result = analyzePhpFile(html, "page-product.php");
+    expect(result.formSpec!.fields[0]!.disabledWhen).toEqual({
+      field: "status",
+      value: "archived",
+    });
   });
 
   it("extracts select options from PHP templates with embedded PHP tags", () => {
-    const html = `<form action="/copy.php" method="post">
-  <h4>【募集タイプ】</h4>
-  <select id="r_type" name="recruiting_type">
-    <option <?php echo $type1 ?> value="1">先着順</option>
-    <option <?php echo $type2 ?> value="2">抽選</option>
-    <option <?php echo $type3 ?> value="3">定時抽選</option>
+    const html = `<form action="/create-product.php" method="post">
+  <h4>【カテゴリ】</h4>
+  <select id="product-category" name="category">
+    <option <?php echo $selectedBook ?> value="book">書籍</option>
+    <option <?php echo $selectedTool ?> value="tool">ツール</option>
+    <option <?php echo $selectedOther ?> value="other">その他</option>
   </select>
-  <input type="submit" value="コピー" />
+  <input type="submit" value="保存" />
 </form>`;
-    const result = analyzePhpFile(html, "page-event-copy.php");
+    const result = analyzePhpFile(html, "page-product.php");
     expect(result.formSpec).toBeDefined();
-    const rt = result.formSpec!.fields.find(f => f.name === "recruiting_type");
-    expect(rt).toBeDefined();
-    expect(rt!.options).toHaveLength(3);
-    expect(rt!.options![0]!.value).toBe("1");
-    expect(rt!.options![0]!.label).toBe("先着順");
-    expect(rt!.options![1]!.label).toBe("抽選");
-    expect(rt!.options![2]!.label).toBe("定時抽選");
+    const category = result.formSpec!.fields.find(f => f.name === "category");
+    expect(category).toBeDefined();
+    expect(category!.options).toHaveLength(3);
+    expect(category!.options![0]!.value).toBe("book");
+    expect(category!.options![0]!.label).toBe("書籍");
+    expect(category!.options![1]!.label).toBe("ツール");
+    expect(category!.options![2]!.label).toBe("その他");
   });
 
   it("returns undefined formSpec for non-template files", () => {
     const php = `<?php
 $title = $_POST["title"];
-$sql = "INSERT INTO event (title) VALUES ('$title')";
+$sql = "INSERT INTO product (title) VALUES ('$title')";
 header("Location: /");
 ?>`;
     const result = analyzePhpFile(php, "insert.php");
     expect(result.formSpec).toBeUndefined();
   });
 
-  it("extracts form spec from real page-event-copy.php pattern", () => {
+  it("extracts a complete synthetic product form", () => {
     const html = `<?php get_header(); ?>
-<form action="https://example.com/test/event-copy.php" method="post">
-  <h4>【イベントタイトル】</h4>
+<form action="https://example.com/create-product.php" method="post">
+  <h4>【商品名】</h4>
   <input type="text" name="title" size="10" value="" required="required" />
-  <h4>【募集タイプ】</h4>
-  <select id="r_type" name="recruiting_type">
-    <option value="1">先着順</option>
-    <option value="2">抽選</option>
-    <option value="3">定時抽選</option>
+  <h4>【カテゴリ】</h4>
+  <select id="product-category" name="category">
+    <option value="book">書籍</option>
+    <option value="tool">ツール</option>
+    <option value="other">その他</option>
   </select>
-  <h4>【もぎり番号設定】</h4>
-  <select id="mogiri_mode" name="mogiri_mode" required="required">
-    <option value="1">番号引き換えあり</option>
-    <option value="3">番号引き換えなし</option>
+  <h4>【公開状態】</h4>
+  <select id="visibility" name="visibility" required="required">
+    <option value="public">公開</option>
+    <option value="private">非公開</option>
   </select>
   <h4>【概要】</h4>
   <textarea id="textarea" rows="5" name="description"></textarea>
-  <h4>【開始日時】</h4>
-  <input type="datetime-local" name="start_time" value="" required="required">
-  <h4>【当選人数】</h4>
-  <input type="number" name="winners_limit" value="" required="required">
-  <input type="submit" value="コピーする" />
+  <h4>【公開日時】</h4>
+  <input type="datetime-local" name="published_at" value="" required="required">
+  <h4>【在庫数】</h4>
+  <input type="number" name="stock" value="" required="required">
+  <input type="submit" value="保存する" />
 </form>`;
-    const result = analyzePhpFile(html, "page-event-copy.php");
+    const result = analyzePhpFile(html, "page-product.php");
     expect(result.formSpec).toBeDefined();
-    expect(result.formSpec!.action).toBe("https://example.com/test/event-copy.php");
-    expect(result.formSpec!.submitLabel).toBe("コピーする");
+    expect(result.formSpec!.action).toBe("https://example.com/create-product.php");
+    expect(result.formSpec!.submitLabel).toBe("保存する");
     expect(result.formSpec!.fields.length).toBeGreaterThanOrEqual(6);
 
-    const rt = result.formSpec!.fields.find(f => f.name === "recruiting_type");
-    expect(rt).toBeDefined();
-    expect(rt!.type).toBe("select");
-    expect(rt!.options).toHaveLength(3);
+    const category = result.formSpec!.fields.find(f => f.name === "category");
+    expect(category).toBeDefined();
+    expect(category!.type).toBe("select");
+    expect(category!.options).toHaveLength(3);
 
     const desc = result.formSpec!.fields.find(f => f.name === "description");
     expect(desc).toBeDefined();

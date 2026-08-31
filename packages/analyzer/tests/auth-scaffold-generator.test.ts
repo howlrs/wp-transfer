@@ -47,9 +47,15 @@ describe("Auth Scaffold Generator", () => {
       expect(files).toHaveLength(0);
     });
 
-    it("generates all 10 auth files when auth plugin detected", () => {
+    it("generates a neutral baseline when explicitly forced", () => {
+      const files = generateAuthScaffold([], { force: true });
+      expect(files.map((file) => file.path)).toContain("middleware.ts");
+      expect(files.map((file) => file.path)).toContain("lib/auth.ts");
+    });
+
+    it("generates all 12 auth files when auth plugin detected", () => {
       const files = generateAuthScaffold(["wpfront-user-role-editor"]);
-      expect(files.length).toBe(10);
+      expect(files.length).toBe(12);
     });
 
     it("generates lib/auth.ts with NextAuth config", () => {
@@ -61,19 +67,23 @@ describe("Auth Scaffold Generator", () => {
       expect(authFile!.content).toContain("CredentialsProvider");
       expect(authFile!.content).toContain("jwt");
       expect(authFile!.content).toContain("role");
+      expect(authFile!.content).toContain("sessionUser.id = token.sub");
+      expect(authFile!.content).toContain("maxAge: 15 * 60");
     });
 
-    it("generates lib/rbac.ts with role definitions", () => {
+    it("generates lib/rbac.ts with WordPress standard role definitions", () => {
       const files = generateAuthScaffold(["wpfront-user-role-editor"]);
       const rbacFile = findFile(files, "lib/rbac.ts");
 
       expect(rbacFile).toBeDefined();
       expect(rbacFile!.content).toContain("administrator");
       expect(rbacFile!.content).toContain("editor");
+      expect(rbacFile!.content).toContain("author");
       expect(rbacFile!.content).toContain("contributor");
-      expect(rbacFile!.content).toContain("support_admin");
+      expect(rbacFile!.content).toContain("subscriber");
       expect(rbacFile!.content).toContain("filterMenuByRole");
       expect(rbacFile!.content).toContain("canAccess");
+      expect(rbacFile!.content).toContain("if (level === undefined) return false");
     });
 
     it("generates lib/providers.tsx with SessionProvider", () => {
@@ -101,6 +111,9 @@ describe("Auth Scaffold Generator", () => {
       expect(loginPage).toBeDefined();
       expect(loginPage!.content).toContain("ログイン");
       expect(loginPage!.content).toContain("signIn");
+      expect(loginPage!.content).toContain('callbackParam?.startsWith("/")');
+      expect(loginPage!.content).toContain('!callbackParam.startsWith("//")');
+      expect(loginPage!.content).toContain('!callbackParam.includes("\\\\")');
     });
 
     it("generates NextAuth route handler", () => {
@@ -111,25 +124,66 @@ describe("Auth Scaffold Generator", () => {
       expect(route!.content).toContain("handlers");
     });
 
-    it("generates accounts API routes", () => {
+    it("generates generic user management API routes", () => {
       const files = generateAuthScaffold(["wpfront-user-role-editor"]);
-      const accountsRoute = findFile(files, "api/accounts/route.ts");
-      const accountIdRoute = findFile(files, "api/accounts/[id]/route.ts");
+      const usersRoute = findFile(files, "api/admin-users/route.ts");
+      const userIdRoute = findFile(files, "api/admin-users/[id]/route.ts");
 
-      expect(accountsRoute).toBeDefined();
-      expect(accountsRoute!.content).toContain("GET");
-      expect(accountsRoute!.content).toContain("POST");
+      expect(usersRoute).toBeDefined();
+      expect(usersRoute!.content).toContain("GET");
+      expect(usersRoute!.content).toContain("POST");
+      expect(usersRoute!.content).toContain("allowedRoles");
+      expect(usersRoute!.content).toContain("requireActiveAdministrator");
+      expect(usersRoute!.content).toContain('"subscriber"');
+      expect(usersRoute!.content).toContain("JSON形式が正しくありません");
+      expect(usersRoute!.content).toContain("/^[A-Za-z0-9._-]{3,64}$/");
+      expect(usersRoute!.content).toContain("password.length < 12");
+      expect(usersRoute!.content).toContain('typeof role !== "string"');
 
-      expect(accountIdRoute).toBeDefined();
-      expect(accountIdRoute!.content).toContain("DELETE");
+      expect(userIdRoute).toBeDefined();
+      expect(userIdRoute!.content).toContain("DELETE");
+      expect(userIdRoute!.content).toContain("administrator.id === userId");
+      expect(userIdRoute!.content).toContain('result === "not-found"');
+      expect(userIdRoute!.content).toContain("最後の有効な管理者は削除できません");
     });
 
-    it("generates accounts management page", () => {
+    it("uses a serializable transaction with retry to preserve an active administrator", () => {
       const files = generateAuthScaffold(["wpfront-user-role-editor"]);
-      const accountsPage = findFile(files, "accounts/page.tsx");
+      const userIdRoute = findFile(files, "api/admin-users/[id]/route.ts");
 
-      expect(accountsPage).toBeDefined();
-      expect(accountsPage!.content).toContain("アカウント管理");
+      expect(userIdRoute).toBeDefined();
+      expect(userIdRoute!.content).toContain("deleteUserAtomically");
+      expect(userIdRoute!.content).toContain("prisma.$transaction");
+      expect(userIdRoute!.content).toContain('isolationLevel: "Serializable"');
+      expect(userIdRoute!.content).toContain("tx.adminUser.count");
+      expect(userIdRoute!.content).toContain("activeAdministrators <= 1");
+      expect(userIdRoute!.content).toContain('code === "P2034" && attempt < 2');
+      expect(userIdRoute!.content).toContain('code === "P2025"');
+    });
+
+    it("generates generic user management page", () => {
+      const files = generateAuthScaffold(["wpfront-user-role-editor"]);
+      const usersPage = findFile(files, "admin-users/page.tsx");
+
+      expect(usersPage).toBeDefined();
+      expect(usersPage!.content).toContain("ユーザー管理");
+      expect(usersPage!.content).toContain('value="author"');
+      expect(usersPage!.content).toContain('value="subscriber"');
+    });
+
+    it("generates database-backed user and access guards", () => {
+      const files = generateAuthScaffold(["wpfront-user-role-editor"]);
+      const guard = findFile(files, "require-active-user.ts");
+
+      expect(guard).toBeDefined();
+      expect(guard!.content).toContain("requireActiveUser");
+      expect(guard!.content).toContain("requireActiveAccess");
+      expect(guard!.content).toContain("requireActiveAdministrator");
+      expect(guard!.content).toContain("isActive");
+      expect(guard!.content).toContain("expiresAt");
+      expect(guard!.content).toContain('user?.role === "administrator"');
+      expect(guard!.content).toContain("canAccess(user.role as Role, path)");
+      expect(guard!.content).toContain("Number.isSafeInteger");
     });
 
     it("generates fail-safe RBAC with default deny", () => {
@@ -139,12 +193,92 @@ describe("Auth Scaffold Generator", () => {
       expect(rbac!.content).toContain("PATH_PERMISSIONS");
     });
 
+    it("fails closed for ordinary, opaque, and sensitive generated resources", () => {
+      const files = generateAuthScaffold(
+        ["wpfront-user-role-editor"],
+        {
+          routeResources: [
+            "articles", "media_items", "records_x9", "users", "user", "accounts", "roles",
+            "permissions", "billing", "payments", "orders", "customers", "staff", "transactions",
+            "api-keys", "invalid route",
+          ],
+        },
+      );
+      const rbac = files.find((file) => file.path === "lib/rbac.ts");
+      const middleware = files.find((file) => file.path === "middleware.ts");
+      const activeGuard = files.find((file) => file.path === "lib/require-active-user.ts");
+
+      expect(rbac!.content).toContain('"/articles": 100');
+      expect(rbac!.content).toContain('"/media_items": 100');
+      expect(rbac!.content).toContain('"/records_x9": 100');
+      expect(rbac!.content).toContain('"/users": 100');
+      expect(rbac!.content).toContain('"/user": 100');
+      expect(rbac!.content).toContain('"/accounts": 100');
+      expect(rbac!.content).toContain('"/roles": 100');
+      expect(rbac!.content).toContain('"/permissions": 100');
+      expect(rbac!.content).toContain('"/billing": 100');
+      expect(rbac!.content).toContain('"/payments": 100');
+      expect(rbac!.content).toContain('"/orders": 100');
+      expect(rbac!.content).toContain('"/customers": 100');
+      expect(rbac!.content).toContain('"/staff": 100');
+      expect(rbac!.content).toContain('"/transactions": 100');
+      expect(rbac!.content).toContain('"/api-keys": 100');
+      expect(rbac!.content).toContain('"/admin-users": 100');
+      expect(rbac!.content).not.toContain('"/invalid route"');
+      // Both edge middleware and DB-backed server guards defer to this same
+      // generated policy for resource API reads, writes, and deletes.
+      expect(middleware!.content).toContain("canAccess(role, permissionPath)");
+      expect(activeGuard!.content).toContain("canAccess(user.role as Role, path)");
+    });
+
+    it("generates one protected layout per valid resource and the users route", () => {
+      const files = generateAuthScaffold(
+        ["wpfront-user-role-editor"],
+        { routeResources: ["articles", "/media_items/", "articles", "bad route"] },
+      );
+      const layouts = files.filter((file) => file.path.endsWith("/layout.tsx"));
+
+      expect(layouts.map((file) => file.path)).toEqual([
+        "app/(admin)/admin-users/layout.tsx",
+        "app/(admin)/articles/layout.tsx",
+        "app/(admin)/media_items/layout.tsx",
+      ]);
+      expect(layouts.every((file) => file.content.includes("requireActiveAccess"))).toBe(true);
+      expect(layouts.every((file) => file.content.includes('redirect("/unauthorized")'))).toBe(true);
+    });
+
+    it("keeps a domain users resource separate from reserved authentication management", () => {
+      const files = generateAuthScaffold(
+        ["wpfront-user-role-editor"],
+        { routeResources: ["users"] },
+      );
+      const paths = files.map((file) => file.path);
+
+      expect(paths).toContain("app/(admin)/users/layout.tsx");
+      expect(paths).toContain("app/(admin)/admin-users/page.tsx");
+      expect(paths).toContain("app/api/admin-users/route.ts");
+      expect(paths).not.toContain("app/(admin)/users/page.tsx");
+      expect(paths).not.toContain("app/api/users/route.ts");
+      expect(new Set(paths).size).toBe(paths.length);
+    });
+
     it("generates middleware with API 401 for unauthenticated", () => {
       const files = generateAuthScaffold(["wpfront-user-role-editor"]);
       const mw = files.find(f => f.path === "middleware.ts");
       expect(mw!.content).toContain("/api/");
       expect(mw!.content).toContain("401");
       expect(mw!.content).toContain("Unauthorized");
+    });
+
+    it("enforces RBAC and normalizes API paths before checking permissions", () => {
+      const files = generateAuthScaffold(["wpfront-user-role-editor"]);
+      const mw = files.find((file) => file.path === "middleware.ts");
+
+      expect(mw!.content).toContain('import { canAccess, type Role } from "@/lib/rbac"');
+      expect(mw!.content).toContain('pathname.slice(4) || "/"');
+      expect(mw!.content).toContain("canAccess(role, permissionPath)");
+      expect(mw!.content).toContain('{ error: "Forbidden" }, { status: 403 }');
+      expect(mw!.content).toContain('new URL("/unauthorized", req.url)');
     });
 
     it("generates unauthorized page", () => {

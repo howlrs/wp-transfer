@@ -21,6 +21,9 @@ jobs:
           node-version: 20
           cache: pnpm
 
+      - name: Repository hygiene
+        run: pnpm check:hygiene
+
       - run: pnpm install --frozen-lockfile
 
       - name: Typecheck
@@ -31,11 +34,12 @@ jobs:
 
       - name: Coverage
         run: pnpm vitest run --config vitest.config.ts --coverage
-        continue-on-error: true
 
       - name: Security audit
-        run: pnpm audit --prod
-        continue-on-error: true
+        run: pnpm audit
 
       - name: Build
         run: pnpm -r build
+
+      - name: Packed CLI smoke test
+        run: pnpm test:package

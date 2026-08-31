@@ -3,8 +3,9 @@
  *
  * Validates environment and inputs before running migration analysis.
  */
-import { existsSync, accessSync, constants } from "node:fs";
+import { existsSync, accessSync, constants, statSync } from "node:fs";
 import { execSync } from "node:child_process";
+import { dirname, resolve } from "node:path";
 
 // -- Types --
 
@@ -44,18 +45,35 @@ function checkSourceDirectory(path: string | undefined): PreflightCheck {
 }
 
 function checkOutputDirectory(path: string): PreflightCheck {
-  const parent = path.split("/").slice(0, -1).join("/") || ".";
+  let writableAncestor = resolve(path);
+  while (!existsSync(writableAncestor)) {
+    const parent = dirname(writableAncestor);
+    if (parent === writableAncestor) break;
+    writableAncestor = parent;
+  }
+
   try {
-    accessSync(parent, constants.W_OK);
-    return { name: "Output directory", status: "pass", message: `${parent} is writable` };
+    if (!statSync(writableAncestor).isDirectory()) {
+      return {
+        name: "Output directory",
+        status: "fail",
+        message: `${writableAncestor} is not a directory`,
+      };
+    }
+    accessSync(writableAncestor, constants.W_OK | constants.X_OK);
+    return { name: "Output directory", status: "pass", message: `${writableAncestor} is writable` };
   } catch {
-    return { name: "Output directory", status: "fail", message: `${parent} is not writable` };
+    return { name: "Output directory", status: "fail", message: `${writableAncestor} is not writable` };
   }
 }
 
 function checkSchemaFile(path: string | undefined): PreflightCheck {
   if (!path) {
-    return { name: "Schema file", status: "warn", message: "No schema file specified — Prisma generation will be skipped" };
+    return {
+      name: "Schema file",
+      status: "warn",
+      message: "No schema file specified — Prisma columns will be conservatively inferred from PHP operations",
+    };
   }
   if (!existsSync(path)) {
     return { name: "Schema file", status: "fail", message: `${path} does not exist` };

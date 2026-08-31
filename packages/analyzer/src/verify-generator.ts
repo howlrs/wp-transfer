@@ -4,6 +4,7 @@
  * Generates Playwright E2E test configuration and smoke tests
  * for a scaffolded Next.js blog project.
  */
+import { pluralizeResource } from "./generator-utils.js";
 
 // ── Types ──
 
@@ -153,7 +154,7 @@ function generateApiSpec(input: VerifyInput): string | null {
   if (input.apiRoutes && input.apiRoutes.length > 0) {
     const seen = new Set<string>();
     for (const route of input.apiRoutes) {
-      // Extract base path: /api/events/[id] → events
+      // Extract base path: /api/products/[id] → products
       const match = route.path.match(/^app\/api\/([^/[]+)/);
       if (match && !seen.has(match[1]!)) {
         seen.add(match[1]!);
@@ -258,6 +259,7 @@ function generateAdminSpec(adminPages: string[]): string | null {
   const seen = new Set<string>();
   const uniquePages: string[] = [];
   for (const p of adminPages) {
+    if (!p.endsWith("/page.tsx")) continue;
     if (seen.has(p)) continue;
     seen.add(p);
     uniquePages.push(p);
@@ -269,7 +271,11 @@ function generateAdminSpec(adminPages: string[]): string | null {
   lines.push('test.describe("Admin Pages", () => {');
 
   for (const p of uniquePages) {
-    const cleanPath = p.replace(/^app\//, "/").replace(/\/page\.tsx$/, "");
+    // Route groups are organizational only and are omitted from Next.js URLs.
+    const cleanPath = p
+      .replace(/^app(?:\/\([^/]+\))?\//, "/")
+      .replace(/\/page\.tsx$/, "")
+      .replace(/\[[^/]+\]/g, "1");
     lines.push(`  test("${cleanPath} loads", async ({ page }) => {`);
     lines.push(`    const res = await page.goto("${cleanPath}");`);
     lines.push(`    expect(res?.status()).toBeLessThan(500);`);
@@ -282,12 +288,6 @@ function generateAdminSpec(adminPages: string[]): string | null {
 }
 
 // ── Migration verification test generators ──
-
-function pluralizeTable(name: string): string {
-  if (name.endsWith("s")) return name;
-  if (name.endsWith("y") && !["a","e","i","o","u"].includes(name[name.length - 2] ?? "")) return name.slice(0, -1) + "ies";
-  return name + "s";
-}
 
 /** Build a table→API path lookup from generated apiRoutes */
 function buildApiPathMap(apiRoutes?: Array<{ path: string; method: string }>): Map<string, string> {
@@ -306,11 +306,10 @@ function getApiPath(table: string, pathMap?: Map<string, string>): string {
     // Direct match
     if (pathMap.has(table)) return pathMap.get(table)!;
     // Try plural forms
-    const plural = pluralizeTable(table);
+    const plural = pluralizeResource(table);
     if (pathMap.has(plural)) return pathMap.get(plural)!;
   }
-  // Fallback: use table name directly
-  return `/api/${table}`;
+  return `/api/${pluralizeResource(table)}`;
 }
 
 function generateMigrationAuthSpec(tables: string[], apiRoutes?: Array<{ path: string; method: string }>): string {
@@ -321,7 +320,7 @@ function generateMigrationAuthSpec(tables: string[], apiRoutes?: Array<{ path: s
   lines.push("/**");
   lines.push(" * Migration Auth Protection Tests");
   lines.push(" * Verifies all API endpoints require authentication.");
-  lines.push(" * PHP source had no auth — Next.js adds middleware protection.");
+  lines.push(" * Generated API routes are protected by the Next.js auth middleware.");
   lines.push(" */");
   lines.push('test.describe("Auth protection: API endpoints reject unauthenticated requests", () => {');
   lines.push('  test.use({ storageState: { cookies: [], origins: [] } }); // No auth');
@@ -357,7 +356,56 @@ function generateMigrationAuthSpec(tables: string[], apiRoutes?: Array<{ path: s
   return lines.join("\n");
 }
 
-function generateMigrationCrudSpec(analyses: PhpAnalysisSummary[], tables: string[], apiRoutes?: Array<{ path: string; method: string }>): string {
+function verificationValue(column: TableColumn): string | number | boolean | Record<string, never> {
+  switch (column.type) {
+    case "Int": return 1;
+    case "Float": return 1.5;
+    case "BigInt": return "1";
+    case "Boolean": return true;
+    case "DateTime": return "2024-01-01T00:00:00.000Z";
+    case "Json": return {};
+    default: return `verification-${column.name}`;
+  }
+}
+
+interface CrudVerificationPlan {
+  payload: string;
+  primaryKey: string;
+}
+
+function createCrudVerificationPlan(
+  table: TableInfo | undefined,
+  inputParams: PhpAnalysisSummary["inputParams"],
+): CrudVerificationPlan | { reason: string } {
+  if (!table) return { reason: "no table schema is available to construct a valid mutation payload" };
+  if (inputParams.some((param) => param.source === "$_FILES")) {
+    return { reason: "the route accepts file uploads and needs a domain-specific multipart fixture" };
+  }
+
+  const primaryKey = table.columns.filter((column) => column.isPrimary);
+  if (primaryKey.length !== 1) return { reason: "the table does not have a single primary key" };
+
+  const inputNames = new Set(inputParams.map((param) => param.name.replace(/\[\]$/, "")));
+  const writableColumns = table.columns.filter((column) => !column.isPrimary && !column.isAutoIncrement);
+  const requiredColumns = writableColumns.filter((column) => !column.nullable);
+  const missingRequired = requiredColumns.filter((column) => !inputNames.has(column.name));
+  if (missingRequired.length > 0) {
+    return { reason: `required fields lack PHP input evidence: ${missingRequired.map((column) => column.name).join(", ")}` };
+  }
+
+  const payloadColumns = writableColumns.filter((column) => inputNames.has(column.name));
+  return {
+    payload: JSON.stringify(Object.fromEntries(payloadColumns.map((column) => [column.name, verificationValue(column)]))),
+    primaryKey: primaryKey[0]!.name,
+  };
+}
+
+function generateMigrationCrudSpec(
+  analyses: PhpAnalysisSummary[],
+  tables: string[],
+  apiRoutes?: Array<{ path: string; method: string }>,
+  tableDefinitions?: TableInfo[],
+): string {
   const pathMap = buildApiPathMap(apiRoutes);
   const lines: string[] = [];
   lines.push('import { test, expect } from "@playwright/test";');
@@ -370,21 +418,32 @@ function generateMigrationCrudSpec(analyses: PhpAnalysisSummary[], tables: strin
   lines.push("");
 
   // Group by table
-  const tableOps = new Map<string, Set<string>>();
+  const tableOps = new Map<string, { ops: Set<string>; inputParams: PhpAnalysisSummary["inputParams"] }>();
   for (const a of analyses) {
     for (const op of a.dbOperations) {
-      if (!tableOps.has(op.table)) tableOps.set(op.table, new Set());
-      tableOps.get(op.table)!.add(op.type);
+      const existing = tableOps.get(op.table) ?? { ops: new Set<string>(), inputParams: [] };
+      existing.ops.add(op.type);
+      existing.inputParams.push(...a.inputParams);
+      tableOps.set(op.table, existing);
     }
   }
 
-  for (const [table, ops] of tableOps) {
+  for (const [table, evidence] of tableOps) {
+    const { ops } = evidence;
     const apiPath = getApiPath(table, pathMap);
     const hasFullCrud = ops.has("INSERT") && ops.has("UPDATE") && ops.has("DELETE");
+    const plan = createCrudVerificationPlan(
+      tableDefinitions?.find((definition) => definition.name === table),
+      evidence.inputParams,
+    );
+    const supportedChain = hasFullCrud && "primaryKey" in plan;
+    const pendingReason = "reason" in plan
+      ? plan.reason
+      : "the table does not have a complete create-update-delete verification chain";
 
-    if (hasFullCrud) {
+    if (supportedChain) {
       lines.push(`test.describe.serial("${table} CRUD (from PHP migration)", () => {`);
-      lines.push(`  let createdId: number;`);
+      lines.push(`  let createdId: string | number;`);
       lines.push("");
     } else {
       lines.push(`test.describe("${table} CRUD (from PHP migration)", () => {`);
@@ -392,21 +451,21 @@ function generateMigrationCrudSpec(analyses: PhpAnalysisSummary[], tables: strin
 
     if (ops.has("INSERT")) {
       lines.push(`  test("POST ${apiPath} — create record (PHP: INSERT)", async ({ request }) => {`);
+      if (!supportedChain) {
+        lines.push(`    test.skip(true, "CRUD mutation verification pending: ${pendingReason}");`);
+        lines.push("  });");
+        lines.push("");
+      } else {
       lines.push(`    const res = await request.post("${apiPath}", {`);
-      lines.push(`      data: { /* seed data — customize per domain */ },`);
+      lines.push(`      data: ${plan.payload},`);
       lines.push("    });");
-      // Smoke-level: endpoint must respond (not hang). Multipart-only PHP
-      // routes reject empty JSON with 500; that's a known scaffold limitation
-      // so we only require a defined status code here. Customize body to get 201.
-      lines.push(`    expect(typeof res.status()).toBe("number");`);
-      if (hasFullCrud) {
-        lines.push(`    if (res.status() >= 200 && res.status() < 300) {`);
-        lines.push(`      const body = await res.json();`);
-        lines.push(`      if (body?.id) createdId = body.id;`);
-        lines.push(`    }`);
-      }
+      lines.push(`    expect(res.status()).toBe(201);`);
+      lines.push(`    const body = await res.json();`);
+      lines.push(`    expect(body).toHaveProperty("${plan.primaryKey}");`);
+      lines.push(`    createdId = body.${plan.primaryKey};`);
       lines.push("  });");
       lines.push("");
+      }
     }
 
     lines.push(`  test("GET ${apiPath} — list records", async ({ request }) => {`);
@@ -419,193 +478,35 @@ function generateMigrationCrudSpec(analyses: PhpAnalysisSummary[], tables: strin
     lines.push("");
 
     if (ops.has("UPDATE")) {
-      if (hasFullCrud) {
+      if (supportedChain) {
         lines.push(`  test("PUT ${apiPath}/{id} — update record (PHP: UPDATE)", async ({ request }) => {`);
-        lines.push(`    if (!createdId) test.skip();`);
         lines.push("    const res = await request.put(`" + apiPath + "/${createdId}`, {");
-        lines.push(`      data: { /* updated fields */ },`);
+        lines.push(`      data: ${plan.payload},`);
         lines.push("    });");
-        lines.push(`    // Smoke: endpoint responds. Customize body for 200.`);
-        lines.push(`    expect(typeof res.status()).toBe("number");`);
+        lines.push(`    expect(res.status()).toBe(200);`);
         lines.push("  });");
       } else {
-        lines.push(`  test("PUT ${apiPath}/1 — update record (PHP: UPDATE)", async ({ request }) => {`);
-        lines.push(`    const res = await request.put("${apiPath}/1", {`);
-        lines.push(`      data: { /* updated fields */ },`);
-        lines.push("    });");
-        lines.push(`    // Smoke: endpoint responds. Customize body for 200.`);
-        lines.push(`    expect(typeof res.status()).toBe("number");`);
+        lines.push(`  test("PUT ${apiPath}/{id} — update record (PHP: UPDATE)", async () => {`);
+        lines.push(`    test.skip(true, "CRUD mutation verification pending: ${pendingReason}");`);
         lines.push("  });");
       }
       lines.push("");
     }
 
     if (ops.has("DELETE")) {
-      if (hasFullCrud) {
+      if (supportedChain) {
         lines.push(`  test("DELETE ${apiPath}/{id} — delete record (PHP: DELETE)", async ({ request }) => {`);
-        lines.push(`    if (!createdId) test.skip();`);
         lines.push("    const res = await request.delete(`" + apiPath + "/${createdId}`);");
-        lines.push(`    // Smoke: endpoint responds.`);
-        lines.push(`    expect(typeof res.status()).toBe("number");`);
+        lines.push(`    expect(res.status()).toBe(200);`);
         lines.push("  });");
       } else {
-        lines.push(`  test("DELETE ${apiPath}/1 — delete record (PHP: DELETE)", async ({ request }) => {`);
-        lines.push(`    const res = await request.delete("${apiPath}/999");`);
-        lines.push(`    // Smoke: endpoint responds.`);
-        lines.push(`    expect(typeof res.status()).toBe("number");`);
+        lines.push(`  test("DELETE ${apiPath}/{id} — delete record (PHP: DELETE)", async () => {`);
+        lines.push(`    test.skip(true, "CRUD mutation verification pending: ${pendingReason}");`);
         lines.push("  });");
       }
       lines.push("");
     }
 
-    lines.push("});");
-    lines.push("");
-  }
-
-  return lines.join("\n");
-}
-
-interface LogicTest {
-  name: string;
-  description: string;
-  steps: string[];
-}
-
-function detectLogicTests(analyses: PhpAnalysisSummary[]): LogicTest[] {
-  const tests: LogicTest[] = [];
-  const fileNames = new Set(analyses.map(a => a.fileName));
-
-  // Event stop/restore
-  if (fileNames.has("event-stop.php") && fileNames.has("event-restoration.php")) {
-    tests.push({
-      name: "event stop and restore state transition",
-      description: "PHP: event-stop.php sets status=1, event-restoration.php sets status=0",
-      steps: [
-        'const created = await request.post("/api/events", { data: { title: "State Test Event" } });',
-        "const eventId = (await created.json()).id;",
-        "",
-        "// Verify initial state (status === 0)",
-        'const initial = await (await request.get(`/api/events/${eventId}`)).json();',
-        "expect(initial.status).toBe(0);",
-        "",
-        "// Stop event (status → 1)",
-        'const stopRes = await request.post(`/api/events/${eventId}/stop`);',
-        "expect(stopRes.status()).toBe(200);",
-        'const stopped = await (await request.get(`/api/events/${eventId}`)).json();',
-        "expect(stopped.status).toBe(1);",
-        "",
-        "// Restore event (status → 0)",
-        'const restoreRes = await request.post(`/api/events/${eventId}/restore`);',
-        "expect(restoreRes.status()).toBe(200);",
-        'const restored = await (await request.get(`/api/events/${eventId}`)).json();',
-        "expect(restored.status).toBe(0);",
-      ],
-    });
-  }
-
-  // User blacklist on/off
-  if (fileNames.has("user-blacklist.php") && fileNames.has("user-blacklist-out.php")) {
-    tests.push({
-      name: "user blacklist on/off toggle",
-      description: "PHP: user-blacklist.php sets blacklist=1, user-blacklist-out.php sets blacklist=0",
-      steps: [
-        '// Verify initial state (blacklist off)',
-        'const initial = await (await request.get("/api/users/1")).json();',
-        'expect(initial.blacklist).toBeFalsy();',
-        '',
-        '// Blacklist ON',
-        'const onRes = await request.post("/api/users/1/blacklist");',
-        'expect(onRes.status()).toBe(200);',
-        'const blocked = await (await request.get("/api/users/1")).json();',
-        'expect(blocked.blacklist).toBeTruthy();',
-        '',
-        '// Blacklist OFF',
-        'const offRes = await request.delete("/api/users/1/blacklist");',
-        'expect(offRes.status()).toBe(200);',
-        'const unblocked = await (await request.get("/api/users/1")).json();',
-        'expect(unblocked.blacklist).toBeFalsy();',
-      ],
-    });
-  }
-
-  // Lottery invalidation
-  if (fileNames.has("lottery-update.php")) {
-    tests.push({
-      name: "lottery invalidation",
-      description: "PHP: lottery-update.php sets invalid=1",
-      steps: [
-        'const res = await request.put("/api/lottery/1", {',
-        '  data: { invalid: 1 },',
-        '});',
-        'expect(res.status()).toBe(200);',
-        'const updated = await (await request.get("/api/lottery/1")).json();',
-        'expect(updated.invalid).toBeTruthy();',
-      ],
-    });
-  }
-
-  // Information text toggle
-  if (fileNames.has("information-text-in.php")) {
-    tests.push({
-      name: "information text flag toggle",
-      description: "PHP: information-text-in.php enables, information-text-out.php disables",
-      steps: [
-        '// Enable text',
-        'const enableRes = await request.post("/api/information/1/text/enable");',
-        'expect(enableRes.status()).toBe(200);',
-        '',
-        '// Disable text',
-        'const disableRes = await request.post("/api/information/1/text/disable");',
-        'expect(disableRes.status()).toBe(200);',
-      ],
-    });
-  }
-
-  // Information banner toggle
-  if (fileNames.has("information-banner-in.php")) {
-    tests.push({
-      name: "information banner flag toggle",
-      description: "PHP: information-banner-in.php enables, information-banner-out.php disables",
-      steps: [
-        '// Enable banner',
-        'const enableRes = await request.post("/api/information/1/banner/enable");',
-        'expect(enableRes.status()).toBe(200);',
-        '',
-        '// Disable banner',
-        'const disableRes = await request.post("/api/information/1/banner/disable");',
-        'expect(disableRes.status()).toBe(200);',
-      ],
-    });
-  }
-
-  return tests;
-}
-
-function generateMigrationLogicSpec(analyses: PhpAnalysisSummary[]): string | null {
-  const tests = detectLogicTests(analyses);
-  if (tests.length === 0) return null;
-
-  const lines: string[] = [];
-  lines.push('import { test, expect } from "@playwright/test";');
-  lines.push("");
-  lines.push("/**");
-  lines.push(" * Migration Business Logic Tests");
-  lines.push(" * Verifies state transitions and business rules from PHP source.");
-  lines.push(" *");
-  lines.push(" * These are marked test.fixme() — they document the business rules from");
-  lines.push(" * the original PHP source as actionable specs. Remove .fixme to activate");
-  lines.push(" * once you have implemented the handler and seeded matching test data.");
-  lines.push(" */");
-  lines.push("");
-
-  for (const t of tests) {
-    lines.push(`test.describe("${t.name}", () => {`);
-    lines.push(`  // ${t.description}`);
-    lines.push(`  test.fixme("${t.name}", async ({ request }) => {`);
-    for (const step of t.steps) {
-      lines.push(`    ${step}`);
-    }
-    lines.push("  });");
     lines.push("});");
     lines.push("");
   }
@@ -650,7 +551,7 @@ function generateMigrationFormSpec(tables: TableInfo[], adminPages?: string[]): 
   // that have BOTH a list page (page.tsx) AND a new page (new/page.tsx).
   // If adminPages is not provided (tests), fall back to using the table name.
   const resolveAdminPath = (tableName: string): string | null => {
-    if (!adminPages || adminPages.length === 0) return tableName;
+    if (!adminPages || adminPages.length === 0) return pluralizeResource(tableName);
     const hasList = new Set<string>();
     const hasNew = new Set<string>();
     for (const p of adminPages) {
@@ -660,13 +561,9 @@ function generateMigrationFormSpec(tables: TableInfo[], adminPages?: string[]): 
       if (newM) hasNew.add(newM[1]!);
     }
     const usable = new Set([...hasList].filter(x => hasNew.has(x)));
-    if (usable.size === 0) return tableName;
+    if (usable.size === 0) return pluralizeResource(tableName);
     if (usable.has(tableName)) return tableName;
-    const tries = [
-      tableName + "s",
-      tableName.endsWith("y") ? tableName.slice(0, -1) + "ies" : null,
-      tableName.endsWith("ss") || tableName.endsWith("sh") || tableName.endsWith("ch") || tableName.endsWith("x") ? tableName + "es" : null,
-    ].filter(Boolean) as string[];
+    const tries = [pluralizeResource(tableName)];
     for (const t of tries) if (usable.has(t)) return t;
     return null;
   };
@@ -766,13 +663,19 @@ function generateMigrationFormSpec(tables: TableInfo[], adminPages?: string[]): 
 }
 
 function generateAuthSetup(): string {
-  return `import { test as setup, expect } from "@playwright/test";
+  return `import { test as setup } from "@playwright/test";
 
 /**
  * Global setup: log in as admin and save auth state.
  * Other test files use this via storageState in playwright.config.ts.
  */
 setup("authenticate as admin", async ({ page }) => {
+  const username = process.env.E2E_ADMIN_USERNAME ?? "admin";
+  const password = process.env.E2E_ADMIN_PASSWORD;
+  if (!password) {
+    throw new Error("E2E_ADMIN_PASSWORD is required for authenticated verification");
+  }
+
   // Ensure auth directory and initial state file exist
   const fs = await import("node:fs");
   fs.mkdirSync("e2e/.auth", { recursive: true });
@@ -783,8 +686,8 @@ setup("authenticate as admin", async ({ page }) => {
   await page.goto("/login");
   // Wait for client-side hydration (login is a "use client" component)
   await page.waitForSelector('input[type="text"]', { timeout: 10_000 });
-  await page.fill('input[type="text"]', "admin");
-  await page.fill('input[type="password"]', "admin123");
+  await page.fill('input[type="text"]', username);
+  await page.fill('input[type="password"]', password);
   await page.click('button[type="submit"]');
 
   // Wait for redirect after login
@@ -881,21 +784,19 @@ export function generateVerifyScaffold(input: VerifyInput): VerifyScaffoldFile[]
   }
 
   // Migration verification tests (from PHP analysis)
-  if (input.phpAnalyses && input.phpAnalyses.length > 0 && input.tableNames) {
-    files.push({
-      path: "e2e/migration-auth.spec.ts",
-      content: generateMigrationAuthSpec(input.tableNames, input.apiRoutes),
-    });
+  if (input.phpAnalyses && input.phpAnalyses.length > 0 && (input.tableNames?.length ?? 0) > 0) {
+    if (input.hasAuth) {
+      files.push({
+        path: "e2e/migration-auth.spec.ts",
+        content: generateMigrationAuthSpec(input.tableNames!, input.apiRoutes),
+      });
+    }
 
     files.push({
       path: "e2e/migration-crud.spec.ts",
-      content: generateMigrationCrudSpec(input.phpAnalyses, input.tableNames, input.apiRoutes),
+      content: generateMigrationCrudSpec(input.phpAnalyses, input.tableNames!, input.apiRoutes, input.tables),
     });
 
-    const logicSpec = generateMigrationLogicSpec(input.phpAnalyses);
-    if (logicSpec) {
-      files.push({ path: "e2e/migration-logic.spec.ts", content: logicSpec });
-    }
   }
 
   // Form UI E2E tests (from table definitions)

@@ -1,10 +1,27 @@
-import { describe, it, expect } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
+import { ofetch } from "ofetch";
 import {
   normalizeOrder,
   normalizeCustomer,
   buildWooUrl,
   createWooRestClient,
 } from "../src/woo-rest-client.js";
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+function mockWooResponses(responses: Array<{ data: Record<string, unknown>[]; totalPages: string }>) {
+  const raw = vi.fn();
+  for (const response of responses) {
+    raw.mockResolvedValueOnce({
+      _data: response.data,
+      headers: { get: vi.fn((name: string) => name === "x-wp-totalpages" ? response.totalPages : null) },
+    });
+  }
+  vi.spyOn(ofetch, "create").mockReturnValue({ raw } as never);
+  return raw;
+}
 
 describe("createWooRestClient", () => {
   it("rejects non-HTTPS URLs", () => {
@@ -35,6 +52,55 @@ describe("createWooRestClient", () => {
         consumerSecret: "cs_test",
       }),
     ).not.toThrow();
+  });
+
+  it("normalizes every paginated order and customer page", async () => {
+    const raw = mockWooResponses([
+      { data: [{ id: 1, status: "processing" }], totalPages: "2" },
+      { data: [{ id: 2, status: "completed" }], totalPages: "2" },
+      { data: [{ id: 3, email: "one@example.com" }], totalPages: "2" },
+      { data: [{ id: 4, email: "two@example.com" }], totalPages: "2" },
+    ]);
+    const client = createWooRestClient({
+      siteUrl: "https://shop.example.com",
+      consumerKey: "ck_test",
+      consumerSecret: "cs_test",
+    });
+
+    await expect(client.fetchAllOrders()).resolves.toMatchObject([{ id: 1 }, { id: 2 }]);
+    await expect(client.fetchAllCustomers()).resolves.toMatchObject([{ id: 3 }, { id: 4 }]);
+    expect(raw).toHaveBeenCalledTimes(4);
+    expect(raw).toHaveBeenNthCalledWith(1, "orders", expect.objectContaining({ query: expect.objectContaining({ page: "1", per_page: "100" }) }));
+    expect(raw).toHaveBeenNthCalledWith(4, "customers", expect.objectContaining({ query: expect.objectContaining({ page: "2" }) }));
+  });
+
+  it("fetches individual order and customer pages with caller pagination", async () => {
+    const raw = mockWooResponses([
+      { data: [{ id: 10, status: "pending" }], totalPages: "1" },
+      { data: [{ id: 20, email: "customer@example.com" }], totalPages: "1" },
+    ]);
+    const client = createWooRestClient({
+      siteUrl: "https://shop.example.com",
+      consumerKey: "ck_test",
+      consumerSecret: "cs_test",
+    });
+
+    await expect(client.fetchOrders(3, 25)).resolves.toMatchObject([{ id: 10, status: "pending" }]);
+    await expect(client.fetchCustomers(4, 10)).resolves.toMatchObject([{ id: 20, email: "customer@example.com" }]);
+    expect(raw).toHaveBeenNthCalledWith(1, "orders", expect.objectContaining({ query: expect.objectContaining({ page: "3", per_page: "25" }) }));
+    expect(raw).toHaveBeenNthCalledWith(2, "customers", expect.objectContaining({ query: expect.objectContaining({ page: "4", per_page: "10" }) }));
+  });
+
+  it("redacts WooCommerce credentials when a request fails", async () => {
+    const raw = vi.fn().mockRejectedValue(new Error("request failed: consumer_key=example-key&consumer_secret=example-secret"));
+    vi.spyOn(ofetch, "create").mockReturnValue({ raw } as never);
+    const client = createWooRestClient({
+      siteUrl: "https://shop.example.com",
+      consumerKey: "ck_test",
+      consumerSecret: "cs_test",
+    });
+
+    await expect(client.fetchOrders()).rejects.toThrow("consumer_key=[REDACTED]&consumer_secret=[REDACTED]");
   });
 });
 

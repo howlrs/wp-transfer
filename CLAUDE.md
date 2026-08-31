@@ -44,4 +44,4 @@ pnpm monorepo with packages: core, wxr-parser, analyzer, cli.
 ## Commands
 - `npx vitest run` — run all tests
 - `pnpm -r typecheck` — typecheck all packages
-- `pnpm --filter wp-transfer-cli dev analyze <file.xml>` — run CLI
+- `pnpm --filter wp-transfer dev analyze <file.xml>` — run CLI

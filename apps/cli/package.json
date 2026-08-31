@@ -1,5 +1,5 @@
 {
-  "name": "wp-transfer-cli",
+  "name": "wp-transfer",
   "version": "0.1.0",
   "description": "WordPress to Next.js migration accelerator CLI tool",
   "type": "module",
@@ -9,12 +9,27 @@
     "url": "https://github.com/howlrs/wp-transfer.git"
   },
   "keywords": ["wordpress", "nextjs", "migration", "cli", "wp-transfer"],
-  "files": ["dist/"],
+  "files": ["dist/index.js", "dist/index.js.map"],
   "main": "./dist/index.js",
   "bin": { "wp-transfer": "./dist/index.js" },
   "engines": { "node": ">=20" },
   "publishConfig": { "access": "public" },
-  "scripts": { "dev": "tsx src/index.ts", "build": "tsc", "typecheck": "tsc --noEmit" },
-  "dependencies": { "@wp-transfer/core": "workspace:*", "@wp-transfer/analyzer": "workspace:*", "@wp-transfer/wxr-parser": "workspace:*", "citty": "^0.2.2", "consola": "^3.4.2" },
-  "devDependencies": { "tsx": "^4.21.0", "typescript": "^6.0.2" }
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "build": "esbuild src/index.ts --bundle --platform=node --format=esm --target=node20 --external:typescript --outfile=dist/index.js --sourcemap --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\"",
+    "prepack": "pnpm run build",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "typescript": "^6.0.2"
+  },
+  "devDependencies": {
+    "@wp-transfer/analyzer": "workspace:*",
+    "@wp-transfer/core": "workspace:*",
+    "@wp-transfer/wxr-parser": "workspace:*",
+    "citty": "^0.2.2",
+    "consola": "^3.4.2",
+    "esbuild": "^0.28.1",
+    "tsx": "^4.21.0"
+  }
 }
