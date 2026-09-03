@@ -33,8 +33,24 @@ describe("rewriteCrossSiteUrls", () => {
     expect(result.links[0]!.targetSiteId).toBe(1);
   });
 
+  it("falls back to the parent site when a nested base is not a path boundary", () => {
+    const content = '<a href="https://example.com/site2-extra/main-post/">main post</a>';
+    const result = rewriteCrossSiteUrls(content, 2, 20, sites, "subpath");
+
+    expect(result.rewritten).toContain('href="/main/blog/main-post"');
+    expect(result.links[0]!.targetSiteId).toBe(1);
+  });
+
   it("skips external URLs", () => {
     const content = '<p>See <a href="https://external.com/page">external</a>.</p>';
+    const result = rewriteCrossSiteUrls(content, 1, 10, sites, "subpath");
+
+    expect(result.rewritten).toBe(content);
+    expect(result.links).toHaveLength(0);
+  });
+
+  it("skips external URLs that contain a target site URL in their path", () => {
+    const content = '<a href="https://outside.example/x/https://example.com/site2/post/">external redirect</a>';
     const result = rewriteCrossSiteUrls(content, 1, 10, sites, "subpath");
 
     expect(result.rewritten).toBe(content);
@@ -45,6 +61,14 @@ describe("rewriteCrossSiteUrls", () => {
     const content = '<p>See <a href="https://example.com/other-post/">local</a>.</p>';
     const result = rewriteCrossSiteUrls(content, 1, 10, sites, "subpath");
 
+    expect(result.links).toHaveLength(0);
+  });
+
+  it("skips same-site URLs when the site is nested below another base URL", () => {
+    const content = '<a href="https://example.com/site2/local-post/">local</a>';
+    const result = rewriteCrossSiteUrls(content, 2, 20, sites, "subpath");
+
+    expect(result.rewritten).toBe(content);
     expect(result.links).toHaveLength(0);
   });
 

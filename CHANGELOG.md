@@ -9,6 +9,7 @@ versioning while it is pre-1.0: minor versions can contain breaking changes.
 
 - Preserve standard WXR custom taxonomy terms and resolve hierarchical parents
   within their taxonomy.
+- Avoid rewriting external and overlapping same-site URLs as cross-site links.
 
 ## [0.4.1] - 2026-08-31
 
