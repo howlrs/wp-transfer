@@ -165,6 +165,76 @@ describe("TaxonomyCollector", () => {
       expect(term.description).toBeUndefined();
     }
   });
+
+  it("extracts standard custom terms and resolves parents within each taxonomy", async () => {
+    const result = await parseWxr(open("custom-taxonomy-terms.xml"));
+
+    expect(result.errors).toEqual([]);
+    expect(result.taxonomies).toHaveLength(8);
+
+    const categoryChild = result.taxonomies.find(
+      (term) => term.taxonomy === "category" && term.slug === "editorial-child",
+    );
+    expect(categoryChild).toMatchObject({
+      id: 100,
+      name: "Editorial Child",
+      parentId: 99,
+    });
+
+    const productRoot = result.taxonomies.find(
+      (term) => term.taxonomy === "product_cat" && term.slug === "catalog",
+    );
+    const productChild = result.taxonomies.find(
+      (term) => term.taxonomy === "product_cat" && term.slug === "apparel",
+    );
+    expect(productRoot).toMatchObject({
+      id: 101,
+      name: "Catalog",
+      slug: "catalog",
+      taxonomy: "product_cat",
+      description: "Products available for purchase.",
+    });
+    expect(productChild).toMatchObject({
+      id: 102,
+      name: "Apparel",
+      slug: "apparel",
+      taxonomy: "product_cat",
+      description: "Clothing and accessories.",
+      parentId: 101,
+    });
+
+    const color = result.taxonomies.find(
+      (term) => term.taxonomy === "pa_color",
+    );
+    expect(color).toMatchObject({
+      id: 103,
+      name: "Blue",
+      slug: "blue",
+      taxonomy: "pa_color",
+    });
+    expect(color!.description).toBeUndefined();
+    expect(color!.parentId).toBeUndefined();
+
+    const brandChild = result.taxonomies.find(
+      (term) => term.taxonomy === "brand" && term.slug === "featured-brand",
+    );
+    expect(brandChild).toMatchObject({
+      id: 106,
+      name: "Featured Brand",
+      parentId: 105,
+    });
+
+    const menu = result.taxonomies.find(
+      (term) => term.taxonomy === "nav_menu",
+    );
+    expect(menu).toMatchObject({
+      id: 104,
+      name: "Primary Menu",
+      slug: "primary",
+      taxonomy: "nav_menu",
+    });
+    expect(menu!.description).toBeUndefined();
+  });
 });
 
 // ---------------------------------------------------------------------------

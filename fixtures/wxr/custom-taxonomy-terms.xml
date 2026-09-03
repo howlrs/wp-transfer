@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<rss version="2.0"
+  xmlns:wp="http://wordpress.org/export/1.2/">
+  <channel>
+    <title>Custom Taxonomy Terms</title>
+    <wp:wxr_version>1.2</wp:wxr_version>
+    <wp:base_site_url>https://terms.example.test</wp:base_site_url>
+    <wp:base_blog_url>https://terms.example.test</wp:base_blog_url>
+    <generator>https://wordpress.org/?v=6.7</generator>
+
+    <!-- A category with the same slug proves parent lookup is taxonomy-scoped. -->
+    <wp:category>
+      <wp:term_id>99</wp:term_id>
+      <wp:category_nicename><![CDATA[catalog]]></wp:category_nicename>
+      <wp:category_parent><![CDATA[]]></wp:category_parent>
+      <wp:cat_name><![CDATA[Editorial Catalog]]></wp:cat_name>
+      <wp:category_description><![CDATA[]]></wp:category_description>
+    </wp:category>
+
+    <wp:category>
+      <wp:term_id>100</wp:term_id>
+      <wp:category_nicename><![CDATA[editorial-child]]></wp:category_nicename>
+      <wp:category_parent><![CDATA[catalog]]></wp:category_parent>
+      <wp:cat_name><![CDATA[Editorial Child]]></wp:cat_name>
+      <wp:category_description><![CDATA[]]></wp:category_description>
+    </wp:category>
+
+    <wp:term>
+      <wp:term_id>101</wp:term_id>
+      <wp:term_taxonomy><![CDATA[product_cat]]></wp:term_taxonomy>
+      <wp:term_slug><![CDATA[catalog]]></wp:term_slug>
+      <wp:term_parent><![CDATA[]]></wp:term_parent>
+      <wp:term_name><![CDATA[Catalog]]></wp:term_name>
+      <wp:term_description><![CDATA[Products available for purchase.]]></wp:term_description>
+    </wp:term>
+
+    <wp:term>
+      <wp:term_id>102</wp:term_id>
+      <wp:term_taxonomy><![CDATA[product_cat]]></wp:term_taxonomy>
+      <wp:term_slug><![CDATA[apparel]]></wp:term_slug>
+      <wp:term_parent><![CDATA[catalog]]></wp:term_parent>
+      <wp:term_name><![CDATA[Apparel]]></wp:term_name>
+      <wp:term_description><![CDATA[Clothing and accessories.]]></wp:term_description>
+    </wp:term>
+
+    <wp:term>
+      <wp:term_id>103</wp:term_id>
+      <wp:term_taxonomy><![CDATA[pa_color]]></wp:term_taxonomy>
+      <wp:term_slug><![CDATA[blue]]></wp:term_slug>
+      <wp:term_name><![CDATA[Blue]]></wp:term_name>
+    </wp:term>
+
+    <!-- Reusing "catalog" in another custom taxonomy tests scoped parents. -->
+    <wp:term>
+      <wp:term_id>105</wp:term_id>
+      <wp:term_taxonomy><![CDATA[brand]]></wp:term_taxonomy>
+      <wp:term_slug><![CDATA[catalog]]></wp:term_slug>
+      <wp:term_parent><![CDATA[]]></wp:term_parent>
+      <wp:term_name><![CDATA[Catalog Brand]]></wp:term_name>
+    </wp:term>
+
+    <wp:term>
+      <wp:term_id>106</wp:term_id>
+      <wp:term_taxonomy><![CDATA[brand]]></wp:term_taxonomy>
+      <wp:term_slug><![CDATA[featured-brand]]></wp:term_slug>
+      <wp:term_parent><![CDATA[catalog]]></wp:term_parent>
+      <wp:term_name><![CDATA[Featured Brand]]></wp:term_name>
+    </wp:term>
+
+    <!-- WordPress nav_menu exports omit description and parent. -->
+    <wp:term>
+      <wp:term_id>104</wp:term_id>
+      <wp:term_taxonomy><![CDATA[nav_menu]]></wp:term_taxonomy>
+      <wp:term_slug><![CDATA[primary]]></wp:term_slug>
+      <wp:term_name><![CDATA[Primary Menu]]></wp:term_name>
+    </wp:term>
+  </channel>
+</rss>
