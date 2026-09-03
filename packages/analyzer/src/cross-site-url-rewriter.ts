@@ -21,26 +21,25 @@ export function rewriteCrossSiteUrls(
 ): RewriteResult {
   const links: CrossSiteLink[] = [];
 
-  // Filter out source site, normalize URLs, sort by length desc (longest match first)
-  const otherSites = sites
-    .filter((s) => s.siteId !== sourceSiteId)
+  // Include the source so overlapping bases resolve to the URL's actual owner.
+  const normalizedSites = sites
     .map((s) => ({ ...s, baseNormalized: s.baseUrl.replace(/\/$/, "") }))
     .sort((a, b) => b.baseNormalized.length - a.baseNormalized.length);
 
   // No cross-site targets → skip entirely
-  if (otherSites.length === 0) {
+  if (!normalizedSites.some((site) => site.siteId !== sourceSiteId)) {
     return { rewritten: content, links };
   }
 
-  // Build a single compiled regex: matches any target site's baseUrl
-  // Sorted longest-first in alternation so the regex engine matches greedily
+  // Anchor at the start and require a path boundary so embedded or partially
+  // matching base URLs cannot be mistaken for a site's URL.
   const sitePattern = new RegExp(
-    otherSites.map((s) => escapeRegex(s.baseNormalized)).join("|"),
+    `^(?:${normalizedSites.map((s) => escapeRegex(s.baseNormalized)).join("|")})(?=$|/)`,
   );
 
   // Build a lookup map: normalized baseUrl → site entry
   const siteLookup = new Map(
-    otherSites.map((s) => [s.baseNormalized, s]),
+    normalizedSites.map((s) => [s.baseNormalized, s]),
   );
 
   const rewritten = content.replace(HREF_RE, (match, url: string) => {
@@ -48,11 +47,10 @@ export function rewriteCrossSiteUrls(
     if (!m) return match;
 
     const matched = m[0]!;
-    // Ensure the match is a proper prefix: URL must be exactly baseUrl or baseUrl + "/"
     const rest = url.slice(matched.length);
-    if (rest !== "" && !rest.startsWith("/")) return match;
-
     const site = siteLookup.get(matched)!;
+    if (site.siteId === sourceSiteId) return match;
+
     const slug = extractSlug(rest);
     if (!slug) return match;
 
