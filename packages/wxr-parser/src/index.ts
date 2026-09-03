@@ -54,7 +54,7 @@ export async function parseWxr(
     onWarning,
   );
 
-  // Resolve parent slugs to parent IDs for categories
+  // Resolve parent slugs to parent IDs within each taxonomy
   taxonomyCollector.resolveParentIds();
 
   return {

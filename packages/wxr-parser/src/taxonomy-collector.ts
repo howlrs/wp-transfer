@@ -3,18 +3,21 @@ import type { Tag } from "sax";
 import type { WxrCollector } from "./stream-parser.js";
 
 /**
- * Collects taxonomy terms (categories and tags) from WXR SAX events.
+ * Collects taxonomy terms (categories, tags, and generic terms) from WXR SAX
+ * events.
  *
- * Categories are inside <wp:category>, tags inside <wp:tag>.
+ * Categories are inside <wp:category>, tags inside <wp:tag>, and custom
+ * taxonomies use the standard outer <wp:term> representation.
  */
 export class TaxonomyCollector implements WxrCollector {
   readonly taxonomies: WpTaxonomyTerm[] = [];
 
-  /** Stores parent slug for each category (keyed by category slug) */
+  /** Stores parent slugs keyed by taxonomy and term slug. */
   private parentSlugMap = new Map<string, string>();
 
   private inCategory = false;
   private inTag = false;
+  private inTerm = false;
   private textBuffer = "";
 
   // Category fields
@@ -29,6 +32,18 @@ export class TaxonomyCollector implements WxrCollector {
   private tagSlug = "";
   private tagName = "";
   private tagDescription = "";
+
+  // Generic <wp:term> fields
+  private termId = 0;
+  private termTaxonomy = "";
+  private termSlug = "";
+  private termName = "";
+  private termDescription = "";
+  private termParent = "";
+
+  private parentKey(taxonomy: string, slug: string): string {
+    return `${taxonomy}\u0000${slug}`;
+  }
 
   onOpenTag(tag: Tag): void {
     const name = tag.name;
@@ -46,19 +61,27 @@ export class TaxonomyCollector implements WxrCollector {
       this.tagSlug = "";
       this.tagName = "";
       this.tagDescription = "";
+    } else if (name === "wp:term") {
+      this.inTerm = true;
+      this.termId = 0;
+      this.termTaxonomy = "";
+      this.termSlug = "";
+      this.termName = "";
+      this.termDescription = "";
+      this.termParent = "";
     }
 
     this.textBuffer = "";
   }
 
   onText(text: string): void {
-    if (this.inCategory || this.inTag) {
+    if (this.inCategory || this.inTag || this.inTerm) {
       this.textBuffer += text;
     }
   }
 
   onCdata(cdata: string): void {
-    if (this.inCategory || this.inTag) {
+    if (this.inCategory || this.inTag || this.inTerm) {
       this.textBuffer += cdata;
     }
   }
@@ -92,7 +115,10 @@ export class TaxonomyCollector implements WxrCollector {
             description: this.catDescription || undefined,
           });
           if (this.catParent) {
-            this.parentSlugMap.set(this.catNicename, this.catParent);
+            this.parentSlugMap.set(
+              this.parentKey("category", this.catNicename),
+              this.catParent,
+            );
           }
           this.inCategory = false;
           break;
@@ -126,31 +152,70 @@ export class TaxonomyCollector implements WxrCollector {
       }
     }
 
+    if (this.inTerm) {
+      switch (name) {
+        case "wp:term_id":
+          this.termId = parseInt(text, 10) || 0;
+          break;
+        case "wp:term_taxonomy":
+          this.termTaxonomy = text;
+          break;
+        case "wp:term_slug":
+          this.termSlug = text;
+          break;
+        case "wp:term_name":
+          this.termName = text;
+          break;
+        case "wp:term_description":
+          this.termDescription = text;
+          break;
+        case "wp:term_parent":
+          this.termParent = text;
+          break;
+        case "wp:term":
+          this.taxonomies.push({
+            id: this.termId,
+            name: this.termName,
+            slug: this.termSlug,
+            taxonomy: this.termTaxonomy,
+            description: this.termDescription || undefined,
+          });
+          if (this.termParent) {
+            this.parentSlugMap.set(
+              this.parentKey(this.termTaxonomy, this.termSlug),
+              this.termParent,
+            );
+          }
+          this.inTerm = false;
+          break;
+      }
+    }
+
     this.textBuffer = "";
   }
 
   /**
-   * Resolves parent slugs to parent IDs for categories.
-   * Must be called after all categories have been collected.
+   * Resolves parent slugs to parent IDs within their own taxonomy.
+   * Must be called after all terms have been collected.
    */
   resolveParentIds(): void {
-    // Build a slug→id lookup from collected categories
+    // Build a taxonomy+slug→id lookup from all collected terms.
     const slugToId = new Map<string, number>();
     for (const term of this.taxonomies) {
-      if (term.taxonomy === "category") {
-        slugToId.set(term.slug, term.id);
-      }
+      slugToId.set(this.parentKey(term.taxonomy, term.slug), term.id);
     }
 
-    // Resolve parentSlug → parentId
+    // Resolve parentSlug → parentId in the same taxonomy.
     for (const term of this.taxonomies) {
-      if (term.taxonomy === "category") {
-        const parentSlug = this.parentSlugMap.get(term.slug);
-        if (parentSlug) {
-          const parentId = slugToId.get(parentSlug);
-          if (parentId !== undefined) {
-            term.parentId = parentId;
-          }
+      const parentSlug = this.parentSlugMap.get(
+        this.parentKey(term.taxonomy, term.slug),
+      );
+      if (parentSlug) {
+        const parentId = slugToId.get(
+          this.parentKey(term.taxonomy, parentSlug),
+        );
+        if (parentId !== undefined) {
+          term.parentId = parentId;
         }
       }
     }

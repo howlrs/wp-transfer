@@ -3,6 +3,13 @@
 Public release milestones are summarized here. This project follows semantic
 versioning while it is pre-1.0: minor versions can contain breaking changes.
 
+## [Unreleased]
+
+### Fixed
+
+- Preserve standard WXR custom taxonomy terms and resolve hierarchical parents
+  within their taxonomy.
+
 ## [0.4.1] - 2026-08-31
 
 ### Release status
